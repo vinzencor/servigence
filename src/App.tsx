@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import CustomerRegistration from './components/CustomerRegistration';
@@ -12,17 +12,80 @@ import VendorManagement from './components/VendorManagement';
 import RemindersServices from './components/RemindersServices';
 import AccountManagement from './components/AccountManagement';
 import InvoiceManagement from './components/InvoiceManagement';
-import { mockCompanies } from './data/mockData';
+import RemindersManagement from './components/RemindersManagement';
+import EmployeeLogin from './components/EmployeeLogin';
+import EmployeeDashboard from './components/EmployeeDashboard';
+import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
-  const [companies, setCompanies] = useState<Company[]>(mockCompanies);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [isEmployeeMode, setIsEmployeeMode] = useState(false);
+  const [loggedInEmployee, setLoggedInEmployee] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSaveCompany = (company: Company) => {
-    setCompanies(prev => [...prev, company]);
+  // Load companies from database on component mount
+  useEffect(() => {
+    loadCompanies();
+  }, []);
+
+  const loadCompanies = async () => {
+    setLoading(true);
+    try {
+      console.log('Loading companies from database...');
+      const companiesData = await dbHelpers.getCompanies();
+      console.log('Loaded companies:', companiesData);
+
+      // Transform the data to match our Company interface
+      const transformedCompanies = companiesData.map((company: any) => ({
+        id: company.id,
+        companyName: company.company_name,
+        vatTrnNo: company.vat_trn_no,
+        phone1: company.phone1,
+        phone2: company.phone2,
+        email1: company.email1,
+        email2: company.email2,
+        address: company.address,
+        companyType: company.company_type,
+        licenseNo: company.license_no,
+        mohreNo: company.mohre_no,
+        moiNo: company.moi_no,
+        quota: company.quota,
+        companyGrade: company.company_grade,
+        creditLimit: company.credit_limit ? parseFloat(company.credit_limit) : 0,
+        creditLimitDays: company.credit_limit_days,
+        proName: company.pro_name,
+        proPhone: company.pro_phone,
+        proEmail: company.pro_email,
+        dateOfRegistration: company.date_of_registration,
+        createdBy: company.created_by,
+        status: company.status,
+        employeeCount: company.employee_count || 0,
+        lastActivity: company.last_activity,
+        notes: company.notes
+      }));
+
+      setCompanies(transformedCompanies);
+    } catch (error) {
+      console.error('Error loading companies:', error);
+      setCompanies([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveCompany = async (company: Company) => {
+    try {
+      // Save to database
+      await dbHelpers.createCompany(company);
+      // Reload companies from database
+      await loadCompanies();
+    } catch (error) {
+      console.error('Error saving company:', error);
+    }
   };
 
   const handleSaveIndividual = (individual: Individual) => {
@@ -45,10 +108,25 @@ function App() {
     setCurrentView('company-documents');
   };
 
+  const handleEmployeeLogin = (employee: any) => {
+    setLoggedInEmployee(employee);
+    setIsEmployeeMode(true);
+  };
+
+  const handleEmployeeLogout = () => {
+    setLoggedInEmployee(null);
+    setIsEmployeeMode(false);
+  };
+
+  const handleBackToMain = () => {
+    setIsEmployeeMode(false);
+    setLoggedInEmployee(null);
+  };
+
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentView} />;
       case 'customer-registration':
         return <CustomerRegistration onSave={handleSaveCompany} onSaveIndividual={handleSaveIndividual} />;
       case 'companies':
@@ -83,10 +161,22 @@ function App() {
         return <AccountManagement />;
       case 'invoices':
         return <InvoiceManagement />;
+      case 'reminders':
+        return <RemindersManagement />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentView} />;
     }
   };
+
+  // Handle employee mode
+  if (isEmployeeMode && loggedInEmployee) {
+    return <EmployeeDashboard employee={loggedInEmployee} onLogout={handleEmployeeLogout} />;
+  }
+
+  // Handle employee login
+  if (currentView === 'employee-login') {
+    return <EmployeeLogin onLogin={handleEmployeeLogin} onBackToMain={handleBackToMain} />;
+  }
 
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>

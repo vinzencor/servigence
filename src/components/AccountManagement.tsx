@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
   Plus,
@@ -24,6 +24,7 @@ import {
   Clock,
   MoreVertical
 } from 'lucide-react';
+import { dbHelpers } from '../lib/supabase';
 
 interface Account {
   id: string;
@@ -46,7 +47,41 @@ interface Account {
 }
 
 const AccountManagement: React.FC = () => {
-  const [accounts] = useState<Account[]>([
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadAccountTransactions();
+  }, []);
+
+  const loadAccountTransactions = async () => {
+    setLoading(true);
+    try {
+      const data = await dbHelpers.getAccountTransactions();
+      console.log('Loaded account transactions:', data);
+
+      // Transform the data to match our Account interface
+      const transformedAccounts = (data || []).map((transaction: any) => ({
+        id: transaction.id,
+        companyId: transaction.company_id || '',
+        type: transaction.transaction_type,
+        category: transaction.category,
+        description: transaction.description,
+        amount: transaction.amount,
+        date: transaction.transaction_date,
+        paymentMethod: transaction.payment_method,
+        reference: transaction.reference_number,
+        status: transaction.status,
+        createdBy: transaction.created_by,
+        approvedBy: transaction.approved_by,
+        notes: transaction.notes
+      }));
+
+      setAccounts(transformedAccounts);
+    } catch (error) {
+      console.error('Error loading account transactions:', error);
+      // Keep mock data as fallback
+      setAccounts([
     {
       id: '1',
       companyId: 'comp1',
@@ -91,9 +126,12 @@ const AccountManagement: React.FC = () => {
       status: 'pending',
       gstAmount: 22.5,
       gstRate: 5,
-      createdBy: 'Staff'
+        createdBy: 'Staff'
+      }]);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'gst' | 'reports'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,50 +179,80 @@ const AccountManagement: React.FC = () => {
   });
 
   // Calculate totals
-  const totalRevenue = accounts.filter(a => a.type === 'service_charge' && a.status === 'completed')
-                              .reduce((sum, a) => sum + a.amount, 0);
+  const serviceCharges = accounts.filter(a => a.type === 'service_charge' && a.status === 'completed')
+                                .reduce((sum, a) => sum + a.amount, 0);
+  const governmentFees = accounts.filter(a => a.type === 'government_fee' && a.status === 'completed')
+                                .reduce((sum, a) => sum + a.amount, 0);
+  const totalRevenue = serviceCharges + governmentFees;
   const totalExpenses = accounts.filter(a => a.type === 'expense' && a.status === 'completed')
                                .reduce((sum, a) => sum + a.amount, 0);
   const totalGST = accounts.filter(a => a.status === 'completed')
                           .reduce((sum, a) => sum + (a.gstAmount || 0), 0);
-  const totalProfit = accounts.filter(a => a.type === 'service_charge' && a.status === 'completed')
-                             .reduce((sum, a) => sum + (a.profitMargin || 0), 0);
+  const totalProfit = serviceCharges; // Only service charges are profit, government fees are pass-through
+
+  console.log('Account calculations:', {
+    accounts: accounts.length,
+    serviceCharges,
+    governmentFees,
+    totalRevenue,
+    totalExpenses,
+    totalGST,
+    totalProfit
+  });
 
   const stats = [
     {
       title: 'Total Revenue',
       value: `AED ${totalRevenue.toLocaleString()}`,
-      change: '+12% from last month',
+      change: `${accounts.filter(a => (a.type === 'service_charge' || a.type === 'government_fee') && a.status === 'completed').length} transactions`,
       icon: TrendingUp,
       color: 'green'
     },
     {
-      title: 'Total Expenses',
-      value: `AED ${totalExpenses.toLocaleString()}`,
-      change: '-5% from last month',
-      icon: TrendingDown,
-      color: 'red'
-    },
-    {
-      title: 'GST Collected',
-      value: `AED ${totalGST.toLocaleString()}`,
-      change: 'Due: 28th Feb',
-      icon: Receipt,
+      title: 'Service Charges',
+      value: `AED ${serviceCharges.toLocaleString()}`,
+      change: `${accounts.filter(a => a.type === 'service_charge' && a.status === 'completed').length} services`,
+      icon: DollarSign,
       color: 'blue'
     },
     {
-      title: 'Net Profit',
-      value: `AED ${totalProfit.toLocaleString()}`,
-      change: '+18% from last month',
-      icon: PieChart,
+      title: 'Government Fees',
+      value: `AED ${governmentFees.toLocaleString()}`,
+      change: `${accounts.filter(a => a.type === 'government_fee' && a.status === 'completed').length} payments`,
+      icon: Receipt,
       color: 'purple'
+    },
+    {
+      title: 'Net Profit',
+      value: `AED ${(totalRevenue - totalExpenses).toLocaleString()}`,
+      change: `${totalExpenses > 0 ? ((totalRevenue - totalExpenses) / totalRevenue * 100).toFixed(1) : '100'}% margin`,
+      icon: PieChart,
+      color: 'green'
     }
   ];
 
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                    <div className="h-8 bg-gray-200 rounded w-32 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-20"></div>
+                  </div>
+                  <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -220,12 +288,36 @@ const AccountManagement: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {/* Recent Transactions */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Transactions</h3>
-        <div className="space-y-4">
-          {accounts.slice(0, 5).map((account) => {
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="animate-pulse flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                <div className="w-10 h-10 bg-gray-200 rounded-lg"></div>
+                <div className="flex-1">
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+                <div className="text-right">
+                  <div className="h-4 bg-gray-200 rounded w-16 mb-1"></div>
+                  <div className="h-3 bg-gray-200 rounded w-12"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="text-center py-8">
+            <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions found</h3>
+            <p className="text-gray-600">Create your first service billing to see transactions here.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {accounts.slice(0, 5).map((account) => {
             const PaymentIcon = getPaymentMethodIcon(account.paymentMethod);
             return (
               <div key={account.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
@@ -252,6 +344,7 @@ const AccountManagement: React.FC = () => {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Financial Summary Charts */}

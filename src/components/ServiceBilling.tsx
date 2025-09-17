@@ -17,6 +17,10 @@ const ServiceBilling: React.FC = () => {
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('');
+  const [reportData, setReportData] = useState<any>(null);
+  const [selectedCompanyForReport, setSelectedCompanyForReport] = useState('');
 
   const [billingForm, setBillingForm] = useState({
     clientType: 'company' as 'company' | 'individual',
@@ -174,6 +178,132 @@ const ServiceBilling: React.FC = () => {
   const downloadInvoice = (billing: any) => {
     // Generate and download invoice as PDF
     generateInvoicePDF(billing);
+  };
+
+  const generateMonthlyRevenueReport = async () => {
+    try {
+      setLoading(true);
+
+      // Get all service billings
+      const billings = await dbHelpers.getServiceBillings();
+
+      // Filter by company if selected
+      const filteredBillings = selectedCompanyForReport
+        ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
+        : billings;
+
+      // Group by month and calculate totals
+      const monthlyData = filteredBillings.reduce((acc: any, billing: any) => {
+        const date = new Date(billing.created_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+        if (!acc[monthKey]) {
+          acc[monthKey] = {
+            month: monthKey,
+            serviceRevenue: 0,
+            governmentCharges: 0,
+            totalRevenue: 0,
+            billingsCount: 0
+          };
+        }
+
+        acc[monthKey].serviceRevenue += billing.service_charge || 0;
+        acc[monthKey].governmentCharges += billing.government_charge || 0;
+        acc[monthKey].totalRevenue += billing.total_amount || 0;
+        acc[monthKey].billingsCount += 1;
+
+        return acc;
+      }, {});
+
+      setReportData(Object.values(monthlyData));
+      setReportType('monthly-revenue');
+      setShowReportModal(true);
+    } catch (error) {
+      console.error('Error generating monthly revenue report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generatePaymentAnalysisReport = async () => {
+    try {
+      setLoading(true);
+
+      const billings = await dbHelpers.getServiceBillings();
+      const filteredBillings = selectedCompanyForReport
+        ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
+        : billings;
+
+      // Analyze payment patterns
+      const paymentData = {
+        totalBillings: filteredBillings.length,
+        totalRevenue: filteredBillings.reduce((sum, b) => sum + (b.total_amount || 0), 0),
+        serviceRevenue: filteredBillings.reduce((sum, b) => sum + (b.service_charge || 0), 0),
+        governmentCharges: filteredBillings.reduce((sum, b) => sum + (b.government_charge || 0), 0),
+        averageBillingAmount: filteredBillings.length > 0
+          ? filteredBillings.reduce((sum, b) => sum + (b.total_amount || 0), 0) / filteredBillings.length
+          : 0,
+        paymentMethods: filteredBillings.reduce((acc: any, billing: any) => {
+          const method = billing.cash_type || 'Unknown';
+          acc[method] = (acc[method] || 0) + 1;
+          return acc;
+        }, {})
+      };
+
+      setReportData(paymentData);
+      setReportType('payment-analysis');
+      setShowReportModal(true);
+    } catch (error) {
+      console.error('Error generating payment analysis report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateServicePerformanceReport = async () => {
+    try {
+      setLoading(true);
+
+      const billings = await dbHelpers.getServiceBillings();
+      const filteredBillings = selectedCompanyForReport
+        ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
+        : billings;
+
+      // Group by service type
+      const serviceData = filteredBillings.reduce((acc: any, billing: any) => {
+        const serviceName = billing.service_name || 'Unknown Service';
+
+        if (!acc[serviceName]) {
+          acc[serviceName] = {
+            name: serviceName,
+            count: 0,
+            revenue: 0,
+            averageAmount: 0
+          };
+        }
+
+        acc[serviceName].count += 1;
+        acc[serviceName].revenue += billing.total_amount || 0;
+
+        return acc;
+      }, {});
+
+      // Calculate averages
+      Object.values(serviceData).forEach((service: any) => {
+        service.averageAmount = service.count > 0 ? service.revenue / service.count : 0;
+      });
+
+      setReportData(Object.values(serviceData));
+      setReportType('service-performance');
+      setShowReportModal(true);
+    } catch (error) {
+      console.error('Error generating service performance report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const generateInvoicePDF = (billing: any) => {
@@ -718,13 +848,41 @@ const ServiceBilling: React.FC = () => {
 
         {activeTab === 'reports' && (
           <div className="p-6">
+            {/* Company Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Filter by Company/Individual (Optional)
+              </label>
+              <select
+                value={selectedCompanyForReport}
+                onChange={(e) => setSelectedCompanyForReport(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Companies & Individuals</option>
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.companyName} (Company)
+                  </option>
+                ))}
+                {individuals.map((individual) => (
+                  <option key={individual.id} value={individual.id}>
+                    {individual.individualName} (Individual)
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <FileText className="w-12 h-12 text-blue-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Monthly Revenue Report</h3>
                 <p className="text-gray-500 mb-4">Comprehensive monthly revenue breakdown by service type</p>
-                <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Generate Report
+                <button
+                  onClick={generateMonthlyRevenueReport}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
               
@@ -732,17 +890,25 @@ const ServiceBilling: React.FC = () => {
                 <DollarSign className="w-12 h-12 text-green-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Analysis</h3>
                 <p className="text-gray-500 mb-4">Analysis of payment patterns and outstanding amounts</p>
-                <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                  Generate Report
+                <button
+                  onClick={generatePaymentAnalysisReport}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
-              
+
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <TrendingUp className="w-12 h-12 text-purple-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Service Performance</h3>
                 <p className="text-gray-500 mb-4">Performance metrics for different service categories</p>
-                <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                  Generate Report
+                <button
+                  onClick={generateServicePerformanceReport}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
             </div>

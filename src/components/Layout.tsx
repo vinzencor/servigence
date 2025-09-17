@@ -59,13 +59,22 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
                   <Settings className="w-5 h-5" />
                 </button>
                 
-                <div className="ml-4 flex items-center space-x-3">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-700">Sarah Khan</p>
-                    <p className="text-xs text-gray-500">Operations Manager</p>
-                  </div>
-                  <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                    SK
+                <div className="ml-4 flex items-center space-x-4">
+                  <button
+                    onClick={() => onNavigate('employee-login')}
+                    className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    Employee Login
+                  </button>
+
+                  <div className="flex items-center space-x-3">
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-700">Sarah Khan</p>
+                      <p className="text-xs text-gray-500">Operations Manager</p>
+                    </div>
+                    <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      SK
+                    </div>
                   </div>
                 </div>
               </div>

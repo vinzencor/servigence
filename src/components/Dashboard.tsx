@@ -1,12 +1,44 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { TrendingUp, Users, Building2, FileText, DollarSign, AlertCircle, Clock, CheckCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { mockCompanies, mockServices, mockInvoices, mockReminders } from '../data/mockData';
+import { dbHelpers } from '../lib/supabase';
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onNavigate?: (view: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  const [realReminders, setRealReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
   const totalCompanies = mockCompanies.length;
   const activeServices = mockServices.filter(s => s.status === 'in_progress').length;
   const pendingInvoices = mockInvoices.filter(i => i.status === 'sent').length;
-  const urgentReminders = mockReminders.filter(r => r.priority === 'urgent' && r.status === 'pending').length;
+  const urgentReminders = realReminders.filter(r => r.priority === 'urgent').length;
+
+  useEffect(() => {
+    loadReminders();
+  }, []);
+
+  const loadReminders = async () => {
+    setLoading(true);
+    try {
+      const data = await dbHelpers.getUpcomingReminders(90);
+      setRealReminders(data || []);
+    } catch (error) {
+      console.error('Error loading reminders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateDaysLeft = (reminderDate: string) => {
+    const today = new Date();
+    const reminder = new Date(reminderDate);
+    const diffTime = reminder.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
 
   const stats = [
     {
@@ -82,27 +114,42 @@ const Dashboard: React.FC = () => {
     }
   ];
 
-  const upcomingTasks = [
+  const upcomingReminders = [
     {
       id: '1',
-      title: 'License Renewal - Al Manara Trading LLC',
-      dueDate: '2024-02-15',
+      title: 'Passport Expiry - John Doe',
+      expiryDate: '2025-03-15',
       priority: 'high',
-      type: 'license_renewal'
+      type: 'passport',
+      company: 'Al Manara Trading LLC',
+      daysLeft: 45
     },
     {
       id: '2',
-      title: 'Visa Processing - Emirates Tech Solutions',
-      dueDate: '2024-01-25',
+      title: 'Visa Expiry - Ahmed Al-Rashid',
+      expiryDate: '2025-02-20',
       priority: 'urgent',
-      type: 'visa_processing'
+      type: 'visa',
+      company: 'Global Tech Solutions',
+      daysLeft: 22
     },
     {
       id: '3',
-      title: 'Document Attestation Follow-up',
-      dueDate: '2024-01-30',
+      title: 'Emirates ID Expiry - Sarah Johnson',
+      expiryDate: '2025-04-10',
       priority: 'medium',
-      type: 'follow_up'
+      type: 'emirates_id',
+      company: 'Tech Innovations LLC',
+      daysLeft: 71
+    },
+    {
+      id: '4',
+      title: 'Labor Card Expiry - Mohammed Hassan',
+      expiryDate: '2025-05-05',
+      priority: 'medium',
+      type: 'labor_card',
+      company: 'Construction Co.',
+      daysLeft: 96
     }
   ];
 
@@ -219,25 +266,71 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Upcoming Tasks */}
+        {/* Upcoming Reminders */}
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900">Upcoming Tasks</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Upcoming Reminders</h2>
+              <span className="text-sm text-gray-500">Document Expiry Alerts</span>
+            </div>
           </div>
           <div className="p-6">
-            <div className="space-y-4">
-              {upcomingTasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-sm transition-all">
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-1">{task.title}</h4>
-                    <p className="text-sm text-gray-500">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                <p className="text-gray-500 mt-2">Loading reminders...</p>
+              </div>
+            ) : realReminders.length === 0 ? (
+              <div className="text-center py-8">
+                <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No upcoming reminders</h3>
+                <p className="text-gray-600">Add employees with document expiry dates to see reminders here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {realReminders.slice(0, 5).map((reminder) => {
+                  const daysLeft = calculateDaysLeft(reminder.reminder_date);
+                  return (
+                    <div key={reminder.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-sm transition-all">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-1">{reminder.title}</h4>
+                        <p className="text-sm text-gray-500 mb-1">
+                          Company: {reminder.company?.company_name || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Expires: {new Date(reminder.reminder_date).toLocaleDateString()}
+                          ({daysLeft > 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days overdue`})
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(reminder.priority)}`}>
+                          {reminder.priority.toUpperCase()}
+                        </span>
+                        <div className="text-right">
+                          <div className={`text-xs font-medium ${
+                            daysLeft <= 0 ? 'text-red-600' :
+                            daysLeft <= 30 ? 'text-red-600' :
+                            daysLeft <= 60 ? 'text-yellow-600' : 'text-green-600'
+                          }`}>
+                            {daysLeft > 0 ? `${daysLeft} days` : 'Overdue'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {realReminders.length > 5 && (
+                  <div className="text-center pt-4">
+                    <button
+                      onClick={() => onNavigate?.('reminders')}
+                      className="text-purple-600 hover:text-purple-700 font-medium text-sm"
+                    >
+                      View all {realReminders.length} reminders →
+                    </button>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                    {task.priority.toUpperCase()}
-                  </span>
-                </div>
-              ))}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -247,18 +340,19 @@ const Dashboard: React.FC = () => {
         <h2 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
-            { title: 'Register Company', icon: Building2, color: 'blue' },
-            { title: 'Add Employee', icon: Users, color: 'green' },
-            { title: 'Create Invoice', icon: FileText, color: 'amber' },
-            { title: 'Set Reminder', icon: Clock, color: 'purple' },
-            { title: 'Add Vendor', icon: Building2, color: 'red' },
-            { title: 'Generate Report', icon: TrendingUp, color: 'blue' }
+            { title: 'Register Company', icon: Building2, color: 'blue', view: 'companies' },
+            { title: 'Add Employee', icon: Users, color: 'green', view: 'employees' },
+            { title: 'Create Invoice', icon: FileText, color: 'amber', view: 'invoices' },
+            { title: 'Reminders', icon: Clock, color: 'purple', view: 'reminders' },
+            { title: 'Vendors', icon: Building2, color: 'red', view: 'vendors' },
+            { title: 'Generate Report', icon: TrendingUp, color: 'blue', view: 'accounts' }
           ].map((action, index) => {
             const Icon = action.icon;
-            
+
             return (
               <button
                 key={index}
+                onClick={() => onNavigate?.(action.view)}
                 className={`p-4 rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 group`}
               >
                 <div className="text-center">
