@@ -1,0 +1,542 @@
+import React, { useState } from 'react';
+import {
+  Users,
+  Plus,
+  Search,
+  Filter,
+  Eye,
+  Edit,
+  Trash2,
+  Star,
+  Phone,
+  Mail,
+  MapPin,
+  Globe,
+  FileText,
+  Calendar,
+  TrendingUp,
+  Award,
+  Clock,
+  CheckCircle,
+  AlertTriangle,
+  Building,
+  CreditCard,
+  Settings,
+  MoreVertical
+} from 'lucide-react';
+
+interface Vendor {
+  id: string;
+  name: string;
+  type: 'insurance' | 'tax_consultant' | 'tax_payer' | 'legal_services' | 'translation' | 'attestation' | 'other';
+  email: string;
+  phone: string;
+  address?: string;
+  services: string[];
+  rating: number;
+  status: 'active' | 'inactive' | 'pending';
+  registrationDate: string;
+  contactPerson?: string;
+  website?: string;
+  licenseNumber?: string;
+  vatNumber?: string;
+  paymentTerms?: string;
+  notes?: string;
+  performanceMetrics: {
+    totalJobs: number;
+    completedJobs: number;
+    averageRating: number;
+    onTimeDelivery: number;
+  };
+}
+
+const VendorManagement: React.FC = () => {
+  const [vendors] = useState<Vendor[]>([
+    {
+      id: '1',
+      name: 'Emirates Insurance Brokers',
+      type: 'insurance',
+      email: 'info@emiratesinsurance.ae',
+      phone: '+971-4-123-4567',
+      address: 'Dubai International Financial Centre',
+      services: ['Health Insurance', 'Life Insurance', 'Property Insurance'],
+      rating: 4.8,
+      status: 'active',
+      registrationDate: '2023-01-15',
+      contactPerson: 'Ahmed Al Mansouri',
+      website: 'www.emiratesinsurance.ae',
+      licenseNumber: 'INS-2023-001',
+      vatNumber: '100123456700003',
+      paymentTerms: 'Net 30',
+      performanceMetrics: {
+        totalJobs: 45,
+        completedJobs: 43,
+        averageRating: 4.8,
+        onTimeDelivery: 95.6
+      }
+    },
+    {
+      id: '2',
+      name: 'Gulf Tax Consultancy',
+      type: 'tax_consultant',
+      email: 'contact@gulftax.ae',
+      phone: '+971-4-987-6543',
+      address: 'Business Bay, Dubai',
+      services: ['VAT Registration', 'Tax Filing', 'Compliance Review'],
+      rating: 4.6,
+      status: 'active',
+      registrationDate: '2023-02-20',
+      contactPerson: 'Sarah Johnson',
+      website: 'www.gulftax.ae',
+      licenseNumber: 'TAX-2023-002',
+      vatNumber: '100987654300003',
+      paymentTerms: 'Net 15',
+      performanceMetrics: {
+        totalJobs: 32,
+        completedJobs: 30,
+        averageRating: 4.6,
+        onTimeDelivery: 93.8
+      }
+    }
+  ]);
+
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'vendors' | 'contracts' | 'performance'>('overview');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | string>('all');
+  const [showAddVendor, setShowAddVendor] = useState(false);
+
+  const getVendorTypeColor = (type: string) => {
+    switch (type) {
+      case 'insurance': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'tax_consultant': return 'bg-green-100 text-green-800 border-green-200';
+      case 'legal_services': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'translation': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'attestation': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'bg-green-100 text-green-800 border-green-200';
+      case 'inactive': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const filteredVendors = vendors.filter(vendor => {
+    const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         vendor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         vendor.services.some(service => service.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesFilter = filterType === 'all' || vendor.type === filterType;
+
+    return matchesSearch && matchesFilter;
+  });
+
+  const stats = [
+    {
+      title: 'Total Vendors',
+      value: vendors.length.toString(),
+      change: '+3 this month',
+      icon: Users,
+      color: 'blue'
+    },
+    {
+      title: 'Active Contracts',
+      value: '12',
+      change: '8 expiring soon',
+      icon: FileText,
+      color: 'green'
+    },
+    {
+      title: 'Average Rating',
+      value: '4.7',
+      change: '+0.2 from last month',
+      icon: Star,
+      color: 'yellow'
+    },
+    {
+      title: 'On-time Delivery',
+      value: '94.5%',
+      change: 'Above target',
+      icon: Clock,
+      color: 'purple'
+    }
+  ];
+
+  const renderOverview = () => (
+    <div className="space-y-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, index) => {
+          const Icon = stat.icon;
+          return (
+            <div key={index} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
+                  <p className={`text-sm mt-2 ${
+                    stat.color === 'green' ? 'text-green-600' :
+                    stat.color === 'yellow' ? 'text-yellow-600' :
+                    stat.color === 'purple' ? 'text-purple-600' :
+                    'text-blue-600'
+                  }`}>
+                    {stat.change}
+                  </p>
+                </div>
+                <div className={`p-3 rounded-xl ${
+                  stat.color === 'blue' ? 'bg-blue-100' :
+                  stat.color === 'green' ? 'bg-green-100' :
+                  stat.color === 'yellow' ? 'bg-yellow-100' :
+                  'bg-purple-100'
+                }`}>
+                  <Icon className={`w-6 h-6 ${
+                    stat.color === 'blue' ? 'text-blue-600' :
+                    stat.color === 'green' ? 'text-green-600' :
+                    stat.color === 'yellow' ? 'text-yellow-600' :
+                    'text-purple-600'
+                  }`} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Top Performing Vendors */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Performing Vendors</h3>
+        <div className="space-y-4">
+          {vendors.sort((a, b) => b.rating - a.rating).slice(0, 5).map((vendor, index) => (
+            <div key={vendor.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full text-white font-semibold text-sm">
+                {index + 1}
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-gray-900">{vendor.name}</p>
+                <p className="text-sm text-gray-600 capitalize">{vendor.type.replace('_', ' ')}</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                <span className="text-sm font-medium text-gray-900">{vendor.rating}</span>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-900">{vendor.performanceMetrics.completedJobs} jobs</p>
+                <p className="text-xs text-gray-600">{vendor.performanceMetrics.onTimeDelivery}% on-time</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: TrendingUp },
+    { id: 'vendors', label: 'Vendors', icon: Users },
+    { id: 'contracts', label: 'Contracts', icon: FileText },
+    { id: 'performance', label: 'Performance', icon: Award }
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Vendor Management</h1>
+            <p className="text-gray-600 mt-1">Manage relationships with service providers and track performance</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
+            </button>
+            <button
+              onClick={() => setShowAddVendor(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Vendor</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="bg-white rounded-xl border border-gray-200 p-2">
+        <div className="flex space-x-1 overflow-x-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center space-x-2 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      {activeTab === 'overview' && renderOverview()}
+      {activeTab === 'vendors' && renderVendorsList()}
+      {activeTab === 'contracts' && renderContracts()}
+      {activeTab === 'performance' && renderPerformance()}
+    </div>
+  );
+
+  function renderVendorsList() {
+    return (
+      <div className="space-y-6">
+        {/* Search and Filter Bar */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+              <div className="relative">
+                <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search vendors..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-full sm:w-80 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div className="relative">
+                <Filter className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="pl-10 pr-8 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+                >
+                  <option value="all">All Types</option>
+                  <option value="insurance">Insurance</option>
+                  <option value="tax_consultant">Tax Consultant</option>
+                  <option value="legal_services">Legal Services</option>
+                  <option value="translation">Translation</option>
+                  <option value="attestation">Attestation</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Vendors Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredVendors.map((vendor) => (
+            <div key={vendor.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 cursor-pointer"
+                 onClick={() => setSelectedVendor(vendor)}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    {vendor.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{vendor.name}</h3>
+                    <p className="text-sm text-gray-600">{vendor.contactPerson}</p>
+                  </div>
+                </div>
+                <div className="relative">
+                  <button className="p-1 text-gray-400 hover:text-gray-600">
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Mail className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-600">{vendor.email}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Phone className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-600">{vendor.phone}</span>
+                </div>
+                {vendor.website && (
+                  <div className="flex items-center space-x-2">
+                    <Globe className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-600">{vendor.website}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getVendorTypeColor(vendor.type)}`}>
+                    {vendor.type.replace('_', ' ').toUpperCase()}
+                  </span>
+                  <div className="flex items-center space-x-1">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <span className="text-sm font-medium text-gray-900">{vendor.rating}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(vendor.status)}`}>
+                    {vendor.status.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {vendor.performanceMetrics.completedJobs} jobs completed
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderContracts() {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Active Contracts</h3>
+            <button className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200">
+              <Plus className="w-4 h-4" />
+              <span>New Contract</span>
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {[
+              {
+                id: '1',
+                vendor: 'Emirates Insurance Brokers',
+                title: 'Annual Insurance Services',
+                type: 'annual_contract',
+                value: 50000,
+                startDate: '2024-01-01',
+                endDate: '2024-12-31',
+                status: 'active'
+              },
+              {
+                id: '2',
+                vendor: 'Gulf Tax Consultancy',
+                title: 'Monthly Tax Compliance',
+                type: 'retainer',
+                value: 24000,
+                startDate: '2024-01-01',
+                endDate: '2024-12-31',
+                status: 'active'
+              }
+            ].map((contract) => (
+              <div key={contract.id} className="border border-gray-200 rounded-lg p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{contract.title}</h4>
+                    <p className="text-sm text-gray-600">{contract.vendor}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(contract.status)}`}>
+                    {contract.status.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Contract Value</p>
+                    <p className="font-medium text-gray-900">AED {contract.value.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Start Date</p>
+                    <p className="font-medium text-gray-900">{contract.startDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">End Date</p>
+                    <p className="font-medium text-gray-900">{contract.endDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Type</p>
+                    <p className="font-medium text-gray-900 capitalize">{contract.type.replace('_', ' ')}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-100 flex space-x-3">
+                  <button className="flex items-center space-x-2 text-blue-600 hover:text-blue-700">
+                    <Eye className="w-4 h-4" />
+                    <span className="text-sm">View</span>
+                  </button>
+                  <button className="flex items-center space-x-2 text-green-600 hover:text-green-700">
+                    <Edit className="w-4 h-4" />
+                    <span className="text-sm">Edit</span>
+                  </button>
+                  <button className="flex items-center space-x-2 text-red-600 hover:text-red-700">
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-sm">Delete</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPerformance() {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance Analytics</h3>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {vendors.map((vendor) => (
+              <div key={vendor.id} className="border border-gray-200 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      {vendor.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{vendor.name}</h4>
+                      <p className="text-sm text-gray-600 capitalize">{vendor.type.replace('_', ' ')}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <span className="text-sm font-medium text-gray-900">{vendor.rating}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <p className="text-2xl font-bold text-blue-600">{vendor.performanceMetrics.totalJobs}</p>
+                    <p className="text-blue-600">Total Jobs</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <p className="text-2xl font-bold text-green-600">{vendor.performanceMetrics.completedJobs}</p>
+                    <p className="text-green-600">Completed</p>
+                  </div>
+                  <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                    <p className="text-2xl font-bold text-yellow-600">{vendor.performanceMetrics.averageRating}</p>
+                    <p className="text-yellow-600">Avg Rating</p>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg">
+                    <p className="text-2xl font-bold text-purple-600">{vendor.performanceMetrics.onTimeDelivery}%</p>
+                    <p className="text-purple-600">On-Time</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+};
+
+export default VendorManagement;
