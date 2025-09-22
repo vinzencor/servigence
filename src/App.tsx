@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
+import Login from './components/Login';
 import CustomerRegistration from './components/CustomerRegistration';
 import CompaniesSection from './components/CompaniesSection';
 import CompanyEmployeeManagement from './components/CompanyEmployeeManagement';
@@ -16,10 +18,12 @@ import InvoiceManagement from './components/InvoiceManagement';
 import RemindersManagement from './components/RemindersManagement';
 import EmployeeLogin from './components/EmployeeLogin';
 import EmployeeDashboard from './components/EmployeeDashboard';
+import Chat from './components/Chat';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
-function App() {
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
@@ -172,18 +176,37 @@ function App() {
         return <ServiceEmployeeManagement />;
       case 'vendors':
         return <VendorManagement />;
+      case 'chat':
+        return <Chat />;
       case 'reminders':
         return <RemindersServices />;
       case 'accounts':
         return <AccountManagement />;
       case 'invoices':
         return <InvoiceManagement />;
-      case 'reminders':
+      case 'reminders-management':
         return <RemindersManagement />;
       default:
         return <Dashboard onNavigate={setCurrentView} />;
     }
   };
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <Login />;
+  }
 
   // Handle employee mode
   if (isEmployeeMode && loggedInEmployee) {
@@ -211,6 +234,14 @@ function App() {
         />
       )}
     </Layout>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
