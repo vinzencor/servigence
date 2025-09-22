@@ -173,13 +173,23 @@ export const dbHelpers = {
         .delete()
         .eq('company_id', id);
 
-      // 4. Delete all service billings for this company (but preserve invoices)
-      // We'll keep service_billings as they contain invoice information
-      // Just update them to mark company as deleted
+      // 4. Handle service billings for this company
+      // Delete service billings that don't have invoices generated
       await supabase
         .from('service_billings')
-        .update({ company_id: null, notes: 'Company deleted - ' + new Date().toISOString() })
-        .eq('company_id', id);
+        .delete()
+        .eq('company_id', id)
+        .eq('invoice_generated', false);
+
+      // Update service billings with invoices to remove company reference but preserve invoice data
+      await supabase
+        .from('service_billings')
+        .update({
+          company_id: null,
+          notes: 'Company deleted - ' + new Date().toISOString()
+        })
+        .eq('company_id', id)
+        .eq('invoice_generated', true);
 
       // 5. Delete account transactions (except those with invoices)
       await supabase
@@ -387,6 +397,18 @@ export const dbHelpers = {
     const { data, error } = await supabase
       .from('service_types')
       .insert([service])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async updateService(id: string, service: any) {
+    const { data, error } = await supabase
+      .from('service_types')
+      .update(service)
+      .eq('id', id)
       .select()
       .single()
 

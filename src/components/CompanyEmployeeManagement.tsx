@@ -618,6 +618,41 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
           ...prev,
           ...mockData
         }));
+
+        // Still save the document even if no data was extracted
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64Data = reader.result as string;
+
+          const documentData = {
+            employee_id: selectedEmployee?.id || null,
+            type: normalizeDocumentType(documentType),
+            name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
+            file_name: file.name,
+            file_path: base64Data,
+            upload_date: new Date().toISOString().split('T')[0],
+            expiry_date: null,
+            status: 'valid'
+          };
+
+          if (selectedEmployee) {
+            // Save immediately for existing employee
+            try {
+              await dbHelpers.createEmployeeDocument(documentData);
+              console.log('Document saved to database (no OCR data)');
+              // Reload documents to show the new one
+              await loadEmployeeDocuments(selectedEmployee.id);
+            } catch (docError) {
+              console.error('Error saving document:', docError);
+            }
+          } else {
+            // Store for later when creating new employee
+            setPendingDocuments(prev => [...prev, documentData]);
+            console.log('Document stored for new employee creation (no OCR data)');
+          }
+        };
+        reader.readAsDataURL(file);
+
         alert(`⚠️ Document uploaded but no relevant data found.\nUsing sample data for demonstration.\nTry uploading a clearer image.`);
       }
     } catch (error) {
@@ -629,6 +664,41 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         ...prev,
         ...mockData
       }));
+
+      // Still save the document even if OCR processing failed
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result as string;
+
+        const documentData = {
+          employee_id: selectedEmployee?.id || null,
+          type: normalizeDocumentType(documentType),
+          name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
+          file_name: file.name,
+          file_path: base64Data,
+          upload_date: new Date().toISOString().split('T')[0],
+          expiry_date: null,
+          status: 'valid'
+        };
+
+        if (selectedEmployee) {
+          // Save immediately for existing employee
+          try {
+            await dbHelpers.createEmployeeDocument(documentData);
+            console.log('Document saved to database (OCR failed)');
+            // Reload documents to show the new one
+            await loadEmployeeDocuments(selectedEmployee.id);
+          } catch (docError) {
+            console.error('Error saving document:', docError);
+          }
+        } else {
+          // Store for later when creating new employee
+          setPendingDocuments(prev => [...prev, documentData]);
+          console.log('Document stored for new employee creation (OCR failed)');
+        }
+      };
+      reader.readAsDataURL(file);
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`❌ Document processing failed: ${errorMessage}\nUsing sample data instead.`);
     } finally {
@@ -787,6 +857,13 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
           laborCardExpiry: '2026-03-10'
         };
       default:
+        // Handle custom document types
+        if (documentType.startsWith('custom-')) {
+          return {
+            customNumber: 'DOC123456789',
+            customExpiry: '2026-12-31'
+          };
+        }
         return {};
     }
   };
@@ -956,6 +1033,28 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         if (laborDateMatches && laborDateMatches.length > 0) {
           extractedData.laborCardExpiry = formatDateForInput(laborDateMatches[laborDateMatches.length - 1]);
           console.log('Found labor card expiry:', laborDateMatches[laborDateMatches.length - 1]);
+        }
+        break;
+
+      default:
+        // Handle custom document types and other unknown types
+        if (documentType.startsWith('custom-')) {
+          console.log('Processing custom document type:', documentType);
+
+          // For custom documents, try to extract any numbers and dates
+          // Extract any number that could be a document number
+          const numberMatches = text.match(/\b\d{6,15}\b/g);
+          if (numberMatches && numberMatches.length > 0) {
+            extractedData.customNumber = numberMatches[0];
+            console.log('Found custom document number:', numberMatches[0]);
+          }
+
+          // Extract any date that could be an expiry date
+          const dateMatches = text.match(/\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}|\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/g);
+          if (dateMatches && dateMatches.length > 0) {
+            extractedData.customExpiry = formatDateForInput(dateMatches[dateMatches.length - 1]);
+            console.log('Found custom document expiry:', dateMatches[dateMatches.length - 1]);
+          }
         }
         break;
     }
@@ -1522,7 +1621,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     {pendingDocuments.filter(doc => doc.type === 'passport').length > 0 && (
                       <div className="mt-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                           {pendingDocuments.filter(doc => doc.type === 'passport').map((doc, index) => (
                             <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
                               {/* Document Preview */}
@@ -1697,7 +1796,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     {pendingDocuments.filter(doc => doc.type === 'emirates-id').length > 0 && (
                       <div className="mt-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                           {pendingDocuments.filter(doc => doc.type === 'emirates-id').map((doc, index) => (
                             <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
                               {/* Document Preview */}
@@ -1856,7 +1955,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     {pendingDocuments.filter(doc => doc.type === 'visa').length > 0 && (
                       <div className="mt-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                           {pendingDocuments.filter(doc => doc.type === 'visa').map((doc, index) => (
                             <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
                               {/* Document Preview */}
@@ -2015,7 +2114,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     {pendingDocuments.filter(doc => doc.type === 'labor-card').length > 0 && (
                       <div className="mt-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                           {pendingDocuments.filter(doc => doc.type === 'labor-card').map((doc, index) => (
                             <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
                               {/* Document Preview */}
@@ -2182,7 +2281,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                             {pendingDocuments.filter(doc => doc.type === `custom-${customDoc.id}`).length > 0 && (
                               <div className="mt-4">
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                   {pendingDocuments.filter(doc => doc.type === `custom-${customDoc.id}`).map((doc, index) => (
                                     <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
                                       {/* Document Preview */}

@@ -74,7 +74,13 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
         lastActivity: company.last_activity,
         notes: company.notes
       }));
-      setAllCompanies([...transformedCompanies, ...companies]);
+
+      // Remove duplicates based on company ID
+      const uniqueCompanies = transformedCompanies.filter((company, index, self) =>
+        index === self.findIndex(c => c.id === company.id)
+      );
+
+      setAllCompanies(uniqueCompanies);
     } catch (error) {
       console.error('Error loading companies:', error);
       setAllCompanies(companies);

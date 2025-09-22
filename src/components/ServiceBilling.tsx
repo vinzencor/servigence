@@ -14,7 +14,7 @@ const ServiceBilling: React.FC = () => {
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
-  const [vendors, setVendors] = useState<any[]>([]);
+
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,6 @@ const ServiceBilling: React.FC = () => {
     individualId: '',
     serviceTypeId: '',
     assignedEmployeeId: '',
-    assignedVendorId: '',
     serviceDate: new Date().toISOString().split('T')[0],
     cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
     quantity: '1',
@@ -111,37 +110,7 @@ const ServiceBilling: React.FC = () => {
       const serviceEmployeesData = await dbHelpers.getServiceEmployees();
       setServiceEmployees(serviceEmployeesData || []);
 
-      // Load vendors (use mock data for now)
-      const mockVendors = [
-        {
-          id: '1',
-          name: 'Emirates Insurance Brokers',
-          type: 'insurance',
-          email: 'info@emiratesinsurance.ae',
-          phone: '+971-4-123-4567',
-          services: ['Health Insurance', 'Life Insurance', 'Property Insurance'],
-          status: 'active'
-        },
-        {
-          id: '2',
-          name: 'Gulf Tax Consultancy',
-          type: 'tax_consultant',
-          email: 'contact@gulftax.ae',
-          phone: '+971-4-987-6543',
-          services: ['VAT Registration', 'Tax Filing', 'Compliance Review'],
-          status: 'active'
-        },
-        {
-          id: '3',
-          name: 'Dubai Legal Services',
-          type: 'legal_services',
-          email: 'info@dubailegal.ae',
-          phone: '+971-4-555-7890',
-          services: ['Contract Review', 'Legal Consultation', 'Document Attestation'],
-          status: 'active'
-        }
-      ];
-      setVendors(mockVendors);
+
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -503,7 +472,6 @@ const ServiceBilling: React.FC = () => {
         individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
         service_type_id: billingForm.serviceTypeId || null,
         assigned_employee_id: billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
-        assigned_vendor_id: billingForm.assignedVendorId && billingForm.assignedVendorId !== '' ? billingForm.assignedVendorId : null,
         service_date: billingForm.serviceDate,
         cash_type: billingForm.cashType,
         typing_charges: typingCharges,
@@ -575,7 +543,6 @@ const ServiceBilling: React.FC = () => {
       individualId: '',
       serviceTypeId: '',
       assignedEmployeeId: '',
-      assignedVendorId: '',
       serviceDate: new Date().toISOString().split('T')[0],
       cashType: 'cash',
       quantity: '1',
@@ -1166,23 +1133,7 @@ const ServiceBilling: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Vendor Assignment */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Vendor</label>
-                  <select
-                    name="assignedVendorId"
-                    value={billingForm.assignedVendorId}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select vendor (optional)</option>
-                    {vendors.map((vendor) => (
-                      <option key={vendor.id} value={vendor.id}>
-                        {vendor.name} - {vendor.type.replace('_', ' ')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
 
                 {/* Service Date */}
                 <div>

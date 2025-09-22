@@ -84,7 +84,7 @@ const ServiceManagement: React.FC = () => {
 
       if (editingService) {
         // Update existing service
-        // await dbHelpers.updateService(editingService.id, serviceData);
+        await dbHelpers.updateService(editingService.id, serviceData);
       } else {
         // Create new service
         await dbHelpers.createService(serviceData);
