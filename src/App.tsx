@@ -81,12 +81,11 @@ function App() {
 
   const handleSaveCompany = async (company: Company) => {
     try {
-      // Save to database
-      await dbHelpers.createCompany(company);
-      // Reload companies from database
+      // The company is already saved to database in CustomerRegistration component
+      // Just reload companies from database to get the latest data
       await loadCompanies();
     } catch (error) {
-      console.error('Error saving company:', error);
+      console.error('Error loading companies:', error);
     }
   };
 

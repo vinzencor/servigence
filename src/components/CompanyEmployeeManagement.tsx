@@ -197,7 +197,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         try {
           const documentsToSave = pendingDocuments.map(doc => ({
             ...doc,
-            employee_id: result.id
+            employee_id: result.id,
+            type: normalizeDocumentType(doc.type)
           }));
 
           for (const doc of documentsToSave) {
@@ -455,6 +456,27 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
     }
   };
 
+  // Helper function to normalize document type for database
+  const normalizeDocumentType = (documentType: string): string => {
+    const typeMapping: { [key: string]: string } = {
+      'passport': 'passport',
+      'emirates-id': 'emirates_id',
+      'visa': 'visa',
+      'labor-card': 'labor_card',
+      'educational-certificate': 'educational_certificate',
+      'experience-certificate': 'experience_certificate',
+      'medical-certificate': 'medical_certificate',
+      'other': 'other'
+    };
+
+    // Handle custom document types
+    if (documentType.startsWith('custom-')) {
+      return 'other';
+    }
+
+    return typeMapping[documentType] || 'other';
+  };
+
   // OCR Document Processing
   const processDocument = async (file: File, documentType: string) => {
     setUploadingDocument(documentType);
@@ -516,7 +538,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
           const documentData = {
             employee_id: selectedEmployee?.id || null,
-            type: documentType,
+            type: normalizeDocumentType(documentType),
             name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
             file_name: file.name,
             file_path: base64Data,
@@ -560,7 +582,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
           const documentData = {
             employee_id: selectedEmployee?.id || null,
-            type: documentType,
+            type: normalizeDocumentType(documentType),
             name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
             file_name: file.name,
             file_path: base64Data, // Store base64 data in file_path for now
@@ -640,7 +662,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
         const documentData = {
           employee_id: selectedEmployee?.id || null,
-          type: documentType,
+          type: normalizeDocumentType(documentType),
           name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
           file_name: file.name,
           file_path: base64Data,
@@ -1054,10 +1076,37 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setEmployeeForm(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  // Delete pending document (for Add Employee modal)
+  const handleDeletePendingDocument = (index: number, documentType: string) => {
+    if (confirm('Are you sure you want to delete this document?')) {
+      setPendingDocuments(prev =>
+        prev.filter((doc, i) => !(i === index && doc.type === documentType))
+      );
+    }
+  };
+
+  // Delete existing document (for Edit Employee modal)
+  const handleDeleteExistingDocument = async (documentId: string) => {
+    if (confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
+      try {
+        await dbHelpers.deleteEmployeeDocument(documentId);
+        // Refresh the documents list
+        if (selectedEmployee) {
+          const documents = await dbHelpers.getEmployeeDocuments(selectedEmployee.id);
+          setEmployeeDocuments(documents);
+        }
+        alert('✅ Document deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting document:', error);
+        alert('❌ Failed to delete document. Please try again.');
+      }
     }
   };
 
@@ -1468,6 +1517,81 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                         </label>
                       </div>
                     </div>
+
+                    {/* Document Preview */}
+                    {pendingDocuments.filter(doc => doc.type === 'passport').length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {pendingDocuments.filter(doc => doc.type === 'passport').map((doc, index) => (
+                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                              {/* Document Preview */}
+                              {doc.file_path && (
+                                <div className="mb-2">
+                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                    <img
+                                      src={doc.file_path}
+                                      alt={doc.name}
+                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() => {
+                                        const newWindow = window.open();
+                                        if (newWindow) {
+                                          newWindow.document.write(`
+                                            <html>
+                                              <head><title>${doc.name}</title></head>
+                                              <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                                <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                              </body>
+                                            </html>
+                                          `);
+                                        }
+                                      }}
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) {
+                                          fallback.style.display = 'flex';
+                                        }
+                                      }}
+                                    />
+                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                      <div className="text-center">
+                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                        <span className="text-sm">Preview not available</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Document Info */}
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                  {doc.expiry_date && (
+                                    <p className="text-xs text-gray-500">
+                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                    Valid
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeletePendingDocument(index, 'passport')}
+                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete document"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {errors.passportNumber && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -1568,6 +1692,81 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                         </label>
                       </div>
                     </div>
+
+                    {/* Document Preview */}
+                    {pendingDocuments.filter(doc => doc.type === 'emirates-id').length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {pendingDocuments.filter(doc => doc.type === 'emirates-id').map((doc, index) => (
+                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                              {/* Document Preview */}
+                              {doc.file_path && (
+                                <div className="mb-2">
+                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                    <img
+                                      src={doc.file_path}
+                                      alt={doc.name}
+                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() => {
+                                        const newWindow = window.open();
+                                        if (newWindow) {
+                                          newWindow.document.write(`
+                                            <html>
+                                              <head><title>${doc.name}</title></head>
+                                              <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                                <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                              </body>
+                                            </html>
+                                          `);
+                                        }
+                                      }}
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) {
+                                          fallback.style.display = 'flex';
+                                        }
+                                      }}
+                                    />
+                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                      <div className="text-center">
+                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                        <span className="text-sm">Preview not available</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Document Info */}
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                  {doc.expiry_date && (
+                                    <p className="text-xs text-gray-500">
+                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                    Valid
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeletePendingDocument(index, 'emirates-id')}
+                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete document"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1652,6 +1851,81 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                         </label>
                       </div>
                     </div>
+
+                    {/* Document Preview */}
+                    {pendingDocuments.filter(doc => doc.type === 'visa').length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {pendingDocuments.filter(doc => doc.type === 'visa').map((doc, index) => (
+                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                              {/* Document Preview */}
+                              {doc.file_path && (
+                                <div className="mb-2">
+                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                    <img
+                                      src={doc.file_path}
+                                      alt={doc.name}
+                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() => {
+                                        const newWindow = window.open();
+                                        if (newWindow) {
+                                          newWindow.document.write(`
+                                            <html>
+                                              <head><title>${doc.name}</title></head>
+                                              <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                                <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                              </body>
+                                            </html>
+                                          `);
+                                        }
+                                      }}
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) {
+                                          fallback.style.display = 'flex';
+                                        }
+                                      }}
+                                    />
+                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                      <div className="text-center">
+                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                        <span className="text-sm">Preview not available</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Document Info */}
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                  {doc.expiry_date && (
+                                    <p className="text-xs text-gray-500">
+                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                    Valid
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeletePendingDocument(index, 'visa')}
+                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete document"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1736,6 +2010,81 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                         </label>
                       </div>
                     </div>
+
+                    {/* Document Preview */}
+                    {pendingDocuments.filter(doc => doc.type === 'labor-card').length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {pendingDocuments.filter(doc => doc.type === 'labor-card').map((doc, index) => (
+                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                              {/* Document Preview */}
+                              {doc.file_path && (
+                                <div className="mb-2">
+                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                    <img
+                                      src={doc.file_path}
+                                      alt={doc.name}
+                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() => {
+                                        const newWindow = window.open();
+                                        if (newWindow) {
+                                          newWindow.document.write(`
+                                            <html>
+                                              <head><title>${doc.name}</title></head>
+                                              <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                                <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                              </body>
+                                            </html>
+                                          `);
+                                        }
+                                      }}
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) {
+                                          fallback.style.display = 'flex';
+                                        }
+                                      }}
+                                    />
+                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                      <div className="text-center">
+                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                        <span className="text-sm">Preview not available</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Document Info */}
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                  {doc.expiry_date && (
+                                    <p className="text-xs text-gray-500">
+                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                    Valid
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeletePendingDocument(index, 'labor-card')}
+                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete document"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1828,6 +2177,81 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                 </label>
                               </div>
                             </div>
+
+                            {/* Document Preview */}
+                            {pendingDocuments.filter(doc => doc.type === `custom-${customDoc.id}`).length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {pendingDocuments.filter(doc => doc.type === `custom-${customDoc.id}`).map((doc, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                      {/* Document Preview */}
+                                      {doc.file_path && (
+                                        <div className="mb-2">
+                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                            <img
+                                              src={doc.file_path}
+                                              alt={doc.name}
+                                              className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                              onClick={() => {
+                                                const newWindow = window.open();
+                                                if (newWindow) {
+                                                  newWindow.document.write(`
+                                                    <html>
+                                                      <head><title>${doc.name}</title></head>
+                                                      <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                                        <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                                      </body>
+                                                    </html>
+                                                  `);
+                                                }
+                                              }}
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) {
+                                                  fallback.style.display = 'flex';
+                                                }
+                                              }}
+                                            />
+                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                              <div className="text-center">
+                                                <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                                <span className="text-sm">Preview not available</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Document Info */}
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                          <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                          {doc.expiry_date && (
+                                            <p className="text-xs text-gray-500">
+                                              Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                            </p>
+                                          )}
+                                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                            Valid
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => handleDeletePendingDocument(index, `custom-${customDoc.id}`)}
+                                          className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                          title="Delete document"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2248,12 +2672,17 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = 'none';
-                                    target.nextElementSibling?.classList.remove('hidden');
+                                    const fallback = target.nextElementSibling as HTMLElement;
+                                    if (fallback) {
+                                      fallback.style.display = 'flex';
+                                    }
                                   }}
                                 />
-                                <div className="hidden flex items-center justify-center h-full text-gray-500">
-                                  <FileText className="w-8 h-8 mb-2" />
-                                  <span className="text-sm">Preview not available</span>
+                                <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                  <div className="text-center">
+                                    <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                    <span className="text-sm">Preview not available</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -2295,17 +2724,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                 <Edit className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={async () => {
-                                  if (confirm('Are you sure you want to delete this document?')) {
-                                    try {
-                                      await dbHelpers.deleteEmployeeDocument(doc.id);
-                                      await loadEmployeeDocuments(selectedEmployee.id);
-                                    } catch (error) {
-                                      console.error('Error deleting document:', error);
-                                      alert('Error deleting document');
-                                    }
-                                  }
-                                }}
+                                onClick={() => handleDeleteExistingDocument(doc.id)}
                                 className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                                 title="Delete Document"
                               >
@@ -2624,12 +3043,17 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = 'none';
-                                    target.nextElementSibling?.classList.remove('hidden');
+                                    const fallback = target.nextElementSibling as HTMLElement;
+                                    if (fallback) {
+                                      fallback.style.display = 'flex';
+                                    }
                                   }}
                                 />
-                                <div className="hidden flex items-center justify-center h-full text-gray-500">
-                                  <FileText className="w-6 h-6 mb-1" />
-                                  <span className="text-xs">Preview not available</span>
+                                <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                  <div className="text-center">
+                                    <FileText className="w-6 h-6 mb-1 mx-auto" />
+                                    <span className="text-xs">Preview not available</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
