@@ -315,6 +315,18 @@ export const dbHelpers = {
     return data
   },
 
+  async updateEmployeeDocument(documentId: string, updates: any) {
+    const { data, error } = await supabase
+      .from('employee_documents')
+      .update(updates)
+      .eq('id', documentId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
   async deleteEmployeeDocument(documentId: string) {
     const { data, error } = await supabase
       .from('employee_documents')

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Search, Upload, Eye, Edit, Trash2, FileText, Calendar, Phone, Mail, User, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff, Edit, Trash2, FileText, Calendar, Phone, Mail, User, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Company, Employee } from '../types';
 import { dbHelpers } from '../lib/supabase';
+import DocumentEditModal from './DocumentEditModal';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -30,6 +31,10 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
   const [showEmiratesIdSection, setShowEmiratesIdSection] = useState(false);
   const [showVisaSection, setShowVisaSection] = useState(false);
   const [showLaborCardSection, setShowLaborCardSection] = useState(false);
+  const [showDocumentEdit, setShowDocumentEdit] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<any>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [employeeForm, setEmployeeForm] = useState({
     employeeId: '',
@@ -77,6 +82,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
     }
   };
 
+  // Validation for creating new employees
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -106,6 +112,41 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
     if (employeeForm.password !== employeeForm.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Validation for editing existing employees
+  const validateEditForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!employeeForm.employeeId.trim()) newErrors.employeeId = 'Employee ID is required';
+    if (!employeeForm.name.trim()) newErrors.name = 'Name is required';
+    if (!employeeForm.position.trim()) newErrors.position = 'Position is required';
+    if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
+    if (!employeeForm.phone.trim()) newErrors.phone = 'Phone is required';
+    if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
+    if (!employeeForm.joinDate) newErrors.joinDate = 'Join date is required';
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (employeeForm.email && !emailRegex.test(employeeForm.email)) {
+      newErrors.email = 'Invalid email format';
+    }
+
+    // Password validation - only if user is trying to change password
+    if (employeeForm.password.trim()) {
+      if (employeeForm.password.length < 6) {
+        newErrors.password = 'Password must be at least 6 characters';
+      }
+      if (!employeeForm.confirmPassword.trim()) {
+        newErrors.confirmPassword = 'Please confirm your new password';
+      }
+      if (employeeForm.password !== employeeForm.confirmPassword) {
+        newErrors.confirmPassword = 'Passwords do not match';
+      }
     }
 
     setErrors(newErrors);
@@ -290,8 +331,10 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
   };
 
   // Handler for editing employee
-  const handleEditEmployee = (employee: Employee) => {
+  const handleEditEmployee = async (employee: Employee) => {
     setSelectedEmployee(employee);
+    // Load employee documents
+    await loadEmployeeDocuments(employee.id);
     // Populate form with employee data
     setEmployeeForm({
       employeeId: employee.employeeId || '',
@@ -342,41 +385,64 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
     }
   };
 
+  // Helper function to clean and validate data
+  const cleanEmployeeData = (formData: any) => {
+    const cleanData: any = {
+      id: selectedEmployee?.id,
+      company_id: company.id,
+      employee_id: formData.employeeId?.trim(),
+      name: formData.name?.trim(),
+      position: formData.position?.trim(),
+      email: formData.email?.trim(),
+      phone: formData.phone?.trim(),
+      nationality: formData.nationality?.trim() || null,
+      passport_number: formData.passportNumber?.trim() || null,
+      visa_type: formData.visaType || 'employment',
+      visa_number: formData.visaNumber?.trim() || null,
+      emirates_id: formData.emiratesId?.trim() || null,
+      labor_card_number: formData.laborCardNumber?.trim() || null,
+      salary: parseFloat(formData.salary) || 0,
+      department: formData.department?.trim() || null,
+      manager: formData.manager?.trim() || null,
+    };
+
+    // Handle date fields - convert empty strings to null
+    const dateFields = [
+      'passport_expiry', 'visa_issue_date', 'visa_expiry_date',
+      'emirates_id_expiry', 'labor_card_expiry', 'join_date'
+    ];
+
+    const formDateFields = [
+      'passportExpiry', 'visaIssueDate', 'visaExpiryDate',
+      'emiratesIdExpiry', 'laborCardExpiry', 'joinDate'
+    ];
+
+    dateFields.forEach((dbField, index) => {
+      const formField = formDateFields[index];
+      const dateValue = formData[formField]?.trim();
+      cleanData[dbField] = dateValue && dateValue !== '' ? dateValue : null;
+    });
+
+    // Only include password if provided
+    if (formData.password?.trim()) {
+      cleanData.password_hash = btoa(formData.password.trim());
+    }
+
+    return cleanData;
+  };
+
   // Handler for updating employee
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedEmployee || !validateForm()) return;
+    if (!selectedEmployee || !validateEditForm()) return;
 
     try {
-      const updatedEmployee = {
-        id: selectedEmployee.id,
-        company_id: company.id,
-        employee_id: employeeForm.employeeId,
-        name: employeeForm.name,
-        position: employeeForm.position,
-        email: employeeForm.email,
-        phone: employeeForm.phone,
-        nationality: employeeForm.nationality,
-        passport_number: employeeForm.passportNumber,
-        passport_expiry: employeeForm.passportExpiry,
-        visa_type: employeeForm.visaType,
-        visa_number: employeeForm.visaNumber,
-        visa_issue_date: employeeForm.visaIssueDate,
-        visa_expiry_date: employeeForm.visaExpiryDate,
-        emirates_id: employeeForm.emiratesId,
-        emirates_id_expiry: employeeForm.emiratesIdExpiry,
-        labor_card_number: employeeForm.laborCardNumber,
-        labor_card_expiry: employeeForm.laborCardExpiry,
-        join_date: employeeForm.joinDate,
-        salary: parseFloat(employeeForm.salary) || 0,
-        department: employeeForm.department,
-        manager: employeeForm.manager,
-        // Only update password if provided
-        ...(employeeForm.password && { password_hash: btoa(employeeForm.password) })
-      };
+      const cleanedData = cleanEmployeeData(employeeForm);
 
-      await dbHelpers.updateEmployee(updatedEmployee);
+      console.log('Updating employee with data:', cleanedData);
+
+      await dbHelpers.updateEmployee(cleanedData);
       await loadEmployees();
       setShowEditEmployee(false);
       setSelectedEmployee(null);
@@ -384,7 +450,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
       alert('Employee updated successfully!');
     } catch (error) {
       console.error('Error updating employee:', error);
-      alert(`Error updating employee: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Error updating employee: ${errorMessage}`);
     }
   };
 
@@ -400,32 +467,80 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
       // Handle PDF files by converting first page to image
       if (file.type === 'application/pdf') {
         try {
+          console.log('Starting PDF conversion...');
           processedFile = await convertPdfToImage(file);
-          console.log('PDF converted to image for OCR processing');
+          console.log('PDF successfully converted to image for OCR processing');
         } catch (pdfError) {
           console.error('PDF conversion failed:', pdfError);
-          throw new Error('PDF processing failed. Please upload an image file (JPG, PNG) instead.');
+          // Instead of throwing an error, let's save the PDF without OCR processing
+          console.log('Saving PDF without OCR processing...');
+          await savePdfWithoutOCR(file, documentType);
+          return; // Exit early since we've saved the document
         }
       }
 
       // Enhanced Tesseract.js configuration for better accuracy
-      const { data: { text, confidence } } = await Tesseract.recognize(processedFile, 'eng+ara', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+      let text = '';
+      let confidence = 0;
+
+      try {
+        console.log('Starting OCR processing...');
+        const result = await Tesseract.recognize(processedFile, 'eng+ara', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+            }
           }
-        },
-        tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/\\:. ',
-      });
+        });
 
-      console.log('OCR Text extracted:', text);
-      console.log('OCR Confidence:', confidence);
+        text = result.data.text;
+        confidence = result.data.confidence;
 
-      // Only proceed if confidence is reasonable
-      if (confidence < 30) {
-        console.warn('Low OCR confidence:', confidence);
-        throw new Error('Document quality too low for accurate text extraction');
+        console.log('OCR Text extracted:', text);
+        console.log('OCR Confidence:', confidence);
+      } catch (ocrError) {
+        console.error('OCR processing failed:', ocrError);
+        // Continue without OCR data
+        console.log('Continuing without OCR data...');
+      }
+
+      // If OCR failed or confidence is too low, save document without OCR data
+      if (!text || confidence < 20) {
+        console.warn('OCR failed or low confidence:', confidence);
+        console.log('Saving document without OCR data...');
+
+        // Save document without OCR processing
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64Data = reader.result as string;
+
+          const documentData = {
+            employee_id: selectedEmployee?.id || null,
+            type: documentType,
+            name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
+            file_name: file.name,
+            file_path: base64Data,
+            upload_date: new Date().toISOString().split('T')[0],
+            expiry_date: null,
+            status: 'valid'
+          };
+
+          if (selectedEmployee) {
+            try {
+              await dbHelpers.createEmployeeDocument(documentData);
+              await loadEmployeeDocuments(selectedEmployee.id);
+              alert('✅ Document uploaded successfully! (OCR processing was skipped)');
+            } catch (docError) {
+              console.error('Error saving document:', docError);
+              alert('❌ Error saving document');
+            }
+          } else {
+            setPendingDocuments(prev => [...prev, documentData]);
+            alert('✅ Document uploaded successfully! (OCR processing was skipped)');
+          }
+        };
+        reader.readAsDataURL(file);
+        return;
       }
 
       // Extract relevant information based on document type
@@ -451,7 +566,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
             file_path: base64Data, // Store base64 data in file_path for now
             upload_date: new Date().toISOString().split('T')[0],
             expiry_date: extractedData[`${documentType.replace('-', '')}Expiry`] || null,
-            status: 'active'
+            status: 'valid'
           };
 
           if (selectedEmployee) {
@@ -459,6 +574,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
             try {
               await dbHelpers.createEmployeeDocument(documentData);
               console.log('Document saved to database');
+              // Reload documents to show the new one
+              await loadEmployeeDocuments(selectedEmployee.id);
             } catch (docError) {
               console.error('Error saving document:', docError);
             }
@@ -490,66 +607,135 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         ...prev,
         ...mockData
       }));
-      alert(`❌ Document processing failed: ${error.message}\nUsing sample data instead.`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`❌ Document processing failed: ${errorMessage}\nUsing sample data instead.`);
     } finally {
       setUploadingDocument('');
     }
   };
 
+  // Initialize PDF.js worker once
+  const initializePDFWorker = () => {
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      // Try multiple CDN sources for better reliability
+      const workerSources = [
+        `https://unpkg.com/pdfjs-dist@5.4.149/build/pdf.worker.min.js`,
+        `https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.149/build/pdf.worker.min.js`,
+        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.min.js`
+      ];
+
+      // Use the first available source
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerSources[0];
+    }
+  };
+
+  // Save PDF document without OCR processing
+  const savePdfWithoutOCR = async (file: File, documentType: string) => {
+    try {
+      console.log('Saving PDF without OCR processing...');
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result as string;
+
+        const documentData = {
+          employee_id: selectedEmployee?.id || null,
+          type: documentType,
+          name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
+          file_name: file.name,
+          file_path: base64Data,
+          upload_date: new Date().toISOString().split('T')[0],
+          expiry_date: null, // No OCR data available
+          status: 'valid'
+        };
+
+        if (selectedEmployee) {
+          // Save immediately for existing employee
+          try {
+            await dbHelpers.createEmployeeDocument(documentData);
+            console.log('PDF document saved to database without OCR');
+            // Reload documents to show the new one
+            await loadEmployeeDocuments(selectedEmployee.id);
+            alert('✅ PDF document uploaded successfully! (OCR processing was skipped due to conversion issues)');
+          } catch (docError) {
+            console.error('Error saving PDF document:', docError);
+            alert('❌ Error saving PDF document to database');
+          }
+        } else {
+          // Store for later when creating new employee
+          setPendingDocuments(prev => [...prev, documentData]);
+          console.log('PDF document stored for new employee creation');
+          alert('✅ PDF document uploaded successfully! (OCR processing was skipped due to conversion issues)');
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error saving PDF:', error);
+      alert('❌ Error saving PDF document');
+    }
+  };
+
   // Convert PDF first page to image for OCR processing
   const convertPdfToImage = async (pdfFile: File): Promise<File> => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        console.log('Converting PDF to image...');
+    try {
+      console.log('Converting PDF to image...');
 
-        // Set up PDF.js worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+      // Initialize PDF worker
+      initializePDFWorker();
 
-        // Read PDF file as array buffer
-        const arrayBuffer = await pdfFile.arrayBuffer();
+      // Read PDF file as array buffer
+      const arrayBuffer = await pdfFile.arrayBuffer();
 
-        // Load PDF document
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        console.log('PDF loaded, pages:', pdf.numPages);
+      // Load PDF document
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      console.log('PDF loaded, pages:', pdf.numPages);
 
-        // Get first page
-        const page = await pdf.getPage(1);
+      // Get first page
+      const page = await pdf.getPage(1);
 
-        // Set up canvas with appropriate scale for better OCR
-        const scale = 2.0; // Higher scale for better text recognition
-        const viewport = page.getViewport({ scale });
+      // Set up canvas with appropriate scale for better OCR
+      const scale = 2.0; // Higher scale for better text recognition
+      const viewport = page.getViewport({ scale });
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
 
-        // Render PDF page to canvas
-        await page.render({
-          canvasContext: ctx,
-          viewport: viewport
-        }).promise;
-
-        console.log('PDF page rendered to canvas');
-
-        // Convert canvas to blob
-        return new Promise<File>((resolveBlob) => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const imageFile = new File([blob], `${pdfFile.name}_page1.png`, { type: 'image/png' });
-              console.log('PDF converted to image file:', imageFile.name);
-              resolveBlob(imageFile);
-            } else {
-              reject(new Error('Failed to convert PDF page to image'));
-            }
-          }, 'image/png', 0.95);
-        });
-
-      } catch (error) {
-        console.error('PDF conversion error:', error);
-        reject(new Error(`PDF conversion failed: ${error.message}. Please try uploading a JPG/PNG image instead.`));
+      if (!ctx) {
+        throw new Error('Failed to get canvas 2D context');
       }
-    });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      // Render PDF page to canvas
+      await page.render({
+        canvasContext: ctx,
+        viewport: viewport,
+        canvas: canvas
+      }).promise;
+
+      console.log('PDF page rendered to canvas');
+
+      // Convert canvas to blob and return as File
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to convert canvas to blob'));
+          }
+        }, 'image/png', 0.95);
+      });
+
+      const imageFile = new File([blob], `${pdfFile.name}_page1.png`, { type: 'image/png' });
+      console.log('PDF converted to image file:', imageFile.name);
+      return imageFile;
+
+    } catch (error) {
+      console.error('PDF conversion error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`PDF conversion failed: ${errorMessage}. Please try uploading a JPG/PNG image instead.`);
+    }
   };
 
   const getMockOCRResults = (documentType: string) => {
@@ -883,10 +1069,12 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
   const getVisaStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'valid': return 'bg-green-100 text-green-800';
       case 'expired': return 'bg-red-100 text-red-800';
-      case 'cancelled': return 'bg-gray-100 text-gray-800';
+      case 'expiring_soon': return 'bg-yellow-100 text-yellow-800';
+      case 'active': return 'bg-green-100 text-green-800'; // Legacy support
+      case 'pending': return 'bg-yellow-100 text-yellow-800'; // Legacy support
+      case 'cancelled': return 'bg-gray-100 text-gray-800'; // Legacy support
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -1729,16 +1917,25 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Password <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={employeeForm.password}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter password for employee login"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      value={employeeForm.password}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter password for employee login"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {errors.password && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-4 h-4 mr-1" />
@@ -1751,16 +1948,25 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={employeeForm.confirmPassword}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="Confirm password"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      name="confirmPassword"
+                      value={employeeForm.confirmPassword}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        errors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                      placeholder="Confirm password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {errors.confirmPassword && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-4 h-4 mr-1" />
@@ -2007,11 +2213,52 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
                 {/* Uploaded Documents */}
                 <div className="space-y-4 md:col-span-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Uploaded Documents</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Uploaded Documents</h3>
+                    <div className="text-sm text-gray-600">
+                      Total: {employeeDocuments.length} documents
+                    </div>
+                  </div>
                   {employeeDocuments.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {employeeDocuments.map((doc) => (
-                        <div key={doc.id} className="border border-gray-200 rounded-lg p-4">
+                        <div key={doc.id} className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
+                          {/* Document Preview */}
+                          {doc.file_path && (
+                            <div className="mb-3">
+                              <div className="w-full h-32 bg-gray-100 rounded border overflow-hidden">
+                                <img
+                                  src={doc.file_path}
+                                  alt={doc.name}
+                                  className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => {
+                                    // Open document in new tab
+                                    const newWindow = window.open();
+                                    if (newWindow) {
+                                      newWindow.document.write(`
+                                        <html>
+                                          <head><title>${doc.name}</title></head>
+                                          <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                            <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                          </body>
+                                        </html>
+                                      `);
+                                    }
+                                  }}
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.nextElementSibling?.classList.remove('hidden');
+                                  }}
+                                />
+                                <div className="hidden flex items-center justify-center h-full text-gray-500">
+                                  <FileText className="w-8 h-8 mb-2" />
+                                  <span className="text-sm">Preview not available</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <h4 className="font-medium text-gray-900">{doc.name}</h4>
@@ -2024,27 +2271,28 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                   Expires: {new Date(doc.expiry_date).toLocaleDateString()}
                                 </p>
                               )}
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 ${
+                                doc.status === 'valid' ? 'bg-green-100 text-green-800' :
+                                doc.status === 'expired' ? 'bg-red-100 text-red-800' :
+                                doc.status === 'expiring_soon' ? 'bg-yellow-100 text-yellow-800' :
+                                doc.status === 'active' ? 'bg-green-100 text-green-800' : // Legacy support
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {doc.status === 'valid' ? 'Valid' :
+                                 doc.status === 'expiring_soon' ? 'Expiring Soon' :
+                                 doc.status?.replace('_', ' ') || 'Valid'}
+                              </span>
                             </div>
-                            <div className="flex space-x-2">
+                            <div className="flex space-x-2 mt-2">
                               <button
                                 onClick={() => {
-                                  // Open document in new tab
-                                  const newWindow = window.open();
-                                  if (newWindow) {
-                                    newWindow.document.write(`
-                                      <html>
-                                        <head><title>${doc.name}</title></head>
-                                        <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
-                                          <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
-                                        </body>
-                                      </html>
-                                    `);
-                                  }
+                                  setSelectedDocument(doc);
+                                  setShowDocumentEdit(true);
                                 }}
-                                className="p-1 text-blue-600 hover:text-blue-800"
-                                title="View Document"
+                                className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
+                                title="Edit Document"
                               >
-                                <Eye className="w-4 h-4" />
+                                <Edit className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={async () => {
@@ -2058,7 +2306,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                     }
                                   }
                                 }}
-                                className="p-1 text-red-600 hover:text-red-800"
+                                className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                                 title="Delete Document"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -2069,8 +2317,42 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500 text-center py-4">No documents uploaded yet</p>
+                    <div className="text-center py-8">
+                      <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 mb-4">No documents uploaded yet</p>
+                      <p className="text-sm text-gray-400">Documents will appear here once uploaded during employee creation or editing.</p>
+                    </div>
                   )}
+
+                  {/* Quick Document Upload */}
+                  <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-2">Quick Document Upload</h4>
+                    <p className="text-sm text-blue-700 mb-3">Upload additional documents for this employee</p>
+                    <div className="flex space-x-2">
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file && selectedEmployee) {
+                            processDocument(file, 'other');
+                          }
+                        }}
+                        className="hidden"
+                        id="quick-document-upload"
+                      />
+                      <label
+                        htmlFor="quick-document-upload"
+                        className="inline-flex items-center px-3 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Document
+                      </label>
+                      <span className="text-xs text-blue-600 self-center">
+                        Supports: JPG, PNG, PDF (max 10MB)
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2128,8 +2410,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Employee ID *</label>
                     <input
                       type="text"
+                      name="employeeId"
                       value={employeeForm.employeeId}
-                      onChange={(e) => handleInputChange('employeeId', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.employeeId ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Enter employee ID"
                     />
@@ -2140,8 +2423,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
                     <input
                       type="text"
+                      name="name"
                       value={employeeForm.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Enter full name"
                     />
@@ -2152,8 +2436,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Position *</label>
                     <input
                       type="text"
+                      name="position"
                       value={employeeForm.position}
-                      onChange={(e) => handleInputChange('position', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.position ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Enter position"
                     />
@@ -2164,8 +2449,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                     <input
                       type="email"
+                      name="email"
                       value={employeeForm.email}
-                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Enter email address"
                     />
@@ -2176,8 +2462,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
                     <input
                       type="tel"
+                      name="phone"
                       value={employeeForm.phone}
-                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.phone ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Enter phone number"
                     />
@@ -2188,8 +2475,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nationality *</label>
                     <input
                       type="text"
+                      name="nationality"
                       value={employeeForm.nationality}
-                      onChange={(e) => handleInputChange('nationality', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.nationality ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Enter nationality"
                     />
@@ -2206,8 +2494,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Join Date *</label>
                     <input
                       type="date"
+                      name="joinDate"
                       value={employeeForm.joinDate}
-                      onChange={(e) => handleInputChange('joinDate', e.target.value)}
+                      onChange={handleInputChange}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.joinDate ? 'border-red-500' : 'border-gray-300'}`}
                     />
                     {errors.joinDate && <p className="text-red-500 text-sm mt-1">{errors.joinDate}</p>}
@@ -2217,8 +2506,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Salary (AED)</label>
                     <input
                       type="number"
+                      name="salary"
                       value={employeeForm.salary}
-                      onChange={(e) => handleInputChange('salary', e.target.value)}
+                      onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter salary"
                     />
@@ -2228,8 +2518,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                     <input
                       type="text"
+                      name="department"
                       value={employeeForm.department}
-                      onChange={(e) => handleInputChange('department', e.target.value)}
+                      onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter department"
                     />
@@ -2239,8 +2530,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
                     <input
                       type="text"
+                      name="manager"
                       value={employeeForm.manager}
-                      onChange={(e) => handleInputChange('manager', e.target.value)}
+                      onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter manager name"
                     />
@@ -2254,26 +2546,199 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-                    <input
-                      type="password"
-                      value={employeeForm.password}
-                      onChange={(e) => handleInputChange('password', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Leave blank to keep current password"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        value={employeeForm.password}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Leave blank to keep current password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-                    <input
-                      type="password"
-                      value={employeeForm.confirmPassword}
-                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="Confirm new password"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        name="confirmPassword"
+                        value={employeeForm.confirmPassword}
+                        onChange={handleInputChange}
+                        className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Confirm new password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                     {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
                   </div>
+                </div>
+              </div>
+
+              {/* Document Management Section */}
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Management</h3>
+
+                {/* Current Documents */}
+                <div className="mb-6">
+                  <h4 className="font-medium text-gray-900 mb-3">Current Documents</h4>
+                  {employeeDocuments.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {employeeDocuments.map((doc) => (
+                        <div key={doc.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                          {/* Document Preview */}
+                          {doc.file_path && (
+                            <div className="mb-2">
+                              <div className="w-full h-24 bg-white rounded border overflow-hidden">
+                                <img
+                                  src={doc.file_path}
+                                  alt={doc.name}
+                                  className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => {
+                                    const newWindow = window.open();
+                                    if (newWindow) {
+                                      newWindow.document.write(`
+                                        <html>
+                                          <head><title>${doc.name}</title></head>
+                                          <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                            <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                          </body>
+                                        </html>
+                                      `);
+                                    }
+                                  }}
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.nextElementSibling?.classList.remove('hidden');
+                                  }}
+                                />
+                                <div className="hidden flex items-center justify-center h-full text-gray-500">
+                                  <FileText className="w-6 h-6 mb-1" />
+                                  <span className="text-xs">Preview not available</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h5 className="font-medium text-gray-900 text-sm">{doc.name}</h5>
+                              <p className="text-xs text-gray-600">{doc.file_name}</p>
+                              <p className="text-xs text-gray-500">
+                                Uploaded: {new Date(doc.upload_date).toLocaleDateString()}
+                              </p>
+                              {doc.expiry_date && (
+                                <p className="text-xs text-gray-500">
+                                  Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex space-x-1 ml-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDocument(doc);
+                                  setShowDocumentEdit(true);
+                                }}
+                                className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                                title="Edit Document"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (confirm('Are you sure you want to delete this document?')) {
+                                    try {
+                                      await dbHelpers.deleteEmployeeDocument(doc.id);
+                                      await loadEmployeeDocuments(selectedEmployee.id);
+                                    } catch (error) {
+                                      console.error('Error deleting document:', error);
+                                      alert('Error deleting document');
+                                    }
+                                  }
+                                }}
+                                className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                                title="Delete Document"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">No documents uploaded yet</p>
+                  )}
+                </div>
+
+                {/* Add New Document */}
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <h4 className="font-medium text-blue-900 mb-3">Add New Document</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Document Type Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-blue-800 mb-2">Document Type</label>
+                      <select
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        id="new-doc-type"
+                      >
+                        <option value="">Select document type</option>
+                        <option value="passport">Passport</option>
+                        <option value="emirates-id">Emirates ID</option>
+                        <option value="visa">Visa</option>
+                        <option value="labor-card">Labor Card</option>
+                        <option value="educational-certificate">Educational Certificate</option>
+                        <option value="experience-certificate">Experience Certificate</option>
+                        <option value="medical-certificate">Medical Certificate</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* File Upload */}
+                    <div>
+                      <label className="block text-sm font-medium text-blue-800 mb-2">Upload Document</label>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          const docType = (document.getElementById('new-doc-type') as HTMLSelectElement)?.value;
+                          if (file && docType && selectedEmployee) {
+                            processDocument(file, docType);
+                          } else if (file && !docType) {
+                            alert('Please select a document type first');
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                        disabled={uploadingDocument !== ''}
+                      />
+                      {uploadingDocument !== '' && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          Processing document... Please wait.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    Supports: JPG, PNG, PDF (max 10MB). OCR will automatically extract data for passport, Emirates ID, visa, and labor card documents.
+                  </p>
                 </div>
               </div>
 
@@ -2341,6 +2806,24 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
             </div>
           </div>
         </div>
+      )}
+
+      {/* Document Edit Modal */}
+      {showDocumentEdit && selectedDocument && (
+        <DocumentEditModal
+          document={selectedDocument}
+          onClose={() => {
+            setShowDocumentEdit(false);
+            setSelectedDocument(null);
+          }}
+          onSave={async () => {
+            setShowDocumentEdit(false);
+            setSelectedDocument(null);
+            if (selectedEmployee) {
+              await loadEmployeeDocuments(selectedEmployee.id);
+            }
+          }}
+        />
       )}
     </div>
   );

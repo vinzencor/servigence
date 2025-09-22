@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import CustomerRegistration from './components/CustomerRegistration';
 import CompaniesSection from './components/CompaniesSection';
 import CompanyEmployeeManagement from './components/CompanyEmployeeManagement';
+import CompanyEditModal from './components/CompanyEditModal';
 import ServiceManagement from './components/ServiceManagement';
 import ServiceEmployeeManagement from './components/ServiceEmployeeManagement';
 import ServiceBilling from './components/ServiceBilling';
@@ -23,6 +24,7 @@ function App() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [showEditCompany, setShowEditCompany] = useState(false);
   const [isEmployeeMode, setIsEmployeeMode] = useState(false);
   const [loggedInEmployee, setLoggedInEmployee] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -99,8 +101,24 @@ function App() {
 
   const handleEditCompany = (company: Company) => {
     setSelectedCompany(company);
-    // You can implement edit functionality here
-    console.log('Edit company:', company);
+    setShowEditCompany(true);
+  };
+
+  const handleSaveCompanyEdit = async (updatedCompany: Company) => {
+    try {
+      // Update local state
+      setCompanies(prev =>
+        prev.map(company =>
+          company.id === updatedCompany.id ? updatedCompany : company
+        )
+      );
+      setShowEditCompany(false);
+      setSelectedCompany(null);
+      // Reload companies to ensure consistency
+      await loadCompanies();
+    } catch (error) {
+      console.error('Error updating company:', error);
+    }
   };
 
   const handleManageDocuments = (company: Company) => {
@@ -181,6 +199,18 @@ function App() {
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>
       {renderCurrentView()}
+
+      {/* Company Edit Modal */}
+      {showEditCompany && selectedCompany && (
+        <CompanyEditModal
+          company={selectedCompany}
+          onClose={() => {
+            setShowEditCompany(false);
+            setSelectedCompany(null);
+          }}
+          onSave={handleSaveCompanyEdit}
+        />
+      )}
     </Layout>
   );
 }
