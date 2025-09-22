@@ -122,6 +122,19 @@ const ServiceManagement: React.FC = () => {
     setShowAddService(true);
   };
 
+  const handleDelete = async (service: ServiceType) => {
+    if (window.confirm(`Are you sure you want to delete "${service.name}"? This action cannot be undone.`)) {
+      try {
+        await dbHelpers.deleteService(service.id);
+        await loadServices();
+        alert('Service deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting service:', error);
+        alert(`Error deleting service: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setServiceForm(prev => ({ ...prev, [name]: value }));
@@ -237,6 +250,7 @@ const ServiceManagement: React.FC = () => {
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => handleDelete(service)}
                       className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete Service"
                     >

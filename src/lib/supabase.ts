@@ -148,15 +148,67 @@ export const dbHelpers = {
   },
 
   async deleteCompany(id: string) {
-    const { data, error } = await supabase
-      .from('companies')
-      .delete()
-      .eq('id', id)
-      .select()
-      .single()
+    try {
+      // Start a transaction-like approach by deleting related data first
 
-    if (error) throw error
-    return data
+      // 1. Delete employee documents for all employees of this company
+      const employees = await this.getEmployees(id);
+      for (const employee of employees || []) {
+        // Delete employee documents
+        await supabase
+          .from('employee_documents')
+          .delete()
+          .eq('employee_id', employee.id);
+      }
+
+      // 2. Delete all employees of this company
+      await supabase
+        .from('employees')
+        .delete()
+        .eq('company_id', id);
+
+      // 3. Delete all reminders for this company
+      await supabase
+        .from('reminders')
+        .delete()
+        .eq('company_id', id);
+
+      // 4. Delete all service billings for this company (but preserve invoices)
+      // We'll keep service_billings as they contain invoice information
+      // Just update them to mark company as deleted
+      await supabase
+        .from('service_billings')
+        .update({ company_id: null, notes: 'Company deleted - ' + new Date().toISOString() })
+        .eq('company_id', id);
+
+      // 5. Delete account transactions (except those with invoices)
+      await supabase
+        .from('account_transactions')
+        .delete()
+        .eq('company_id', id)
+        .is('service_billing_id', null);
+
+      // 6. Update account transactions with service billings to remove company reference
+      await supabase
+        .from('account_transactions')
+        .update({ company_id: null })
+        .eq('company_id', id)
+        .not('service_billing_id', 'is', null);
+
+      // 7. Finally delete the company
+      const { data, error } = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in cascade delete:', error);
+      throw error;
+    }
   },
 
   // Individuals
@@ -213,7 +265,85 @@ export const dbHelpers = {
       .insert([employee])
       .select()
       .single()
-    
+
+    if (error) throw error
+    return data
+  },
+
+  async updateEmployee(employee: any) {
+    const { data, error } = await supabase
+      .from('employees')
+      .update(employee)
+      .eq('id', employee.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async deleteEmployee(employeeId: string) {
+    const { data, error } = await supabase
+      .from('employees')
+      .delete()
+      .eq('id', employeeId)
+
+    if (error) throw error
+    return data
+  },
+
+  // Employee Documents
+  async createEmployeeDocument(document: any) {
+    const { data, error } = await supabase
+      .from('employee_documents')
+      .insert([document])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async getEmployeeDocuments(employeeId: string) {
+    const { data, error } = await supabase
+      .from('employee_documents')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data
+  },
+
+  async deleteEmployeeDocument(documentId: string) {
+    const { data, error } = await supabase
+      .from('employee_documents')
+      .delete()
+      .eq('id', documentId)
+
+    if (error) throw error
+    return data
+  },
+
+  // Individual management
+  async deleteIndividual(individualId: string) {
+    const { data, error } = await supabase
+      .from('individuals')
+      .delete()
+      .eq('id', individualId)
+
+    if (error) throw error
+    return data
+  },
+
+  async updateIndividualNotes(individualId: string, notes: string) {
+    const { data, error } = await supabase
+      .from('individuals')
+      .update({ notes })
+      .eq('id', individualId)
+      .select()
+      .single()
+
     if (error) throw error
     return data
   },
@@ -247,7 +377,17 @@ export const dbHelpers = {
       .insert([service])
       .select()
       .single()
-    
+
+    if (error) throw error
+    return data
+  },
+
+  async deleteService(serviceId: string) {
+    const { data, error } = await supabase
+      .from('service_types')
+      .delete()
+      .eq('id', serviceId)
+
     if (error) throw error
     return data
   },
@@ -372,5 +512,49 @@ export const dbHelpers = {
       .getPublicUrl(path)
 
     return data.publicUrl
+  },
+
+  // Vendors
+  async getVendors() {
+    const { data, error } = await supabase
+      .from('vendors')
+      .select('*')
+      .order('name')
+
+    if (error) throw error
+    return data
+  },
+
+  async createVendor(vendor: any) {
+    const { data, error } = await supabase
+      .from('vendors')
+      .insert([vendor])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async updateVendor(id: string, updates: any) {
+    const { data, error } = await supabase
+      .from('vendors')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async deleteVendor(id: string) {
+    const { error } = await supabase
+      .from('vendors')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return true
   }
 }

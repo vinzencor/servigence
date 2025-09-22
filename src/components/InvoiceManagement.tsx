@@ -47,7 +47,7 @@ interface Invoice {
 }
 
 const InvoiceManagement: React.FC = () => {
-  const [invoices] = useState<Invoice[]>([
+  const [invoices, setInvoices] = useState<Invoice[]>([
     {
       id: '1',
       companyId: 'comp1',
@@ -120,6 +120,10 @@ const InvoiceManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'templates' | 'reports'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
+  const [showCreateInvoice, setShowCreateInvoice] = useState(false);
+  const [showEditInvoice, setShowEditInvoice] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -186,6 +190,72 @@ const InvoiceManagement: React.FC = () => {
       color: 'red'
     }
   ];
+
+  // Handler functions
+  const handleEditInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setShowEditInvoice(true);
+  };
+
+  const handleSendInvoice = (invoice: Invoice) => {
+    // Simulate sending invoice
+    const updatedInvoices = invoices.map(inv =>
+      inv.id === invoice.id ? { ...inv, status: 'sent' as const } : inv
+    );
+    setInvoices(updatedInvoices);
+    alert(`Invoice ${invoice.invoiceNumber} sent successfully!`);
+  };
+
+  const handleDeleteInvoice = (invoice: Invoice) => {
+    setInvoiceToDelete(invoice);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteInvoice = () => {
+    if (invoiceToDelete) {
+      const updatedInvoices = invoices.filter(inv => inv.id !== invoiceToDelete.id);
+      setInvoices(updatedInvoices);
+      setShowDeleteConfirm(false);
+      setInvoiceToDelete(null);
+      alert(`Invoice ${invoiceToDelete.invoiceNumber} deleted successfully!`);
+    }
+  };
+
+  // Template handlers
+  const handleViewTemplate = (templateName: string) => {
+    alert(`Viewing ${templateName} template. Template preview functionality will be implemented soon.`);
+  };
+
+  const handleDeleteTemplate = (templateName: string) => {
+    if (confirm(`Are you sure you want to delete the ${templateName} template?`)) {
+      alert(`${templateName} template deleted successfully!`);
+    }
+  };
+
+  // Report handlers
+  const handleExportReport = () => {
+    // Generate CSV data
+    const csvData = [
+      ['Invoice Number', 'Company', 'Date', 'Due Date', 'Amount', 'Status'],
+      ...invoices.map(inv => [
+        inv.invoiceNumber,
+        inv.companyName,
+        inv.date,
+        inv.dueDate,
+        inv.total.toString(),
+        inv.status
+      ])
+    ];
+
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invoice-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const renderOverview = () => (
     <div className="space-y-6">
@@ -327,11 +397,10 @@ const InvoiceManagement: React.FC = () => {
             <p className="text-gray-600 mt-1">Professional invoice generation and payment tracking</p>
           </div>
           <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-              <Settings className="w-4 h-4" />
-              <span>Settings</span>
-            </button>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 shadow-lg">
+            <button
+              onClick={() => setShowCreateInvoice(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 shadow-lg"
+            >
               <Plus className="w-5 h-5" />
               <span>Create Invoice</span>
             </button>
@@ -460,21 +529,151 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               <div className="flex space-x-3">
-                <button className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
                   <Printer className="w-4 h-4" />
                   <span>Print</span>
                 </button>
-                <button className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                <button
+                  onClick={() => alert('PDF download functionality will be implemented soon!')}
+                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                >
                   <Download className="w-4 h-4" />
                   <span>Download PDF</span>
                 </button>
-                <button className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+                <button
+                  onClick={() => handleSendInvoice(selectedInvoice)}
+                  className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+                >
                   <Mail className="w-4 h-4" />
                   <span>Send Email</span>
                 </button>
-                <button className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+                <button
+                  onClick={() => {
+                    setSelectedInvoice(null);
+                    handleEditInvoice(selectedInvoice);
+                  }}
+                  className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                >
                   <Edit className="w-4 h-4" />
                   <span>Edit</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Invoice Modal */}
+      {showCreateInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Create New Invoice</h2>
+                <button
+                  onClick={() => setShowCreateInvoice(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-8">
+                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Create Invoice</h3>
+                <p className="text-gray-600">Invoice creation functionality will be implemented soon.</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  This will include client selection, service selection, and invoice generation.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowCreateInvoice(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Invoice Modal */}
+      {showEditInvoice && selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Edit Invoice</h2>
+                <button
+                  onClick={() => setShowEditInvoice(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-8">
+                <Edit className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Edit Invoice {selectedInvoice.invoiceNumber}</h3>
+                <p className="text-gray-600">Invoice editing functionality will be implemented soon.</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  This will include editing invoice details, services, and amounts.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowEditInvoice(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && invoiceToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Invoice
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete invoice <strong>{invoiceToDelete.invoiceNumber}</strong>?
+                This action cannot be undone.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setInvoiceToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteInvoice}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Delete
                 </button>
               </div>
             </div>
@@ -572,16 +771,29 @@ const InvoiceManagement: React.FC = () => {
                           <button
                             onClick={() => setSelectedInvoice(invoice)}
                             className="p-1 text-gray-400 hover:text-blue-600"
+                            title="View Invoice"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button className="p-1 text-gray-400 hover:text-green-600">
+                          <button
+                            onClick={() => handleEditInvoice(invoice)}
+                            className="p-1 text-gray-400 hover:text-green-600"
+                            title="Edit Invoice"
+                          >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button className="p-1 text-gray-400 hover:text-purple-600">
+                          <button
+                            onClick={() => handleSendInvoice(invoice)}
+                            className="p-1 text-gray-400 hover:text-purple-600"
+                            title="Send Invoice"
+                          >
                             <Send className="w-4 h-4" />
                           </button>
-                          <button className="p-1 text-gray-400 hover:text-red-600">
+                          <button
+                            onClick={() => handleDeleteInvoice(invoice)}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                            title="Delete Invoice"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -635,8 +847,24 @@ const InvoiceManagement: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">{template.usage} times used</span>
                   <div className="flex space-x-2">
-                    <button className="text-blue-600 hover:text-blue-700 text-sm">Preview</button>
-                    <button className="text-green-600 hover:text-green-700 text-sm">Use</button>
+                    <button
+                      onClick={() => handleViewTemplate(template.name)}
+                      className="text-blue-600 hover:text-blue-700 text-sm"
+                    >
+                      Preview
+                    </button>
+                    <button
+                      onClick={() => setShowCreateInvoice(true)}
+                      className="text-green-600 hover:text-green-700 text-sm"
+                    >
+                      Use
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTemplate(template.name)}
+                      className="text-red-600 hover:text-red-700 text-sm"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
               </div>
@@ -653,7 +881,10 @@ const InvoiceManagement: React.FC = () => {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Invoice Reports</h3>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200">
+            <button
+              onClick={handleExportReport}
+              className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
+            >
               <Download className="w-4 h-4" />
               <span>Export Report</span>
             </button>

@@ -14,9 +14,15 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [showEmployeeDetails, setShowEmployeeDetails] = useState(false);
+  const [showEditEmployee, setShowEditEmployee] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState('');
+  const [employeeDocuments, setEmployeeDocuments] = useState<any[]>([]);
+  const [pendingDocuments, setPendingDocuments] = useState<any[]>([]);
   const [customDocuments, setCustomDocuments] = useState<any[]>([]);
   const [showAddCustomDoc, setShowAddCustomDoc] = useState(false);
   const [newCustomDoc, setNewCustomDoc] = useState({ name: '', hasNumber: true, hasExpiry: true });
@@ -145,6 +151,25 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
       const result = await dbHelpers.createEmployee(newEmployee);
       console.log('Employee created:', result);
 
+      // Save any pending documents
+      if (pendingDocuments.length > 0) {
+        try {
+          const documentsToSave = pendingDocuments.map(doc => ({
+            ...doc,
+            employee_id: result.id
+          }));
+
+          for (const doc of documentsToSave) {
+            await dbHelpers.createEmployeeDocument(doc);
+          }
+
+          console.log(`Saved ${documentsToSave.length} documents for new employee`);
+          setPendingDocuments([]); // Clear pending documents
+        } catch (docError) {
+          console.error('Error saving employee documents:', docError);
+        }
+      }
+
       // Create reminders for document expiry dates
       const remindersToCreate = [];
 
@@ -243,6 +268,124 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
       confirmPassword: ''
     });
     setErrors({});
+    setPendingDocuments([]);
+  };
+
+  // Load employee documents
+  const loadEmployeeDocuments = async (employeeId: string) => {
+    try {
+      const documents = await dbHelpers.getEmployeeDocuments(employeeId);
+      setEmployeeDocuments(documents || []);
+    } catch (error) {
+      console.error('Error loading employee documents:', error);
+      setEmployeeDocuments([]);
+    }
+  };
+
+  // Handler for viewing employee details
+  const handleViewEmployee = async (employee: Employee) => {
+    setSelectedEmployee(employee);
+    await loadEmployeeDocuments(employee.id);
+    setShowEmployeeDetails(true);
+  };
+
+  // Handler for editing employee
+  const handleEditEmployee = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    // Populate form with employee data
+    setEmployeeForm({
+      employeeId: employee.employeeId || '',
+      name: employee.name || '',
+      position: employee.position || '',
+      email: employee.email || '',
+      phone: employee.phone || '',
+      nationality: employee.nationality || '',
+      passportNumber: employee.passportNumber || '',
+      passportExpiry: employee.passportExpiry || '',
+      visaType: employee.visaType || 'employment',
+      visaNumber: employee.visaNumber || '',
+      visaIssueDate: employee.visaIssueDate || '',
+      visaExpiryDate: employee.visaExpiryDate || '',
+      emiratesId: employee.emiratesId || '',
+      emiratesIdExpiry: employee.emiratesIdExpiry || '',
+      laborCardNumber: employee.laborCardNumber || '',
+      laborCardExpiry: employee.laborCardExpiry || '',
+      joinDate: employee.joinDate || new Date().toISOString().split('T')[0],
+      salary: employee.salary?.toString() || '',
+      department: employee.department || '',
+      manager: employee.manager || '',
+      password: '',
+      confirmPassword: ''
+    });
+    setShowEditEmployee(true);
+  };
+
+  // Handler for deleting employee
+  const handleDeleteEmployee = (employee: Employee) => {
+    setEmployeeToDelete(employee);
+    setShowDeleteConfirm(true);
+  };
+
+  // Confirm delete employee
+  const confirmDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+
+    try {
+      await dbHelpers.deleteEmployee(employeeToDelete.id);
+      await loadEmployees();
+      setShowDeleteConfirm(false);
+      setEmployeeToDelete(null);
+      alert('Employee deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      alert(`Error deleting employee: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Handler for updating employee
+  const handleUpdateEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedEmployee || !validateForm()) return;
+
+    try {
+      const updatedEmployee = {
+        id: selectedEmployee.id,
+        company_id: company.id,
+        employee_id: employeeForm.employeeId,
+        name: employeeForm.name,
+        position: employeeForm.position,
+        email: employeeForm.email,
+        phone: employeeForm.phone,
+        nationality: employeeForm.nationality,
+        passport_number: employeeForm.passportNumber,
+        passport_expiry: employeeForm.passportExpiry,
+        visa_type: employeeForm.visaType,
+        visa_number: employeeForm.visaNumber,
+        visa_issue_date: employeeForm.visaIssueDate,
+        visa_expiry_date: employeeForm.visaExpiryDate,
+        emirates_id: employeeForm.emiratesId,
+        emirates_id_expiry: employeeForm.emiratesIdExpiry,
+        labor_card_number: employeeForm.laborCardNumber,
+        labor_card_expiry: employeeForm.laborCardExpiry,
+        join_date: employeeForm.joinDate,
+        salary: parseFloat(employeeForm.salary) || 0,
+        department: employeeForm.department,
+        manager: employeeForm.manager,
+        // Only update password if provided
+        ...(employeeForm.password && { password_hash: btoa(employeeForm.password) })
+      };
+
+      await dbHelpers.updateEmployee(updatedEmployee);
+      await loadEmployees();
+      setShowEditEmployee(false);
+      setSelectedEmployee(null);
+      resetForm();
+      alert('Employee updated successfully!');
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      alert(`Error updating employee: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   // OCR Document Processing
@@ -294,6 +437,39 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
           ...prev,
           ...extractedData
         }));
+
+        // Save document to database if we're editing an existing employee, or store for later if creating new
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64Data = reader.result as string;
+
+          const documentData = {
+            employee_id: selectedEmployee?.id || null,
+            type: documentType,
+            name: `${documentType.replace('-', ' ').toUpperCase()} Document`,
+            file_name: file.name,
+            file_path: base64Data, // Store base64 data in file_path for now
+            upload_date: new Date().toISOString().split('T')[0],
+            expiry_date: extractedData[`${documentType.replace('-', '')}Expiry`] || null,
+            status: 'active'
+          };
+
+          if (selectedEmployee) {
+            // Save immediately for existing employee
+            try {
+              await dbHelpers.createEmployeeDocument(documentData);
+              console.log('Document saved to database');
+            } catch (docError) {
+              console.error('Error saving document:', docError);
+            }
+          } else {
+            // Store for later when creating new employee
+            setPendingDocuments(prev => [...prev, documentData]);
+            console.log('Document stored for new employee creation');
+          }
+        };
+        reader.readAsDataURL(file);
+
         alert(`✅ Document processed successfully!\nExtracted: ${Object.keys(extractedData).join(', ')}\nConfidence: ${Math.round(confidence)}%`);
       } else {
         console.log('No relevant data extracted from OCR text');
@@ -809,23 +985,32 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => setSelectedEmployee(employee)}
+                      onClick={() => handleViewEmployee(employee)}
                       className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="View Details"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => handleEditEmployee(employee)}
                       className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                       title="Edit Employee"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => handleViewEmployee(employee)}
                       className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="Documents"
+                      title="View Documents"
                     >
                       <FileText className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteEmployee(employee)}
+                      className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Employee"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                   <span className="text-xs text-gray-500">{employee.nationality}</span>
@@ -1689,6 +1874,468 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Add Document Type
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Details Modal */}
+      {showEmployeeDetails && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Employee Details</h2>
+                <button
+                  onClick={() => {
+                    setShowEmployeeDetails(false);
+                    setSelectedEmployee(null);
+                  }}
+                  className="text-white hover:text-gray-200 transition-colors"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Personal Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Personal Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Employee ID</label>
+                      <p className="text-gray-900">{selectedEmployee.employeeId}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                      <p className="text-gray-900">{selectedEmployee.name}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Position</label>
+                      <p className="text-gray-900">{selectedEmployee.position}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <p className="text-gray-900">{selectedEmployee.email}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Phone</label>
+                      <p className="text-gray-900">{selectedEmployee.phone}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Nationality</label>
+                      <p className="text-gray-900">{selectedEmployee.nationality}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Employment Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Employment Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Join Date</label>
+                      <p className="text-gray-900">{new Date(selectedEmployee.joinDate).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Department</label>
+                      <p className="text-gray-900">{selectedEmployee.department || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Manager</label>
+                      <p className="text-gray-900">{selectedEmployee.manager || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Salary</label>
+                      <p className="text-gray-900">AED {selectedEmployee.salary?.toLocaleString() || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Visa Status</label>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getVisaStatusColor(selectedEmployee.visaStatus)}`}>
+                        {selectedEmployee.visaStatus}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Document Information */}
+                <div className="space-y-4 md:col-span-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Document Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Passport Number</label>
+                        <p className="text-gray-900">{selectedEmployee.passportNumber || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Passport Expiry</label>
+                        <p className="text-gray-900">{selectedEmployee.passportExpiry ? new Date(selectedEmployee.passportExpiry).toLocaleDateString() : 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Emirates ID</label>
+                        <p className="text-gray-900">{selectedEmployee.emiratesId || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Emirates ID Expiry</label>
+                        <p className="text-gray-900">{selectedEmployee.emiratesIdExpiry ? new Date(selectedEmployee.emiratesIdExpiry).toLocaleDateString() : 'Not provided'}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Visa Number</label>
+                        <p className="text-gray-900">{selectedEmployee.visaNumber || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Visa Expiry</label>
+                        <p className="text-gray-900">{selectedEmployee.visaExpiryDate ? new Date(selectedEmployee.visaExpiryDate).toLocaleDateString() : 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Labor Card Number</label>
+                        <p className="text-gray-900">{selectedEmployee.laborCardNumber || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Labor Card Expiry</label>
+                        <p className="text-gray-900">{selectedEmployee.laborCardExpiry ? new Date(selectedEmployee.laborCardExpiry).toLocaleDateString() : 'Not provided'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Uploaded Documents */}
+                <div className="space-y-4 md:col-span-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Uploaded Documents</h3>
+                  {employeeDocuments.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {employeeDocuments.map((doc) => (
+                        <div key={doc.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-gray-900">{doc.name}</h4>
+                              <p className="text-sm text-gray-600">{doc.file_name}</p>
+                              <p className="text-xs text-gray-500">
+                                Uploaded: {new Date(doc.upload_date).toLocaleDateString()}
+                              </p>
+                              {doc.expiry_date && (
+                                <p className="text-xs text-gray-500">
+                                  Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => {
+                                  // Open document in new tab
+                                  const newWindow = window.open();
+                                  if (newWindow) {
+                                    newWindow.document.write(`
+                                      <html>
+                                        <head><title>${doc.name}</title></head>
+                                        <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                          <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
+                                        </body>
+                                      </html>
+                                    `);
+                                  }
+                                }}
+                                className="p-1 text-blue-600 hover:text-blue-800"
+                                title="View Document"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (confirm('Are you sure you want to delete this document?')) {
+                                    try {
+                                      await dbHelpers.deleteEmployeeDocument(doc.id);
+                                      await loadEmployeeDocuments(selectedEmployee.id);
+                                    } catch (error) {
+                                      console.error('Error deleting document:', error);
+                                      alert('Error deleting document');
+                                    }
+                                  }
+                                }}
+                                className="p-1 text-red-600 hover:text-red-800"
+                                title="Delete Document"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">No documents uploaded yet</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowEmployeeDetails(false);
+                    handleEditEmployee(selectedEmployee);
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Edit Employee
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEmployeeDetails(false);
+                    setSelectedEmployee(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {showEditEmployee && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Edit Employee</h2>
+                <button
+                  onClick={() => {
+                    setShowEditEmployee(false);
+                    setSelectedEmployee(null);
+                    resetForm();
+                  }}
+                  className="text-white hover:text-gray-200 transition-colors"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateEmployee} className="p-6">
+              {/* Personal Information */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Personal Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Employee ID *</label>
+                    <input
+                      type="text"
+                      value={employeeForm.employeeId}
+                      onChange={(e) => handleInputChange('employeeId', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.employeeId ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter employee ID"
+                    />
+                    {errors.employeeId && <p className="text-red-500 text-sm mt-1">{errors.employeeId}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                    <input
+                      type="text"
+                      value={employeeForm.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter full name"
+                    />
+                    {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Position *</label>
+                    <input
+                      type="text"
+                      value={employeeForm.position}
+                      onChange={(e) => handleInputChange('position', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.position ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter position"
+                    />
+                    {errors.position && <p className="text-red-500 text-sm mt-1">{errors.position}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                    <input
+                      type="email"
+                      value={employeeForm.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter email address"
+                    />
+                    {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
+                    <input
+                      type="tel"
+                      value={employeeForm.phone}
+                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.phone ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter phone number"
+                    />
+                    {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nationality *</label>
+                    <input
+                      type="text"
+                      value={employeeForm.nationality}
+                      onChange={(e) => handleInputChange('nationality', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.nationality ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter nationality"
+                    />
+                    {errors.nationality && <p className="text-red-500 text-sm mt-1">{errors.nationality}</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Employment Information */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Employment Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Join Date *</label>
+                    <input
+                      type="date"
+                      value={employeeForm.joinDate}
+                      onChange={(e) => handleInputChange('joinDate', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.joinDate ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {errors.joinDate && <p className="text-red-500 text-sm mt-1">{errors.joinDate}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Salary (AED)</label>
+                    <input
+                      type="number"
+                      value={employeeForm.salary}
+                      onChange={(e) => handleInputChange('salary', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter salary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                    <input
+                      type="text"
+                      value={employeeForm.department}
+                      onChange={(e) => handleInputChange('department', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter department"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
+                    <input
+                      type="text"
+                      value={employeeForm.manager}
+                      onChange={(e) => handleInputChange('manager', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter manager name"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Password Update (Optional) */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Password Update (Optional)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                    <input
+                      type="password"
+                      value={employeeForm.password}
+                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Leave blank to keep current password"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                    <input
+                      type="password"
+                      value={employeeForm.confirmPassword}
+                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Confirm new password"
+                    />
+                    {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditEmployee(false);
+                    setSelectedEmployee(null);
+                    resetForm();
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Update Employee
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && employeeToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Employee</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+
+              <p className="text-gray-700 mb-6">
+                Are you sure you want to delete <strong>{employeeToDelete.name}</strong>?
+                This will permanently remove the employee and all associated data.
+              </p>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setEmployeeToDelete(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteEmployee}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete Employee
                 </button>
               </div>
             </div>

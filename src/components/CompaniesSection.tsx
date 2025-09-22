@@ -28,6 +28,13 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'companies' | 'individuals'>('companies');
   const [individuals, setIndividuals] = useState<any[]>([]);
+  const [selectedIndividual, setSelectedIndividual] = useState<any>(null);
+  const [showIndividualDetails, setShowIndividualDetails] = useState(false);
+  const [showEditIndividual, setShowEditIndividual] = useState(false);
+  const [showDeleteIndividual, setShowDeleteIndividual] = useState(false);
+  const [individualToDelete, setIndividualToDelete] = useState<any>(null);
+  const [showIndividualNotes, setShowIndividualNotes] = useState(false);
+  const [individualNotes, setIndividualNotes] = useState('');
 
   // Load companies and individuals from Supabase on component mount
   useEffect(() => {
@@ -190,18 +197,86 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   };
 
   const handleDeleteCompany = async (company: Company) => {
-    if (window.confirm(`Are you sure you want to delete ${company.companyName}? This action cannot be undone.`)) {
+    const confirmMessage = `⚠️ WARNING: Delete ${company.companyName}?
+
+This will permanently delete:
+• All employees and their documents
+• All reminders and notes
+• All service records
+• All account transactions (except invoices)
+
+Invoices will be preserved for record-keeping.
+
+This action cannot be undone. Are you sure?`;
+
+    if (window.confirm(confirmMessage)) {
       try {
+        setLoading(true);
         await dbHelpers.deleteCompany(company.id);
 
         // Update local state
         setAllCompanies(prev => prev.filter(c => c.id !== company.id));
 
-        alert('Company deleted successfully!');
+        alert('✅ Company and all related data deleted successfully!\n\nInvoices have been preserved for record-keeping.');
       } catch (error) {
         console.error('Error deleting company:', error);
-        alert(`Error deleting company: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        alert(`❌ Error deleting company: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
       }
+    }
+  };
+
+  // Individual handlers
+  const handleViewIndividual = (individual: any) => {
+    setSelectedIndividual(individual);
+    setShowIndividualDetails(true);
+  };
+
+  const handleEditIndividual = (individual: any) => {
+    setSelectedIndividual(individual);
+    setShowEditIndividual(true);
+  };
+
+  const handleDeleteIndividual = (individual: any) => {
+    setIndividualToDelete(individual);
+    setShowDeleteIndividual(true);
+  };
+
+  const handleIndividualNotes = (individual: any) => {
+    setSelectedIndividual(individual);
+    setIndividualNotes(individual.notes || '');
+    setShowIndividualNotes(true);
+  };
+
+  const confirmDeleteIndividual = async () => {
+    if (!individualToDelete) return;
+
+    try {
+      await dbHelpers.deleteIndividual(individualToDelete.id);
+      await loadIndividuals();
+      setShowDeleteIndividual(false);
+      setIndividualToDelete(null);
+      alert('Individual deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting individual:', error);
+      alert(`Error deleting individual: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const saveIndividualNotes = async () => {
+    if (!selectedIndividual) return;
+
+    try {
+      await dbHelpers.updateIndividualNotes(selectedIndividual.id, individualNotes);
+      await loadIndividuals();
+      setShowIndividualNotes(false);
+      setSelectedIndividual(null);
+      setIndividualNotes('');
+      alert('Notes saved successfully!');
+    } catch (error) {
+      console.error('Error saving individual notes:', error);
+      alert(`Error saving notes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -392,13 +467,13 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
                           >
                             <Users className="w-4 h-4" />
                           </button>
-                          <button
+                          {/* <button
                             onClick={() => onManageDocuments?.(company)}
                             className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                             title="Manage Documents"
                           >
                             <FileEdit className="w-4 h-4" />
-                          </button>
+                          </button> */}
                           <button
                             onClick={() => handleAddNotes(company)}
                             className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -511,16 +586,32 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-3">
-                            <button className="text-blue-600 hover:text-blue-900 transition-colors">
+                            <button
+                              onClick={() => handleViewIndividual(individual)}
+                              className="text-blue-600 hover:text-blue-900 transition-colors"
+                              title="View Details"
+                            >
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button className="text-green-600 hover:text-green-900 transition-colors">
+                            <button
+                              onClick={() => handleEditIndividual(individual)}
+                              className="text-green-600 hover:text-green-900 transition-colors"
+                              title="Edit Individual"
+                            >
                               <Edit className="w-4 h-4" />
                             </button>
-                            <button className="text-purple-600 hover:text-purple-900 transition-colors">
+                            <button
+                              onClick={() => handleIndividualNotes(individual)}
+                              className="text-purple-600 hover:text-purple-900 transition-colors"
+                              title="Add Notes"
+                            >
                               <FileText className="w-4 h-4" />
                             </button>
-                            <button className="text-red-600 hover:text-red-900 transition-colors">
+                            <button
+                              onClick={() => handleDeleteIndividual(individual)}
+                              className="text-red-600 hover:text-red-900 transition-colors"
+                              title="Delete Individual"
+                            >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
@@ -698,6 +789,230 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
                   Save Notes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Individual Details Modal */}
+      {showIndividualDetails && selectedIndividual && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900">Individual Details</h2>
+                <button
+                  onClick={() => setShowIndividualDetails(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Personal Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Personal Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                      <p className="text-gray-900">{selectedIndividual.individual_name}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <p className="text-gray-900">{selectedIndividual.email || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Phone</label>
+                      <p className="text-gray-900">{selectedIndividual.phone || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Nationality</label>
+                      <p className="text-gray-900">{selectedIndividual.nationality || 'Not provided'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Document Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Document Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Emirates ID</label>
+                      <p className="text-gray-900">{selectedIndividual.emirates_id || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Passport Number</label>
+                      <p className="text-gray-900">{selectedIndividual.passport_number || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Visa Number</label>
+                      <p className="text-gray-900">{selectedIndividual.visa_number || 'Not provided'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section */}
+              {selectedIndividual.notes && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Notes</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700 whitespace-pre-wrap">{selectedIndividual.notes}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowIndividualDetails(false);
+                  handleEditIndividual(selectedIndividual);
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Edit Individual
+              </button>
+              <button
+                onClick={() => setShowIndividualDetails(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Individual Notes Modal */}
+      {showIndividualNotes && selectedIndividual && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">
+                  Notes for {selectedIndividual.individual_name}
+                </h2>
+                <button
+                  onClick={() => setShowIndividualNotes(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes
+                </label>
+                <textarea
+                  value={individualNotes}
+                  onChange={(e) => setIndividualNotes(e.target.value)}
+                  rows={8}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                  placeholder="Add notes about this individual..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowIndividualNotes(false);
+                  setSelectedIndividual(null);
+                  setIndividualNotes('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveIndividualNotes}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Save Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Individual Modal */}
+      {showEditIndividual && selectedIndividual && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Edit Individual</h2>
+                <button
+                  onClick={() => setShowEditIndividual(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="text-center py-8">
+                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Edit Individual</h3>
+                <p className="text-gray-600">Individual editing functionality will be implemented soon.</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  For now, you can view details and manage notes.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowEditIndividual(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Individual Confirmation Modal */}
+      {showDeleteIndividual && individualToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Individual
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete <strong>{individualToDelete.individual_name}</strong>?
+                This action cannot be undone.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteIndividual(false);
+                    setIndividualToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteIndividual}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
                 </button>
               </div>
             </div>

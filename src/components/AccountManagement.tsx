@@ -133,7 +133,7 @@ const AccountManagement: React.FC = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'gst' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'government' | 'reports'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
@@ -399,7 +399,7 @@ const AccountManagement: React.FC = () => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
-    { id: 'gst', label: 'GST Management', icon: FileText },
+    { id: 'government', label: 'Government Access', icon: FileText },
     { id: 'reports', label: 'Reports', icon: TrendingUp }
   ];
 
@@ -455,7 +455,7 @@ const AccountManagement: React.FC = () => {
       {/* Main Content */}
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'transactions' && renderTransactions()}
-      {activeTab === 'gst' && renderGSTManagement()}
+      {activeTab === 'government' && renderGovernmentAccess()}
       {activeTab === 'reports' && renderReports()}
     </div>
   );
@@ -586,46 +586,98 @@ const AccountManagement: React.FC = () => {
     );
   }
 
-  function renderGSTManagement() {
+  function renderGovernmentAccess() {
+    // Filter government fee transactions
+    const governmentTransactions = accounts.filter(a => a.category === 'Government Charges' || (a as any).transaction_type === 'government_fee');
+    const totalGovernmentFees = governmentTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    // Group by service type
+    const serviceGroups = governmentTransactions.reduce((groups: any, transaction) => {
+      const service = transaction.description.split(' ')[0] || 'Other';
+      if (!groups[service]) {
+        groups[service] = { count: 0, total: 0, transactions: [] };
+      }
+      groups[service].count += 1;
+      groups[service].total += transaction.amount;
+      groups[service].transactions.push(transaction);
+      return groups;
+    }, {});
+
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">GST Management</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">Government Access & Fees</h3>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div className="bg-blue-50 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 mb-2">GST Collected</h4>
-              <p className="text-2xl font-bold text-blue-600">AED {totalGST.toLocaleString()}</p>
-              <p className="text-sm text-blue-600">Current quarter</p>
+              <h4 className="font-medium text-blue-900 mb-2">Total Government Fees</h4>
+              <p className="text-2xl font-bold text-blue-600">AED {totalGovernmentFees.toLocaleString()}</p>
+              <p className="text-sm text-blue-600">All time</p>
             </div>
             <div className="bg-green-50 rounded-lg p-4">
-              <h4 className="font-medium text-green-900 mb-2">GST Paid</h4>
-              <p className="text-2xl font-bold text-green-600">AED 0</p>
-              <p className="text-sm text-green-600">Current quarter</p>
+              <h4 className="font-medium text-green-900 mb-2">Services Used</h4>
+              <p className="text-2xl font-bold text-green-600">{Object.keys(serviceGroups).length}</p>
+              <p className="text-sm text-green-600">Different services</p>
             </div>
-            <div className="bg-amber-50 rounded-lg p-4">
-              <h4 className="font-medium text-amber-900 mb-2">GST Payable</h4>
-              <p className="text-2xl font-bold text-amber-600">AED {totalGST.toLocaleString()}</p>
-              <p className="text-sm text-amber-600">Due: 28th Feb</p>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <h4 className="font-medium text-purple-900 mb-2">Total Transactions</h4>
+              <p className="text-2xl font-bold text-purple-600">{governmentTransactions.length}</p>
+              <p className="text-sm text-purple-600">Government payments</p>
             </div>
           </div>
 
+          {/* Service Breakdown */}
+          <div className="space-y-4 mb-6">
+            <h4 className="font-medium text-gray-900">Government Services Breakdown</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(serviceGroups).map(([service, data]: [string, any]) => (
+                <div key={service} className="border border-gray-200 rounded-lg p-4">
+                  <h5 className="font-medium text-gray-900 mb-2">{service}</h5>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Transactions:</span>
+                      <span className="font-medium">{data.count}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Fees:</span>
+                      <span className="font-medium text-blue-600">AED {data.total.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recent Government Transactions */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">GST Transactions</h4>
-            {accounts.filter(a => a.gstAmount && a.gstAmount > 0).map((account) => (
-              <div key={account.id} className="border border-gray-200 rounded-lg p-4">
+            <h4 className="font-medium text-gray-900">Recent Government Transactions</h4>
+            {governmentTransactions.slice(0, 10).map((transaction) => (
+              <div key={transaction.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">{account.description}</p>
-                    <p className="text-sm text-gray-600">{account.category} • {account.date}</p>
+                    <p className="font-medium text-gray-900">{transaction.description}</p>
+                    <p className="text-sm text-gray-600">
+                      {transaction.category} • {new Date((transaction as any).transaction_date).toLocaleDateString()}
+                    </p>
+                    {(transaction as any).reference_number && (
+                      <p className="text-xs text-gray-500">Ref: {(transaction as any).reference_number}</p>
+                    )}
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">AED {account.amount.toLocaleString()}</p>
-                    <p className="text-sm text-blue-600">GST ({account.gstRate}%): AED {account.gstAmount}</p>
+                    <p className="font-semibold text-gray-900">AED {transaction.amount.toLocaleString()}</p>
+                    <p className="text-sm text-blue-600">{(transaction as any).payment_method}</p>
                   </div>
                 </div>
               </div>
             ))}
+
+            {governmentTransactions.length === 0 && (
+              <div className="text-center py-8">
+                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Government Transactions</h3>
+                <p className="text-gray-600">Government fees will appear here when services are billed.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

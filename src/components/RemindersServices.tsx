@@ -93,6 +93,7 @@ const RemindersServices: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -124,6 +125,21 @@ const RemindersServices: React.FC = () => {
       case 'follow_up': return Clock;
       default: return Bell;
     }
+  };
+
+  // Calendar navigation functions
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate);
+    if (direction === 'prev') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setCurrentDate(newDate);
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
   };
 
   const filteredReminders = reminders.filter(reminder => {
@@ -535,10 +551,51 @@ const RemindersServices: React.FC = () => {
   }
 
   function renderCalendarView() {
+    // Get first day of the month and calculate calendar grid
+    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const startDate = new Date(firstDayOfMonth);
+    startDate.setDate(startDate.getDate() - firstDayOfMonth.getDay());
+
+    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">Calendar View</h3>
+          {/* Calendar Header with Navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Calendar View</h3>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigateMonth('prev')}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              <div className="text-center">
+                <h4 className="text-xl font-semibold text-gray-900">{monthName}</h4>
+              </div>
+
+              <button
+                onClick={() => navigateMonth('next')}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              <button
+                onClick={goToToday}
+                className="px-3 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Today
+              </button>
+            </div>
+          </div>
 
           <div className="grid grid-cols-7 gap-1 mb-4">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
@@ -549,14 +606,20 @@ const RemindersServices: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: 35 }, (_, i) => {
-              const date = new Date();
-              date.setDate(date.getDate() - date.getDay() + i);
+            {Array.from({ length: 42 }, (_, i) => {
+              const date = new Date(startDate);
+              date.setDate(startDate.getDate() + i);
               const dayReminders = reminders.filter(r => r.dueDate === date.toISOString().split('T')[0]);
+              const isCurrentMonth = date.getMonth() === currentDate.getMonth();
+              const isToday = date.toDateString() === new Date().toDateString();
 
               return (
-                <div key={i} className="min-h-[100px] p-2 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <div className="text-sm font-medium text-gray-900 mb-2">
+                <div key={i} className={`min-h-[100px] p-2 border border-gray-200 rounded-lg hover:bg-gray-50 ${
+                  !isCurrentMonth ? 'bg-gray-50 opacity-50' : ''
+                } ${isToday ? 'bg-blue-50 border-blue-200' : ''}`}>
+                  <div className={`text-sm font-medium mb-2 ${
+                    isToday ? 'text-blue-600' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
+                  }`}>
                     {date.getDate()}
                   </div>
                   <div className="space-y-1">
@@ -574,6 +637,26 @@ const RemindersServices: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+
+          {/* Calendar Legend */}
+          <div className="mt-6 flex items-center justify-center space-x-6 text-sm">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-red-100 border border-red-200 rounded"></div>
+              <span className="text-gray-600">Urgent</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-amber-100 border border-amber-200 rounded"></div>
+              <span className="text-gray-600">High Priority</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-blue-100 border border-blue-200 rounded"></div>
+              <span className="text-gray-600">Medium Priority</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-gray-100 border border-gray-200 rounded"></div>
+              <span className="text-gray-600">Low Priority</span>
+            </div>
           </div>
         </div>
       </div>
