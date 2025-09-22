@@ -107,6 +107,21 @@ const VendorManagement: React.FC = () => {
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [showVendorDetails, setShowVendorDetails] = useState(false);
   const [assignedWork, setAssignedWork] = useState<any[]>([]);
+  const [showNewContract, setShowNewContract] = useState(false);
+  const [showContractDetails, setShowContractDetails] = useState(false);
+  const [showEditContract, setShowEditContract] = useState(false);
+  const [selectedContract, setSelectedContract] = useState<any>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [contractToDelete, setContractToDelete] = useState<string | null>(null);
+  const [editContractForm, setEditContractForm] = useState({
+    title: '',
+    type: '',
+    value: 0,
+    startDate: '',
+    endDate: '',
+    terms: '',
+    renewalDate: ''
+  });
 
   const getVendorTypeColor = (type: string) => {
     switch (type) {
@@ -139,7 +154,7 @@ const VendorManagement: React.FC = () => {
   });
 
   // Mock assigned work data - in real app, this would come from service billings
-  const mockAssignedWork = [
+  const [mockAssignedWork, setMockAssignedWork] = useState([
     {
       id: '1',
       vendorId: '1',
@@ -184,7 +199,37 @@ const VendorManagement: React.FC = () => {
       amount: 800,
       description: 'Quarterly tax filing and documentation'
     }
-  ];
+  ]);
+
+  // Mock contracts data
+  const [contracts, setContracts] = useState([
+    {
+      id: '1',
+      vendor: 'Emirates Insurance Brokers',
+      vendorId: '1',
+      title: 'Annual Insurance Services',
+      type: 'annual_contract',
+      value: 50000,
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+      status: 'active',
+      terms: 'Comprehensive insurance coverage including health, life, and property insurance for all company operations.',
+      renewalDate: '2024-11-01'
+    },
+    {
+      id: '2',
+      vendor: 'Gulf Tax Consultancy',
+      vendorId: '2',
+      title: 'Monthly Tax Compliance',
+      type: 'retainer',
+      value: 24000,
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+      status: 'active',
+      terms: 'Monthly tax compliance services including VAT filing, corporate tax preparation, and regulatory compliance.',
+      renewalDate: '2024-11-15'
+    }
+  ]);
 
   const handleViewVendorDetails = (vendor: Vendor) => {
     setSelectedVendor(vendor);
@@ -194,9 +239,69 @@ const VendorManagement: React.FC = () => {
   };
 
   const handleMarkWorkComplete = (workId: string) => {
+    // Update the main work array
+    setMockAssignedWork(prev => prev.map(work =>
+      work.id === workId ? { ...work, status: 'completed' } : work
+    ));
+
+    // Update the assigned work for the current vendor
     setAssignedWork(prev => prev.map(work =>
       work.id === workId ? { ...work, status: 'completed' } : work
     ));
+  };
+
+  // Contract handlers
+  const handleViewContract = (contract: any) => {
+    setSelectedContract(contract);
+    setShowContractDetails(true);
+  };
+
+  const handleEditContract = (contract: any) => {
+    setSelectedContract(contract);
+    setEditContractForm({
+      title: contract.title,
+      type: contract.type,
+      value: contract.value,
+      startDate: contract.startDate,
+      endDate: contract.endDate,
+      terms: contract.terms,
+      renewalDate: contract.renewalDate
+    });
+    setShowEditContract(true);
+  };
+
+  const handleUpdateContract = () => {
+    if (selectedContract) {
+      setContracts(prev => prev.map(contract =>
+        contract.id === selectedContract.id
+          ? { ...contract, ...editContractForm }
+          : contract
+      ));
+      setShowEditContract(false);
+      setSelectedContract(null);
+      setEditContractForm({
+        title: '',
+        type: '',
+        value: 0,
+        startDate: '',
+        endDate: '',
+        terms: '',
+        renewalDate: ''
+      });
+    }
+  };
+
+  const handleDeleteContract = (contractId: string) => {
+    setContractToDelete(contractId);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteContract = () => {
+    if (contractToDelete) {
+      setContracts(prev => prev.filter(contract => contract.id !== contractToDelete));
+      setContractToDelete(null);
+      setShowDeleteConfirm(false);
+    }
   };
 
   // Calculate vendor workload statistics
@@ -557,6 +662,268 @@ const VendorManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Add Vendor Modal */}
+      {showAddVendor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Add New Vendor</h2>
+                <button
+                  onClick={() => setShowAddVendor(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-8">
+                <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Add Vendor Form</h3>
+                <p className="text-gray-600">Vendor registration form will be implemented here</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Contract Modal */}
+      {showNewContract && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Create New Contract</h2>
+                <button
+                  onClick={() => setShowNewContract(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-8">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Contract Creation Form</h3>
+                <p className="text-gray-600">Contract creation form will be implemented here</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contract Details Modal */}
+      {showContractDetails && selectedContract && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Contract Details</h2>
+                <button
+                  onClick={() => setShowContractDetails(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{selectedContract.title}</h3>
+                  <p className="text-gray-600">{selectedContract.vendor}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-600">Contract Value</span>
+                    <p className="font-medium text-gray-900">AED {selectedContract.value.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Type</span>
+                    <p className="font-medium text-gray-900 capitalize">{selectedContract.type.replace('_', ' ')}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Start Date</span>
+                    <p className="font-medium text-gray-900">{selectedContract.startDate}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">End Date</span>
+                    <p className="font-medium text-gray-900">{selectedContract.endDate}</p>
+                  </div>
+                </div>
+
+                {selectedContract.terms && (
+                  <div>
+                    <span className="text-sm text-gray-600">Terms & Conditions</span>
+                    <p className="mt-1 text-gray-900">{selectedContract.terms}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Contract Modal */}
+      {showEditContract && selectedContract && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-orange-600 to-orange-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Edit Contract</h2>
+                <button
+                  onClick={() => setShowEditContract(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <form className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contract Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editContractForm.title}
+                      onChange={(e) => setEditContractForm(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      placeholder="Enter contract title"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contract Type
+                    </label>
+                    <select
+                      value={editContractForm.type}
+                      onChange={(e) => setEditContractForm(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="">Select type</option>
+                      <option value="annual_contract">Annual Contract</option>
+                      <option value="retainer">Retainer</option>
+                      <option value="project_based">Project Based</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contract Value (AED)
+                    </label>
+                    <input
+                      type="number"
+                      value={editContractForm.value}
+                      onChange={(e) => setEditContractForm(prev => ({ ...prev, value: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Renewal Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editContractForm.renewalDate}
+                      onChange={(e) => setEditContractForm(prev => ({ ...prev, renewalDate: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editContractForm.startDate}
+                      onChange={(e) => setEditContractForm(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editContractForm.endDate}
+                      onChange={(e) => setEditContractForm(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Terms & Conditions
+                  </label>
+                  <textarea
+                    value={editContractForm.terms}
+                    onChange={(e) => setEditContractForm(prev => ({ ...prev, terms: e.target.value }))}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="Enter contract terms and conditions"
+                  />
+                </div>
+              </form>
+            </div>
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowEditContract(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateContract}
+                className="px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg hover:from-orange-700 hover:to-orange-800"
+              >
+                Update Contract
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Delete Contract</h3>
+                  <p className="text-gray-600">Are you sure you want to delete this contract?</p>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteContract}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -671,35 +1038,17 @@ const VendorManagement: React.FC = () => {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Active Contracts</h3>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200">
+            <button
+              onClick={() => setShowNewContract(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+            >
               <Plus className="w-4 h-4" />
               <span>New Contract</span>
             </button>
           </div>
 
           <div className="space-y-4">
-            {[
-              {
-                id: '1',
-                vendor: 'Emirates Insurance Brokers',
-                title: 'Annual Insurance Services',
-                type: 'annual_contract',
-                value: 50000,
-                startDate: '2024-01-01',
-                endDate: '2024-12-31',
-                status: 'active'
-              },
-              {
-                id: '2',
-                vendor: 'Gulf Tax Consultancy',
-                title: 'Monthly Tax Compliance',
-                type: 'retainer',
-                value: 24000,
-                startDate: '2024-01-01',
-                endDate: '2024-12-31',
-                status: 'active'
-              }
-            ].map((contract) => (
+            {contracts.map((contract) => (
               <div key={contract.id} className="border border-gray-200 rounded-lg p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -731,15 +1080,24 @@ const VendorManagement: React.FC = () => {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-100 flex space-x-3">
-                  <button className="flex items-center space-x-2 text-blue-600 hover:text-blue-700">
+                  <button
+                    onClick={() => handleViewContract(contract)}
+                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
+                  >
                     <Eye className="w-4 h-4" />
                     <span className="text-sm">View</span>
                   </button>
-                  <button className="flex items-center space-x-2 text-green-600 hover:text-green-700">
+                  <button
+                    onClick={() => handleEditContract(contract)}
+                    className="flex items-center space-x-2 text-green-600 hover:text-green-700"
+                  >
                     <Edit className="w-4 h-4" />
                     <span className="text-sm">Edit</span>
                   </button>
-                  <button className="flex items-center space-x-2 text-red-600 hover:text-red-700">
+                  <button
+                    onClick={() => handleDeleteContract(contract.id)}
+                    className="flex items-center space-x-2 text-red-600 hover:text-red-700"
+                  >
                     <Trash2 className="w-4 h-4" />
                     <span className="text-sm">Delete</span>
                   </button>

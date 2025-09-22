@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Plus,
@@ -124,6 +124,54 @@ const InvoiceManagement: React.FC = () => {
   const [showEditInvoice, setShowEditInvoice] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  const [editInvoiceForm, setEditInvoiceForm] = useState({
+    companyName: '',
+    dueDate: '',
+    subtotal: 0,
+    tax: 0,
+    total: 0,
+    status: 'draft' as 'draft' | 'sent' | 'paid' | 'overdue'
+  });
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+
+  // Create Invoice Form State
+  const [createInvoiceForm, setCreateInvoiceForm] = useState({
+    companyName: '',
+    companyEmail: '',
+    companyAddress: '',
+    invoiceDate: new Date().toISOString().split('T')[0],
+    dueDate: '',
+    services: [] as Array<{
+      id: string;
+      name: string;
+      description: string;
+      quantity: number;
+      rate: number;
+      amount: number;
+    }>,
+    subtotal: 0,
+    taxRate: 5,
+    tax: 0,
+    total: 0,
+    notes: '',
+    terms: 'Payment is due within 30 days of invoice date.'
+  });
+
+  // Create Template Form State
+  const [createTemplateForm, setCreateTemplateForm] = useState({
+    name: '',
+    description: '',
+    layout: 'standard' as 'standard' | 'modern' | 'minimal',
+    colorScheme: 'blue' as 'blue' | 'red' | 'green' | 'purple' | 'gray',
+    includeCompanyLogo: true,
+    includeTerms: true,
+    includeNotes: true,
+    defaultTerms: 'Payment is due within 30 days of invoice date.',
+    headerFields: [] as string[],
+    footerFields: [] as string[]
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -194,7 +242,37 @@ const InvoiceManagement: React.FC = () => {
   // Handler functions
   const handleEditInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
+    setEditInvoiceForm({
+      companyName: invoice.companyName,
+      dueDate: invoice.dueDate,
+      subtotal: invoice.subtotal,
+      tax: invoice.tax,
+      total: invoice.total,
+      status: invoice.status
+    });
     setShowEditInvoice(true);
+  };
+
+  const handleUpdateInvoice = () => {
+    if (selectedInvoice) {
+      const updatedInvoices = invoices.map(invoice =>
+        invoice.id === selectedInvoice.id
+          ? { ...invoice, ...editInvoiceForm }
+          : invoice
+      );
+      setInvoices(updatedInvoices);
+      setShowEditInvoice(false);
+      setSelectedInvoice(null);
+      setEditInvoiceForm({
+        companyName: '',
+        dueDate: '',
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        status: 'draft'
+      });
+      alert('Invoice updated successfully!');
+    }
   };
 
   const handleSendInvoice = (invoice: Invoice) => {
@@ -223,12 +301,226 @@ const InvoiceManagement: React.FC = () => {
 
   // Template handlers
   const handleViewTemplate = (templateName: string) => {
-    alert(`Viewing ${templateName} template. Template preview functionality will be implemented soon.`);
+    setSelectedTemplate(templateName);
+    setShowTemplatePreview(true);
+  };
+
+  const handleUseTemplate = (templateName: string) => {
+    // Close preview modal if open
+    setShowTemplatePreview(false);
+
+    // Set template-specific defaults
+    let defaultTerms = 'Payment is due within 30 days of invoice date.';
+    let defaultServices: any[] = [];
+
+    switch (templateName) {
+      case 'Standard Invoice':
+        defaultTerms = 'Payment is due within 30 days of invoice date. Late payments may incur additional charges.';
+        break;
+      case 'Service Invoice':
+        defaultTerms = 'Payment is due within 15 days of invoice date. Services are non-refundable once completed.';
+        defaultServices = [{
+          id: Date.now().toString(),
+          name: 'Professional Service',
+          description: 'Service description',
+          quantity: 1,
+          rate: 0,
+          amount: 0
+        }];
+        break;
+      case 'Detailed Invoice':
+        defaultTerms = 'Payment is due within 30 days of invoice date. Please include invoice number with payment.';
+        break;
+    }
+
+    // Pre-populate the create invoice form with template defaults
+    setCreateInvoiceForm(prev => ({
+      ...prev,
+      terms: defaultTerms,
+      services: defaultServices
+    }));
+
+    setSelectedTemplate(templateName);
+    setShowCreateInvoice(true);
   };
 
   const handleDeleteTemplate = (templateName: string) => {
-    if (confirm(`Are you sure you want to delete the ${templateName} template?`)) {
-      alert(`${templateName} template deleted successfully!`);
+    const confirmDelete = confirm(
+      `Are you sure you want to delete the "${templateName}" template?\n\n` +
+      `This action cannot be undone. Any invoices created with this template will not be affected, ` +
+      `but you won't be able to create new invoices using this template.`
+    );
+
+    if (confirmDelete) {
+      // In a real app, this would delete from database
+      console.log(`Deleting template: ${templateName}`);
+
+      // Show success message
+      alert(`Template "${templateName}" has been deleted successfully!`);
+
+      // If this template was selected, clear the selection
+      if (selectedTemplate === templateName) {
+        setSelectedTemplate(null);
+        setShowTemplatePreview(false);
+      }
+    }
+  };
+
+  // Create Invoice Form Handlers
+  const addServiceLine = () => {
+    const newService = {
+      id: Date.now().toString(),
+      name: '',
+      description: '',
+      quantity: 1,
+      rate: 0,
+      amount: 0
+    };
+    setCreateInvoiceForm(prev => ({
+      ...prev,
+      services: [...prev.services, newService]
+    }));
+  };
+
+  const updateServiceLine = (id: string, field: string, value: any) => {
+    setCreateInvoiceForm(prev => ({
+      ...prev,
+      services: prev.services.map(service => {
+        if (service.id === id) {
+          const updatedService = { ...service, [field]: value };
+          if (field === 'quantity' || field === 'rate') {
+            updatedService.amount = updatedService.quantity * updatedService.rate;
+          }
+          return updatedService;
+        }
+        return service;
+      })
+    }));
+  };
+
+  const removeServiceLine = (id: string) => {
+    setCreateInvoiceForm(prev => ({
+      ...prev,
+      services: prev.services.filter(service => service.id !== id)
+    }));
+  };
+
+  const calculateInvoiceTotals = () => {
+    const subtotal = createInvoiceForm.services.reduce((sum, service) => sum + service.amount, 0);
+    const tax = subtotal * (createInvoiceForm.taxRate / 100);
+    const total = subtotal + tax;
+
+    setCreateInvoiceForm(prev => ({
+      ...prev,
+      subtotal,
+      tax,
+      total
+    }));
+  };
+
+  // Recalculate totals when services change
+  React.useEffect(() => {
+    calculateInvoiceTotals();
+  }, [createInvoiceForm.services, createInvoiceForm.taxRate]);
+
+  const handleCreateInvoice = () => {
+    try {
+      // Validate required fields
+      if (!createInvoiceForm.companyName.trim()) {
+        alert('Please enter company name');
+        return;
+      }
+      if (!createInvoiceForm.dueDate) {
+        alert('Please select due date');
+        return;
+      }
+      if (createInvoiceForm.services.length === 0) {
+        alert('Please add at least one service');
+        return;
+      }
+
+      // Generate invoice number
+      const invoiceNumber = `INV-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, '0')}`;
+
+      // Create new invoice
+      const newInvoice: Invoice = {
+        id: Date.now().toString(),
+        companyId: 'temp-' + Date.now(),
+        companyName: createInvoiceForm.companyName,
+        invoiceNumber,
+        date: createInvoiceForm.invoiceDate,
+        dueDate: createInvoiceForm.dueDate,
+        subtotal: createInvoiceForm.subtotal,
+        tax: createInvoiceForm.tax,
+        total: createInvoiceForm.total,
+        status: 'draft',
+        services: createInvoiceForm.services
+      };
+
+      // Add to invoices list
+      setInvoices(prev => [newInvoice, ...prev]);
+
+      // Reset form
+      setCreateInvoiceForm({
+        companyName: '',
+        companyEmail: '',
+        companyAddress: '',
+        invoiceDate: new Date().toISOString().split('T')[0],
+        dueDate: '',
+        services: [],
+        subtotal: 0,
+        taxRate: 5,
+        tax: 0,
+        total: 0,
+        notes: '',
+        terms: 'Payment is due within 30 days of invoice date.'
+      });
+
+      setShowCreateInvoice(false);
+      alert(`Invoice ${invoiceNumber} created successfully!`);
+
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      alert('Error creating invoice. Please try again.');
+    }
+  };
+
+  // Template Creation Handler
+  const handleCreateTemplate = () => {
+    try {
+      // Validate required fields
+      if (!createTemplateForm.name.trim()) {
+        alert('Please enter template name');
+        return;
+      }
+      if (!createTemplateForm.description.trim()) {
+        alert('Please enter template description');
+        return;
+      }
+
+      // In a real app, this would save to database
+      console.log('Creating template:', createTemplateForm);
+
+      // Reset form
+      setCreateTemplateForm({
+        name: '',
+        description: '',
+        layout: 'standard',
+        colorScheme: 'blue',
+        includeCompanyLogo: true,
+        includeTerms: true,
+        includeNotes: true,
+        defaultTerms: 'Payment is due within 30 days of invoice date.',
+        headerFields: [],
+        footerFields: []
+      });
+
+      setShowCreateTemplate(false);
+      alert(`Template "${createTemplateForm.name}" created successfully!`);
+
+    } catch (error) {
+      console.error('Error creating template:', error);
+      alert('Error creating template. Please try again.');
     }
   };
 
@@ -569,37 +861,272 @@ const InvoiceManagement: React.FC = () => {
       {/* Create Invoice Modal */}
       {showCreateInvoice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-red-600 to-red-700 p-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Create New Invoice</h2>
+                <h2 className="text-xl font-bold text-white">Create New Invoice</h2>
                 <button
                   onClick={() => setShowCreateInvoice(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Plus className="w-5 h-5 text-white rotate-45" />
                 </button>
               </div>
             </div>
+
             <div className="p-6">
-              <div className="text-center py-8">
-                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Create Invoice</h3>
-                <p className="text-gray-600">Invoice creation functionality will be implemented soon.</p>
-                <p className="text-sm text-gray-500 mt-2">
-                  This will include client selection, service selection, and invoice generation.
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowCreateInvoice(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Close
-              </button>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateInvoice(); }} className="space-y-6">
+                {/* Client Information */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Client Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={createInvoiceForm.companyName}
+                        onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, companyName: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder="Enter company name"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={createInvoiceForm.companyEmail}
+                        onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, companyEmail: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder="Enter email address"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Address
+                    </label>
+                    <textarea
+                      value={createInvoiceForm.companyAddress}
+                      onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, companyAddress: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Enter company address"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+
+                {/* Invoice Details */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Invoice Date
+                      </label>
+                      <input
+                        type="date"
+                        value={createInvoiceForm.invoiceDate}
+                        onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, invoiceDate: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Due Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={createInvoiceForm.dueDate}
+                        onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, dueDate: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Services Section */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Services</h3>
+                    <button
+                      type="button"
+                      onClick={addServiceLine}
+                      className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Service</span>
+                    </button>
+                  </div>
+
+                  {createInvoiceForm.services.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                      <p>No services added yet. Click "Add Service" to get started.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {createInvoiceForm.services.map((service, index) => (
+                        <div key={service.id} className="bg-white p-4 rounded-lg border border-gray-200">
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                            <div className="md:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Service Name
+                              </label>
+                              <input
+                                type="text"
+                                value={service.name}
+                                onChange={(e) => updateServiceLine(service.id, 'name', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                placeholder="Service name"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Quantity
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={service.quantity}
+                                onChange={(e) => updateServiceLine(service.id, 'quantity', parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Rate (AED)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={service.rate}
+                                onChange={(e) => updateServiceLine(service.id, 'rate', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Amount
+                                </label>
+                                <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700">
+                                  AED {service.amount.toFixed(2)}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeServiceLine(service.id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remove service"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-3">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Description
+                            </label>
+                            <textarea
+                              value={service.description}
+                              onChange={(e) => updateServiceLine(service.id, 'description', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                              placeholder="Service description"
+                              rows={2}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Invoice Summary */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Summary</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">AED {createInvoiceForm.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Tax ({createInvoiceForm.taxRate}%):</span>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={createInvoiceForm.taxRate}
+                          onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, taxRate: parseFloat(e.target.value) || 0 }))}
+                          className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                        <span>%</span>
+                        <span className="font-medium">AED {createInvoiceForm.tax.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-300 pt-3">
+                      <div className="flex justify-between text-lg font-bold">
+                        <span>Total:</span>
+                        <span className="text-red-600">AED {createInvoiceForm.total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes and Terms */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Notes
+                    </label>
+                    <textarea
+                      value={createInvoiceForm.notes}
+                      onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, notes: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Additional notes"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Terms & Conditions
+                    </label>
+                    <textarea
+                      value={createInvoiceForm.terms}
+                      onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, terms: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Terms and conditions"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateInvoice(false)}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!createInvoiceForm.companyName.trim() || !createInvoiceForm.dueDate || createInvoiceForm.services.length === 0}
+                    className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Create Invoice
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -623,21 +1150,102 @@ const InvoiceManagement: React.FC = () => {
               </div>
             </div>
             <div className="p-6">
-              <div className="text-center py-8">
-                <Edit className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Edit Invoice {selectedInvoice.invoiceNumber}</h3>
-                <p className="text-gray-600">Invoice editing functionality will be implemented soon.</p>
-                <p className="text-sm text-gray-500 mt-2">
-                  This will include editing invoice details, services, and amounts.
-                </p>
-              </div>
+              <form className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editInvoiceForm.companyName}
+                      onChange={(e) => setEditInvoiceForm(prev => ({ ...prev, companyName: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      placeholder="Enter company name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editInvoiceForm.dueDate}
+                      onChange={(e) => setEditInvoiceForm(prev => ({ ...prev, dueDate: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Subtotal (AED)
+                    </label>
+                    <input
+                      type="number"
+                      value={editInvoiceForm.subtotal}
+                      onChange={(e) => {
+                        const subtotal = Number(e.target.value);
+                        const tax = subtotal * 0.05; // 5% tax
+                        const total = subtotal + tax;
+                        setEditInvoiceForm(prev => ({ ...prev, subtotal, tax, total }));
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tax (AED)
+                    </label>
+                    <input
+                      type="number"
+                      value={editInvoiceForm.tax}
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Total (AED)
+                    </label>
+                    <input
+                      type="number"
+                      value={editInvoiceForm.total}
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-semibold"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={editInvoiceForm.status}
+                      onChange={(e) => setEditInvoiceForm(prev => ({ ...prev, status: e.target.value as any }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="sent">Sent</option>
+                      <option value="paid">Paid</option>
+                      <option value="overdue">Overdue</option>
+                    </select>
+                  </div>
+                </div>
+              </form>
             </div>
             <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
               <button
                 onClick={() => setShowEditInvoice(false)}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
-                Close
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateInvoice}
+                className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800"
+              >
+                Update Invoice
               </button>
             </div>
           </div>
@@ -676,6 +1284,314 @@ const InvoiceManagement: React.FC = () => {
                   Delete
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Template Modal */}
+      {showCreateTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-red-600 to-red-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Create New Template</h2>
+                <button
+                  onClick={() => setShowCreateTemplate(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-8">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Create Template Form</h3>
+                <p className="text-gray-600">Template creation form will be implemented here</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Preview Modal */}
+      {showTemplatePreview && selectedTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Template Preview: {selectedTemplate}</h2>
+                <button
+                  onClick={() => setShowTemplatePreview(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              {/* Template Preview Content */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">INVOICE</h3>
+                      <p className="text-sm text-gray-600">#{selectedTemplate?.toUpperCase()}-2024-001</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">Date: {new Date().toLocaleDateString()}</p>
+                      <p className="text-sm text-gray-600">Due: {new Date(Date.now() + 30*24*60*60*1000).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-2">From:</h4>
+                        <p className="text-sm text-gray-600">Your Company Name</p>
+                        <p className="text-sm text-gray-600">123 Business Street</p>
+                        <p className="text-sm text-gray-600">Dubai, UAE</p>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-2">To:</h4>
+                        <p className="text-sm text-gray-600">Client Company Name</p>
+                        <p className="text-sm text-gray-600">456 Client Avenue</p>
+                        <p className="text-sm text-gray-600">Abu Dhabi, UAE</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sample Invoice Items */}
+                <div className="mb-6">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-900">Description</th>
+                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-900">Qty</th>
+                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-900">Rate</th>
+                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-900">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      <tr>
+                        <td className="px-4 py-2 text-sm text-gray-900">Employment Visa Processing</td>
+                        <td className="px-4 py-2 text-sm text-gray-900 text-right">2</td>
+                        <td className="px-4 py-2 text-sm text-gray-900 text-right">AED 2,500</td>
+                        <td className="px-4 py-2 text-sm text-gray-900 text-right">AED 5,000</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-2 text-sm text-gray-900">Trade License Renewal</td>
+                        <td className="px-4 py-2 text-sm text-gray-900 text-right">1</td>
+                        <td className="px-4 py-2 text-sm text-gray-900 text-right">AED 3,000</td>
+                        <td className="px-4 py-2 text-sm text-gray-900 text-right">AED 3,000</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Invoice Summary */}
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex justify-end">
+                    <div className="w-64">
+                      <div className="flex justify-between py-2">
+                        <span className="text-sm text-gray-600">Subtotal:</span>
+                        <span className="text-sm text-gray-900">AED 8,000</span>
+                      </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-sm text-gray-600">Tax (5%):</span>
+                        <span className="text-sm text-gray-900">AED 400</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-t border-gray-200 font-semibold">
+                        <span className="text-sm text-gray-900">Total:</span>
+                        <span className="text-sm text-gray-900">AED 8,400</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Terms */}
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-2">Terms & Conditions</h4>
+                  <p className="text-sm text-gray-600">Payment is due within 30 days of invoice date.</p>
+                </div>
+              </div>
+
+              {/* Preview Actions */}
+              <div className="flex justify-center space-x-3 mt-6">
+                <button
+                  onClick={() => handleUseTemplate(selectedTemplate!)}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Use This Template
+                </button>
+                <button
+                  onClick={() => setShowTemplatePreview(false)}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Template Modal */}
+      {showCreateTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Create New Template</h2>
+                <button
+                  onClick={() => setShowCreateTemplate(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateTemplate(); }} className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Template Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={createTemplateForm.name}
+                        onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, name: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Enter template name"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Layout Style
+                      </label>
+                      <select
+                        value={createTemplateForm.layout}
+                        onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, layout: e.target.value as any }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="standard">Standard</option>
+                        <option value="modern">Modern</option>
+                        <option value="minimal">Minimal</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={createTemplateForm.description}
+                      onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Enter template description"
+                      rows={3}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Design Options */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Design Options</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Color Scheme
+                      </label>
+                      <select
+                        value={createTemplateForm.colorScheme}
+                        onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, colorScheme: e.target.value as any }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="blue">Blue</option>
+                        <option value="red">Red</option>
+                        <option value="green">Green</option>
+                        <option value="purple">Purple</option>
+                        <option value="gray">Gray</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Template Features
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={createTemplateForm.includeCompanyLogo}
+                            onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, includeCompanyLogo: e.target.checked }))}
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Include Company Logo</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={createTemplateForm.includeTerms}
+                            onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, includeTerms: e.target.checked }))}
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Include Terms & Conditions</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={createTemplateForm.includeNotes}
+                            onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, includeNotes: e.target.checked }))}
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Include Notes Section</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Default Terms */}
+                {createTemplateForm.includeTerms && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Default Terms & Conditions</h3>
+                    <textarea
+                      value={createTemplateForm.defaultTerms}
+                      onChange={(e) => setCreateTemplateForm(prev => ({ ...prev, defaultTerms: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Enter default terms and conditions"
+                      rows={4}
+                    />
+                  </div>
+                )}
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateTemplate(false)}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!createTemplateForm.name.trim() || !createTemplateForm.description.trim()}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Create Template
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -815,7 +1731,10 @@ const InvoiceManagement: React.FC = () => {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Invoice Templates</h3>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200">
+            <button
+              onClick={() => setShowCreateTemplate(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
+            >
               <Plus className="w-4 h-4" />
               <span>Create Template</span>
             </button>
@@ -854,7 +1773,7 @@ const InvoiceManagement: React.FC = () => {
                       Preview
                     </button>
                     <button
-                      onClick={() => setShowCreateInvoice(true)}
+                      onClick={() => handleUseTemplate(template.name)}
                       className="text-green-600 hover:text-green-700 text-sm"
                     >
                       Use
