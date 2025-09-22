@@ -96,13 +96,20 @@ export const dbHelpers = {
   },
 
   async createReminder(reminder: any) {
+    console.log('Creating reminder in database:', reminder);
+
     const { data, error } = await supabase
       .from('reminders')
       .insert([reminder])
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Database error creating reminder:', error);
+      throw error;
+    }
+
+    console.log('Reminder created in database:', data);
     return data
   },
 
@@ -499,7 +506,19 @@ export const dbHelpers = {
       .insert([billing])
       .select()
       .single()
-    
+
+    if (error) throw error
+    return data
+  },
+
+  async updateServiceBilling(id: string, updates: any) {
+    const { data, error } = await supabase
+      .from('service_billings')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
     if (error) throw error
     return data
   },

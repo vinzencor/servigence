@@ -9,6 +9,7 @@ const ServiceBilling: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('this_month');
   const [showCreateBilling, setShowCreateBilling] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showEditBilling, setShowEditBilling] = useState(false);
   const [selectedBilling, setSelectedBilling] = useState<any>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
@@ -36,6 +37,19 @@ const ServiceBilling: React.FC = () => {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Edit billing form state
+  const [editBillingForm, setEditBillingForm] = useState({
+    clientType: 'company' as 'company' | 'individual',
+    companyId: '',
+    individualId: '',
+    serviceTypeId: '',
+    assignedEmployeeId: '',
+    serviceDate: '',
+    cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
+    quantity: '1',
+    notes: ''
+  });
 
   const tabs = [
     { id: 'billing', label: 'Service Billing', icon: DollarSign },
@@ -178,9 +192,78 @@ const ServiceBilling: React.FC = () => {
     setShowInvoiceModal(true);
   };
 
+  const editBilling = (billing: any) => {
+    setSelectedBilling(billing);
+    // Populate edit form with existing billing data
+    setEditBillingForm({
+      clientType: billing.company_id ? 'company' : 'individual',
+      companyId: billing.company_id || '',
+      individualId: billing.individual_id || '',
+      serviceTypeId: billing.service_type_id || '',
+      assignedEmployeeId: billing.assigned_employee_id || '',
+      serviceDate: billing.service_date || '',
+      cashType: billing.cash_type || 'cash',
+      quantity: billing.quantity?.toString() || '1',
+      notes: billing.notes || ''
+    });
+    setShowEditBilling(true);
+  };
+
+  const handleEditBillingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedBilling) return;
+
+    try {
+      const selectedService = services.find(s => s.id === editBillingForm.serviceTypeId);
+      if (!selectedService) {
+        alert('Please select a valid service');
+        return;
+      }
+
+      const quantity = parseInt(editBillingForm.quantity);
+      const typingCharges = selectedService.typingCharges * quantity;
+      const governmentCharges = selectedService.governmentCharges * quantity;
+      const totalAmount = typingCharges + governmentCharges;
+
+      const updatedBillingData = {
+        company_id: editBillingForm.clientType === 'company' && editBillingForm.companyId ? editBillingForm.companyId : null,
+        individual_id: editBillingForm.clientType === 'individual' && editBillingForm.individualId ? editBillingForm.individualId : null,
+        service_type_id: editBillingForm.serviceTypeId || null,
+        assigned_employee_id: editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
+        service_date: editBillingForm.serviceDate,
+        cash_type: editBillingForm.cashType,
+        typing_charges: typingCharges,
+        government_charges: governmentCharges,
+        total_amount: totalAmount,
+        quantity: quantity,
+        notes: editBillingForm.notes || null
+      };
+
+      // Update billing in database
+      await dbHelpers.updateServiceBilling(selectedBilling.id, updatedBillingData);
+
+      alert('✅ Service billing updated successfully!');
+
+      setShowEditBilling(false);
+      setSelectedBilling(null);
+
+      // Reload data to show the updated billing
+      await loadServiceBillings();
+    } catch (error) {
+      console.error('Error updating service billing:', error);
+      alert(`❌ Error updating service billing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const downloadInvoice = (billing: any) => {
-    // Generate and download invoice as PDF
-    generateInvoicePDF(billing);
+    try {
+      // Generate and download invoice as PDF
+      generateInvoicePDF(billing);
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Error generating invoice. Please try again.');
+    }
   };
 
   const generateMonthlyRevenueReport = async () => {
@@ -210,8 +293,8 @@ const ServiceBilling: React.FC = () => {
           };
         }
 
-        acc[monthKey].serviceRevenue += billing.service_charge || 0;
-        acc[monthKey].governmentCharges += billing.government_charge || 0;
+        acc[monthKey].serviceRevenue += billing.typing_charges || 0;
+        acc[monthKey].governmentCharges += billing.government_charges || 0;
         acc[monthKey].totalRevenue += billing.total_amount || 0;
         acc[monthKey].billingsCount += 1;
 
@@ -242,8 +325,8 @@ const ServiceBilling: React.FC = () => {
       const paymentData = {
         totalBillings: filteredBillings.length,
         totalRevenue: filteredBillings.reduce((sum, b) => sum + (b.total_amount || 0), 0),
-        serviceRevenue: filteredBillings.reduce((sum, b) => sum + (b.service_charge || 0), 0),
-        governmentCharges: filteredBillings.reduce((sum, b) => sum + (b.government_charge || 0), 0),
+        serviceRevenue: filteredBillings.reduce((sum, b) => sum + (b.typing_charges || 0), 0),
+        governmentCharges: filteredBillings.reduce((sum, b) => sum + (b.government_charges || 0), 0),
         averageBillingAmount: filteredBillings.length > 0
           ? filteredBillings.reduce((sum, b) => sum + (b.total_amount || 0), 0) / filteredBillings.length
           : 0,
@@ -276,7 +359,7 @@ const ServiceBilling: React.FC = () => {
 
       // Group by service type
       const serviceData = filteredBillings.reduce((acc: any, billing: any) => {
-        const serviceName = billing.service_name || 'Unknown Service';
+        const serviceName = billing.service_type?.name || 'Unknown Service';
 
         if (!acc[serviceName]) {
           acc[serviceName] = {
@@ -325,7 +408,17 @@ const ServiceBilling: React.FC = () => {
 
   const generateInvoiceHTML = (billing: any) => {
     const currentDate = new Date().toLocaleDateString();
-    const serviceDate = new Date(billing.service_date).toLocaleDateString();
+    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString() : 'N/A';
+
+    // Safely get client information
+    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
+    const serviceName = billing.service_type?.name || 'Service';
+    const invoiceNumber = billing.invoice_number || 'N/A';
+    const quantity = billing.quantity || 1;
+    const typingCharges = parseFloat(billing.typing_charges || 0);
+    const governmentCharges = parseFloat(billing.government_charges || 0);
+    const totalAmount = parseFloat(billing.total_amount || 0);
+    const cashType = billing.cash_type || 'N/A';
 
     return `
       <!DOCTYPE html>
@@ -362,15 +455,15 @@ const ServiceBilling: React.FC = () => {
         <div class="invoice-details">
           <div class="invoice-info">
             <div class="info-title">Invoice Details</div>
-            <div class="info-row"><strong>Invoice Number:</strong> ${billing.invoice_number}</div>
+            <div class="info-row"><strong>Invoice Number:</strong> ${invoiceNumber}</div>
             <div class="info-row"><strong>Invoice Date:</strong> ${currentDate}</div>
             <div class="info-row"><strong>Service Date:</strong> ${serviceDate}</div>
-            <div class="info-row"><strong>Payment Method:</strong> ${billing.cash_type?.toUpperCase()}</div>
+            <div class="info-row"><strong>Payment Method:</strong> ${cashType.toUpperCase()}</div>
           </div>
 
           <div class="client-info">
             <div class="info-title">Bill To</div>
-            <div class="info-row"><strong>Client:</strong> ${billing.company?.company_name || billing.individual?.individual_name || 'N/A'}</div>
+            <div class="info-row"><strong>Client:</strong> ${clientName}</div>
             ${billing.company ? `
               <div class="info-row"><strong>Company:</strong> ${billing.company.company_name}</div>
               <div class="info-row"><strong>Trade License:</strong> ${billing.company.trade_license_number || 'N/A'}</div>
@@ -390,19 +483,19 @@ const ServiceBilling: React.FC = () => {
           </thead>
           <tbody>
             <tr>
-              <td>${billing.service_type?.name || 'Service'}</td>
-              <td>${billing.quantity || 1}</td>
-              <td>AED ${parseFloat(billing.typing_charges || 0).toFixed(2)}</td>
-              <td>AED ${parseFloat(billing.government_charges || 0).toFixed(2)}</td>
-              <td>AED ${parseFloat(billing.total_amount || 0).toFixed(2)}</td>
+              <td>${serviceName}</td>
+              <td>${quantity}</td>
+              <td>AED ${typingCharges.toFixed(2)}</td>
+              <td>AED ${governmentCharges.toFixed(2)}</td>
+              <td>AED ${totalAmount.toFixed(2)}</td>
             </tr>
           </tbody>
         </table>
 
         <div class="total-section">
-          <div class="total-row">Service Charges: AED ${parseFloat(billing.typing_charges || 0).toFixed(2)}</div>
-          <div class="total-row">Government Charges: AED ${parseFloat(billing.government_charges || 0).toFixed(2)}</div>
-          <div class="total-final">Total Amount: AED ${parseFloat(billing.total_amount || 0).toFixed(2)}</div>
+          <div class="total-row">Service Charges: AED ${typingCharges.toFixed(2)}</div>
+          <div class="total-row">Government Charges: AED ${governmentCharges.toFixed(2)}</div>
+          <div class="total-final">Total Amount: AED ${totalAmount.toFixed(2)}</div>
         </div>
 
         <div class="footer">
@@ -807,10 +900,7 @@ const ServiceBilling: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              // TODO: Implement edit functionality
-                              alert('Edit functionality coming soon!');
-                            }}
+                            onClick={() => editBilling(billing)}
                             className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                             title="Edit Billing"
                           >
@@ -1377,6 +1467,413 @@ const ServiceBilling: React.FC = () => {
                 >
                   <Download className="w-5 h-5" />
                   <span>Download Invoice</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Billing Modal */}
+      {showEditBilling && selectedBilling && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Edit Service Billing</h2>
+                <button
+                  onClick={() => {
+                    setShowEditBilling(false);
+                    setSelectedBilling(null);
+                  }}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditBillingSubmit} className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Client Selection */}
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="clientType"
+                        value="company"
+                        checked={editBillingForm.clientType === 'company'}
+                        onChange={(e) => setEditBillingForm(prev => ({ ...prev, clientType: e.target.value as 'company' | 'individual' }))}
+                        className="mr-2"
+                      />
+                      <Building2 className="w-4 h-4 mr-1" />
+                      Company
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="clientType"
+                        value="individual"
+                        checked={editBillingForm.clientType === 'individual'}
+                        onChange={(e) => setEditBillingForm(prev => ({ ...prev, clientType: e.target.value as 'company' | 'individual' }))}
+                        className="mr-2"
+                      />
+                      <User className="w-4 h-4 mr-1" />
+                      Individual
+                    </label>
+                  </div>
+                </div>
+
+                {/* Company/Individual Selection */}
+                {editBillingForm.clientType === 'company' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Company <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="companyId"
+                      value={editBillingForm.companyId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, companyId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select a company</option>
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.companyName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Individual <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="individualId"
+                      value={editBillingForm.individualId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, individualId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select an individual</option>
+                      {individuals.map((individual) => (
+                        <option key={individual.id} value={individual.id}>
+                          {individual.individualName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Service Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Service <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="serviceTypeId"
+                    value={editBillingForm.serviceTypeId}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, serviceTypeId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  >
+                    <option value="">Select a service</option>
+                    {services.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name} - AED {service.typingCharges + service.governmentCharges}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Employee Assignment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Employee</label>
+                  <select
+                    name="assignedEmployeeId"
+                    value={editBillingForm.assignedEmployeeId}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, assignedEmployeeId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Select an employee (optional)</option>
+                    {serviceEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Service Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="serviceDate"
+                    value={editBillingForm.serviceDate}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, serviceDate: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                </div>
+
+                {/* Cash Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Cash Type</label>
+                  <select
+                    name="cashType"
+                    value={editBillingForm.cashType}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, cashType: e.target.value as any }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    {cashTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={editBillingForm.quantity}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, quantity: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    min="1"
+                    required
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea
+                    name="notes"
+                    value={editBillingForm.notes}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    rows={3}
+                    placeholder="Additional notes or comments"
+                  />
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditBilling(false);
+                    setSelectedBilling(null);
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200"
+                >
+                  Update Billing
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && reportData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">
+                  {reportType === 'monthly-revenue' && 'Monthly Revenue Report'}
+                  {reportType === 'payment-analysis' && 'Payment Analysis Report'}
+                  {reportType === 'service-performance' && 'Service Performance Report'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportData(null);
+                    setReportType('');
+                  }}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {reportType === 'monthly-revenue' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Monthly Revenue Breakdown</h3>
+                    <p className="text-gray-600">Revenue analysis by month</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left">Month</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Service Revenue</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Government Charges</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Total Revenue</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Billings Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.map((row: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-4 py-2">{row.month}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {row.serviceRevenue.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {row.governmentCharges.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right font-semibold">AED {row.totalRevenue.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{row.billingsCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {reportType === 'payment-analysis' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Analysis</h3>
+                    <p className="text-gray-600">Analysis of payment patterns and revenue breakdown</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-blue-900">Total Billings</h4>
+                      <p className="text-2xl font-bold text-blue-600">{reportData.totalBillings}</p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-green-900">Total Revenue</h4>
+                      <p className="text-2xl font-bold text-green-600">AED {reportData.totalRevenue.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-purple-900">Service Revenue</h4>
+                      <p className="text-2xl font-bold text-purple-600">AED {reportData.serviceRevenue.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-orange-900">Government Charges</h4>
+                      <p className="text-2xl font-bold text-orange-600">AED {reportData.governmentCharges.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-gray-900 mb-3">Average Billing Amount</h4>
+                    <p className="text-xl font-bold text-gray-700">AED {reportData.averageBillingAmount.toFixed(2)}</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-3">Payment Methods Distribution</h4>
+                    <div className="space-y-2">
+                      {Object.entries(reportData.paymentMethods).map(([method, count]: [string, any]) => (
+                        <div key={method} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span className="capitalize">{method.replace('_', ' ')}</span>
+                          <span className="font-semibold">{count} transactions</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {reportType === 'service-performance' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Service Performance Report</h3>
+                    <p className="text-gray-600">Performance metrics for different service categories</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left">Service Name</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Count</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Total Revenue</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Average Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.map((service: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-4 py-2">{service.name}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{service.count}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {service.revenue.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {service.averageAmount.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-6">
+                <button
+                  onClick={() => {
+                    // Export report as CSV
+                    const csvData = reportType === 'monthly-revenue'
+                      ? reportData.map((row: any) => [row.month, row.serviceRevenue, row.governmentCharges, row.totalRevenue, row.billingsCount])
+                      : reportType === 'service-performance'
+                      ? reportData.map((service: any) => [service.name, service.count, service.revenue, service.averageAmount])
+                      : [];
+
+                    if (csvData.length > 0) {
+                      const headers = reportType === 'monthly-revenue'
+                        ? ['Month', 'Service Revenue', 'Government Charges', 'Total Revenue', 'Billings Count']
+                        : ['Service Name', 'Count', 'Total Revenue', 'Average Amount'];
+
+                      const csvContent = [
+                        headers.join(','),
+                        ...csvData.map((row: any[]) => row.join(','))
+                      ].join('\n');
+
+                      const blob = new Blob([csvContent], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `${reportType}-report-${new Date().toISOString().split('T')[0]}.csv`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Export CSV
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportData(null);
+                    setReportType('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>

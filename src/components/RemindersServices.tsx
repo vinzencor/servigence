@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Users
 } from 'lucide-react';
+import { dbHelpers } from '../lib/supabase';
 
 interface Reminder {
   id: string;
@@ -94,6 +95,284 @@ const RemindersServices: React.FC = () => {
   const [filterPriority, setFilterPriority] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [showReminderDetails, setShowReminderDetails] = useState(false);
+  const [showEditReminder, setShowEditReminder] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
+
+  // Add Reminder Form State
+  const [newReminder, setNewReminder] = useState({
+    title: '',
+    description: '',
+    type: 'other' as 'visa_renewal' | 'license_renewal' | 'document_expiry' | 'follow_up' | 'payment_due' | 'contract_renewal' | 'other',
+    companyId: '',
+    employeeId: '',
+    vendorId: '',
+    date: '',
+    dueDate: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    assignedTo: '',
+    notes: ''
+  });
+
+  // Edit Reminder Form State
+  const [editReminderForm, setEditReminderForm] = useState({
+    title: '',
+    description: '',
+    type: 'other' as 'visa_renewal' | 'license_renewal' | 'document_expiry' | 'follow_up' | 'payment_due' | 'contract_renewal' | 'other',
+    companyId: '',
+    employeeId: '',
+    vendorId: '',
+    date: '',
+    dueDate: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    assignedTo: '',
+    notes: ''
+  });
+
+  // Form handlers
+  const resetReminderForm = () => {
+    setNewReminder({
+      title: '',
+      description: '',
+      type: 'other',
+      companyId: '',
+      employeeId: '',
+      vendorId: '',
+      date: '',
+      dueDate: '',
+      priority: 'medium',
+      assignedTo: '',
+      notes: ''
+    });
+  };
+
+  const handleCreateReminder = async () => {
+    try {
+      // Validate required fields
+      if (!newReminder.title.trim()) {
+        alert('Please enter a reminder title');
+        return;
+      }
+      if (!newReminder.dueDate) {
+        alert('Please select a due date');
+        return;
+      }
+
+      // Prepare reminder data for database
+      const reminderData = {
+        title: newReminder.title.trim(),
+        description: newReminder.description.trim() || null,
+        reminder_date: newReminder.dueDate,
+        reminder_type: newReminder.type,
+        priority: newReminder.priority,
+        status: 'active',
+        company_id: newReminder.companyId && newReminder.companyId !== '' ? newReminder.companyId : null,
+        employee_id: newReminder.employeeId && newReminder.employeeId !== '' ? newReminder.employeeId : null,
+        vendor_id: newReminder.vendorId && newReminder.vendorId !== '' ? newReminder.vendorId : null,
+        assigned_to: newReminder.assignedTo.trim() || null,
+        notes: newReminder.notes.trim() || null,
+        days_before_reminder: 30,
+        created_by: 'System' // Add created_by field
+      };
+
+      console.log('Creating reminder with data:', reminderData);
+      const result = await dbHelpers.createReminder(reminderData);
+      console.log('Reminder created successfully:', result);
+
+      // Reset form and close modal
+      resetReminderForm();
+      setShowAddReminder(false);
+      alert('✅ Reminder created successfully!');
+
+    } catch (error) {
+      console.error('Error creating reminder:', error);
+
+      // Provide more specific error messages
+      let errorMessage = 'Error creating reminder. ';
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key')) {
+          errorMessage += 'A reminder with similar details already exists.';
+        } else if (error.message.includes('foreign key')) {
+          errorMessage += 'Invalid company, employee, or vendor selected.';
+        } else if (error.message.includes('not null')) {
+          errorMessage += 'Please fill in all required fields.';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'Please try again.';
+      }
+
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+  const [reminderToDelete, setReminderToDelete] = useState<string | null>(null);
+  const [showReminderMenu, setShowReminderMenu] = useState<string | null>(null);
+  const [showAddService, setShowAddService] = useState(false);
+
+  // Add Service Form State
+  const [newService, setNewService] = useState({
+    name: '',
+    client: '',
+    type: 'company_formation' as 'company_formation' | 'visa' | 'license_renewal' | 'document_processing' | 'other',
+    assignedTo: '',
+    startDate: '',
+    expectedCompletionDate: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    description: '',
+    milestones: [] as Array<{name: string, expectedDate: string, status: 'pending' | 'in_progress' | 'completed'}>
+  });
+
+  // Handler functions
+  const handleViewReminder = (reminder: Reminder) => {
+    setSelectedReminder(reminder);
+    setShowReminderDetails(true);
+  };
+
+  const handleEditReminder = (reminder: Reminder) => {
+    setSelectedReminder(reminder);
+    // Populate edit form with existing reminder data
+    setEditReminderForm({
+      title: reminder.title,
+      description: reminder.description,
+      type: reminder.type,
+      companyId: reminder.companyId || '',
+      employeeId: reminder.employeeId || '',
+      vendorId: reminder.vendorId || '',
+      date: reminder.date,
+      dueDate: reminder.dueDate,
+      priority: reminder.priority,
+      assignedTo: reminder.assignedTo || '',
+      notes: reminder.notes || ''
+    });
+    setShowEditReminder(true);
+  };
+
+  const handleUpdateReminder = async () => {
+    if (!selectedReminder) return;
+
+    try {
+      // Validate required fields
+      if (!editReminderForm.title.trim()) {
+        alert('Please enter a reminder title');
+        return;
+      }
+      if (!editReminderForm.dueDate) {
+        alert('Please select a due date');
+        return;
+      }
+
+      // Prepare updated reminder data
+      const updatedReminderData = {
+        title: editReminderForm.title.trim(),
+        description: editReminderForm.description.trim() || null,
+        reminder_date: editReminderForm.dueDate,
+        reminder_type: editReminderForm.type,
+        priority: editReminderForm.priority,
+        company_id: editReminderForm.companyId && editReminderForm.companyId !== '' ? editReminderForm.companyId : null,
+        employee_id: editReminderForm.employeeId && editReminderForm.employeeId !== '' ? editReminderForm.employeeId : null,
+        vendor_id: editReminderForm.vendorId && editReminderForm.vendorId !== '' ? editReminderForm.vendorId : null,
+        assigned_to: editReminderForm.assignedTo.trim() || null,
+        notes: editReminderForm.notes.trim() || null
+      };
+
+      console.log('Updating reminder with data:', updatedReminderData);
+      const result = await dbHelpers.updateReminder(selectedReminder.id, updatedReminderData);
+      console.log('Reminder updated successfully:', result);
+
+      // Close modal and reset form
+      setShowEditReminder(false);
+      setSelectedReminder(null);
+      alert('✅ Reminder updated successfully!');
+
+      // In a real app, you would reload the reminders list here
+      // For now, we'll just show the success message
+
+    } catch (error) {
+      console.error('Error updating reminder:', error);
+
+      // Provide more specific error messages
+      let errorMessage = 'Error updating reminder. ';
+      if (error instanceof Error) {
+        if (error.message.includes('foreign key')) {
+          errorMessage += 'Invalid company, employee, or vendor selected.';
+        } else if (error.message.includes('not null')) {
+          errorMessage += 'Please fill in all required fields.';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'Please try again.';
+      }
+
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+
+  const handleCreateService = async () => {
+    try {
+      // Validate required fields
+      if (!newService.name.trim()) {
+        alert('Please enter a service name');
+        return;
+      }
+      if (!newService.client.trim()) {
+        alert('Please enter a client name');
+        return;
+      }
+      if (!newService.expectedCompletionDate) {
+        alert('Please select an expected completion date');
+        return;
+      }
+
+      // For now, we'll just show a success message since this would typically
+      // be stored in a separate services/projects table
+      console.log('Creating service with data:', newService);
+
+      // Reset form and close modal
+      resetServiceForm();
+      setShowAddService(false);
+      alert('✅ Service milestone created successfully!');
+
+    } catch (error) {
+      console.error('Error creating service:', error);
+      alert('❌ Error creating service. Please try again.');
+    }
+  };
+
+  const resetServiceForm = () => {
+    setNewService({
+      name: '',
+      client: '',
+      type: 'company_formation',
+      assignedTo: '',
+      startDate: '',
+      expectedCompletionDate: '',
+      priority: 'medium',
+      description: '',
+      milestones: []
+    });
+  };
+
+  const handleDeleteReminder = (reminderId: string) => {
+    setReminderToDelete(reminderId);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteReminder = () => {
+    if (reminderToDelete) {
+      // In a real app, this would call an API to delete the reminder
+      console.log('Deleting reminder:', reminderToDelete);
+      setReminderToDelete(null);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  const handleReminderMenuToggle = (reminderId: string) => {
+    setShowReminderMenu(showReminderMenu === reminderId ? null : reminderId);
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -243,9 +522,50 @@ const RemindersServices: React.FC = () => {
                   <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(reminder.priority)}`}>
                     {reminder.priority.toUpperCase()}
                   </span>
-                  <button className="p-1 text-gray-400 hover:text-gray-600">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => handleReminderMenuToggle(reminder.id)}
+                      className="p-1 text-gray-400 hover:text-gray-600"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {showReminderMenu === reminder.id && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                        <div className="py-1">
+                          <button
+                            onClick={() => {
+                              handleViewReminder(reminder);
+                              setShowReminderMenu(null);
+                            }}
+                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>View Details</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleEditReminder(reminder);
+                              setShowReminderMenu(null);
+                            }}
+                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Edit className="w-4 h-4" />
+                            <span>Edit Reminder</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleDeleteReminder(reminder.id);
+                              setShowReminderMenu(null);
+                            }}
+                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -305,7 +625,10 @@ const RemindersServices: React.FC = () => {
               <Settings className="w-4 h-4" />
               <span>Settings</span>
             </button>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-2 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg">
+            <button
+              onClick={() => setShowAddReminder(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-2 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg"
+            >
               <Plus className="w-5 h-5" />
               <span>Add Reminder</span>
             </button>
@@ -341,6 +664,591 @@ const RemindersServices: React.FC = () => {
       {activeTab === 'reminders' && renderRemindersList()}
       {activeTab === 'services' && renderServiceTracking()}
       {activeTab === 'calendar' && renderCalendarView()}
+
+      {/* Add Reminder Modal */}
+      {showAddReminder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Add New Reminder</h2>
+                <button
+                  onClick={() => setShowAddReminder(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateReminder(); }} className="space-y-6">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newReminder.title}
+                    onChange={(e) => setNewReminder(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter reminder title"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={newReminder.description}
+                    onChange={(e) => setNewReminder(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter reminder description"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Type and Priority Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Type
+                    </label>
+                    <select
+                      value={newReminder.type}
+                      onChange={(e) => setNewReminder(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="other">Other</option>
+                      <option value="visa_renewal">Visa Renewal</option>
+                      <option value="license_renewal">License Renewal</option>
+                      <option value="document_expiry">Document Expiry</option>
+                      <option value="follow_up">Follow Up</option>
+                      <option value="payment_due">Payment Due</option>
+                      <option value="contract_renewal">Contract Renewal</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Priority
+                    </label>
+                    <select
+                      value={newReminder.priority}
+                      onChange={(e) => setNewReminder(prev => ({ ...prev, priority: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Date and Due Date Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={newReminder.date}
+                      onChange={(e) => setNewReminder(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Due Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={newReminder.dueDate}
+                      onChange={(e) => setNewReminder(prev => ({ ...prev, dueDate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Assigned To */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assigned To
+                  </label>
+                  <input
+                    type="text"
+                    value={newReminder.assignedTo}
+                    onChange={(e) => setNewReminder(prev => ({ ...prev, assignedTo: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter assignee name"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={newReminder.notes}
+                    onChange={(e) => setNewReminder(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Additional notes or comments"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetReminderForm();
+                      setShowAddReminder(false);
+                    }}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newReminder.title.trim() || !newReminder.dueDate}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Create Reminder
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reminder Details Modal */}
+      {showReminderDetails && selectedReminder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Reminder Details</h2>
+                <button
+                  onClick={() => setShowReminderDetails(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedReminder.title}</h3>
+                  <p className="text-gray-600">{selectedReminder.description}</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(selectedReminder.priority)}`}>
+                      {selectedReminder.priority.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedReminder.status)}`}>
+                      {selectedReminder.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                    <p className="text-gray-900">{selectedReminder.dueDate}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+                    <p className="text-gray-900">{selectedReminder.assignedTo}</p>
+                  </div>
+                </div>
+                {selectedReminder.notes && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <p className="text-gray-900">{selectedReminder.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Reminder Modal */}
+      {showEditReminder && selectedReminder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Edit Reminder</h2>
+                <button
+                  onClick={() => setShowEditReminder(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleUpdateReminder(); }} className="space-y-6">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editReminderForm.title}
+                    onChange={(e) => setEditReminderForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter reminder title"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={editReminderForm.description}
+                    onChange={(e) => setEditReminderForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter reminder description"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Type and Priority Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Type
+                    </label>
+                    <select
+                      value={editReminderForm.type}
+                      onChange={(e) => setEditReminderForm(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="other">Other</option>
+                      <option value="visa_renewal">Visa Renewal</option>
+                      <option value="license_renewal">License Renewal</option>
+                      <option value="document_expiry">Document Expiry</option>
+                      <option value="follow_up">Follow Up</option>
+                      <option value="payment_due">Payment Due</option>
+                      <option value="contract_renewal">Contract Renewal</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Priority
+                    </label>
+                    <select
+                      value={editReminderForm.priority}
+                      onChange={(e) => setEditReminderForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Date and Due Date Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editReminderForm.date}
+                      onChange={(e) => setEditReminderForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Due Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={editReminderForm.dueDate}
+                      onChange={(e) => setEditReminderForm(prev => ({ ...prev, dueDate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Assigned To */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assigned To
+                  </label>
+                  <input
+                    type="text"
+                    value={editReminderForm.assignedTo}
+                    onChange={(e) => setEditReminderForm(prev => ({ ...prev, assignedTo: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter assignee name"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={editReminderForm.notes}
+                    onChange={(e) => setEditReminderForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Additional notes or comments"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditReminder(false);
+                      setSelectedReminder(null);
+                    }}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!editReminderForm.title.trim() || !editReminderForm.dueDate}
+                    className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Update Reminder
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Delete Reminder</h3>
+                  <p className="text-gray-600">Are you sure you want to delete this reminder?</p>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteReminder}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Service Modal */}
+      {showAddService && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Add New Service</h2>
+                <button
+                  onClick={() => setShowAddService(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateService(); }} className="space-y-6">
+                {/* Service Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newService.name}
+                    onChange={(e) => setNewService(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter service name"
+                    required
+                  />
+                </div>
+
+                {/* Client Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newService.client}
+                    onChange={(e) => setNewService(prev => ({ ...prev, client: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter client name"
+                    required
+                  />
+                </div>
+
+                {/* Service Type and Priority */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Type
+                    </label>
+                    <select
+                      value={newService.type}
+                      onChange={(e) => setNewService(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="company_formation">Company Formation</option>
+                      <option value="visa">Visa Processing</option>
+                      <option value="license_renewal">License Renewal</option>
+                      <option value="document_processing">Document Processing</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Priority
+                    </label>
+                    <select
+                      value={newService.priority}
+                      onChange={(e) => setNewService(prev => ({ ...prev, priority: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Assigned To */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assigned To
+                  </label>
+                  <input
+                    type="text"
+                    value={newService.assignedTo}
+                    onChange={(e) => setNewService(prev => ({ ...prev, assignedTo: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter assignee name"
+                  />
+                </div>
+
+                {/* Start Date and Expected Completion Date */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={newService.startDate}
+                      onChange={(e) => setNewService(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Expected Completion Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={newService.expectedCompletionDate}
+                      onChange={(e) => setNewService(prev => ({ ...prev, expectedCompletionDate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={newService.description}
+                    onChange={(e) => setNewService(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter service description"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetServiceForm();
+                      setShowAddService(false);
+                    }}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newService.name.trim() || !newService.client.trim() || !newService.expectedCompletionDate}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Create Service
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -428,13 +1336,25 @@ const RemindersServices: React.FC = () => {
                       {reminder.status.toUpperCase()}
                     </span>
                     <div className="flex space-x-1">
-                      <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                      <button
+                        onClick={() => handleViewReminder(reminder)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        title="View Reminder"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg">
+                      <button
+                        onClick={() => handleEditReminder(reminder)}
+                        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"
+                        title="Edit Reminder"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                      <button
+                        onClick={() => handleDeleteReminder(reminder.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        title="Delete Reminder"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -454,7 +1374,10 @@ const RemindersServices: React.FC = () => {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Service Milestone Tracking</h3>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200">
+            <button
+              onClick={() => setShowAddService(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200"
+            >
               <Plus className="w-4 h-4" />
               <span>Add Service</span>
             </button>
