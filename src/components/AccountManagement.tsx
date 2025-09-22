@@ -137,6 +137,332 @@ const AccountManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
+  const [showAddTransaction, setShowAddTransaction] = useState(false);
+  const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+  const [showEditTransaction, setShowEditTransaction] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Account | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+
+  // Transaction Form State
+  const [transactionForm, setTransactionForm] = useState({
+    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
+    category: '',
+    description: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'cheque' | 'card',
+    reference: '',
+    companyId: '',
+    gstRate: '5',
+    notes: ''
+  });
+
+  const handleCreateTransaction = async () => {
+    try {
+      // Validate required fields
+      if (!transactionForm.description.trim()) {
+        alert('Please enter a transaction description');
+        return;
+      }
+      if (!transactionForm.amount || parseFloat(transactionForm.amount) <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+      if (!transactionForm.category.trim()) {
+        alert('Please enter a category');
+        return;
+      }
+
+      const amount = parseFloat(transactionForm.amount);
+      const gstRate = parseFloat(transactionForm.gstRate);
+      const gstAmount = (amount * gstRate) / 100;
+
+      // Prepare transaction data for database
+      const transactionData = {
+        transaction_type: transactionForm.type,
+        category: transactionForm.category.trim(),
+        description: transactionForm.description.trim(),
+        amount: amount,
+        transaction_date: transactionForm.date,
+        payment_method: transactionForm.paymentMethod,
+        reference_number: transactionForm.reference.trim() || null,
+        company_id: transactionForm.companyId || null,
+        gst_rate: gstRate,
+        gst_amount: gstAmount,
+        status: 'completed',
+        created_by: 'System',
+        notes: transactionForm.notes.trim() || null
+      };
+
+      console.log('Creating transaction with data:', transactionData);
+      const result = await dbHelpers.createAccountTransaction(transactionData);
+      console.log('Transaction created successfully:', result);
+
+      // Reset form and close modal
+      resetTransactionForm();
+      setShowAddTransaction(false);
+      alert('✅ Transaction created successfully!');
+
+      // Reload transactions
+      loadAccountTransactions();
+
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+
+      // Provide more specific error messages
+      let errorMessage = 'Error creating transaction. ';
+      if (error instanceof Error) {
+        if (error.message.includes('foreign key')) {
+          errorMessage += 'Invalid company selected.';
+        } else if (error.message.includes('not null')) {
+          errorMessage += 'Please fill in all required fields.';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'Please try again.';
+      }
+
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+
+  const resetTransactionForm = () => {
+    setTransactionForm({
+      type: 'service_charge',
+      category: '',
+      description: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'cash',
+      reference: '',
+      companyId: '',
+      gstRate: '5',
+      notes: ''
+    });
+  };
+
+  // Edit Transaction Form State
+  const [editTransactionForm, setEditTransactionForm] = useState({
+    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
+    category: '',
+    description: '',
+    amount: 0,
+    date: '',
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'cheque' | 'card',
+    reference: '',
+    status: 'pending' as 'pending' | 'completed' | 'cancelled',
+    gstAmount: 0,
+    gstRate: 5,
+    notes: ''
+  });
+
+  // Handler functions
+  const handleExportData = () => {
+    try {
+      // Prepare CSV data
+      const csvHeaders = [
+        'Date',
+        'Description',
+        'Type',
+        'Category',
+        'Amount (AED)',
+        'GST Amount (AED)',
+        'Payment Method',
+        'Status',
+        'Reference',
+        'Notes'
+      ];
+
+      const csvData = accounts.map(account => [
+        account.date,
+        account.description,
+        account.type.replace('_', ' '),
+        account.category,
+        account.amount.toString(),
+        (account.gstAmount || 0).toString(),
+        account.paymentMethod.replace('_', ' '),
+        account.status,
+        account.reference || '',
+        account.notes || ''
+      ]);
+
+      // Create CSV content
+      const csvContent = [
+        csvHeaders.join(','),
+        ...csvData.map(row => row.map(field => `"${field}"`).join(','))
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `account_transactions_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert('Account data exported successfully!');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Error exporting data. Please try again.');
+    }
+  };
+
+  const handleViewTransaction = (transaction: Account) => {
+    setSelectedTransaction(transaction);
+    setShowTransactionDetails(true);
+  };
+
+  const handleEditTransaction = (transaction: Account) => {
+    setSelectedTransaction(transaction);
+    // Populate form with existing transaction data
+    setEditTransactionForm({
+      type: transaction.type,
+      category: transaction.category,
+      description: transaction.description,
+      amount: transaction.amount,
+      date: transaction.date,
+      paymentMethod: transaction.paymentMethod,
+      reference: transaction.reference || '',
+      status: transaction.status,
+      gstAmount: transaction.gstAmount || 0,
+      gstRate: transaction.gstRate || 5,
+      notes: transaction.notes || ''
+    });
+    setShowEditTransaction(true);
+  };
+
+  const handleUpdateTransaction = async () => {
+    if (!selectedTransaction) return;
+
+    try {
+      // Validate required fields
+      if (!editTransactionForm.description.trim()) {
+        alert('Please enter a transaction description');
+        return;
+      }
+      if (editTransactionForm.amount <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+      if (!editTransactionForm.date) {
+        alert('Please select a transaction date');
+        return;
+      }
+
+      // Update the transaction in the accounts array
+      const updatedTransaction: Account = {
+        ...selectedTransaction,
+        type: editTransactionForm.type,
+        category: editTransactionForm.category,
+        description: editTransactionForm.description.trim(),
+        amount: editTransactionForm.amount,
+        date: editTransactionForm.date,
+        paymentMethod: editTransactionForm.paymentMethod,
+        reference: editTransactionForm.reference.trim() || undefined,
+        status: editTransactionForm.status,
+        gstAmount: editTransactionForm.gstAmount || undefined,
+        gstRate: editTransactionForm.gstRate || undefined,
+        notes: editTransactionForm.notes.trim() || undefined
+      };
+
+      // Update the accounts state
+      setAccounts(prev => prev.map(account =>
+        account.id === selectedTransaction.id ? updatedTransaction : account
+      ));
+
+      // Reset form and close modal
+      setShowEditTransaction(false);
+      setSelectedTransaction(null);
+      alert('Transaction updated successfully!');
+
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      alert('Error updating transaction. Please try again.');
+    }
+  };
+
+  const handleDeleteTransaction = (transactionId: string) => {
+    setTransactionToDelete(transactionId);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteTransaction = () => {
+    if (transactionToDelete) {
+      setAccounts(prev => prev.filter(account => account.id !== transactionToDelete));
+      setTransactionToDelete(null);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  const handleExportReport = () => {
+    try {
+      // Calculate financial summary
+      const totalServiceCharges = accounts
+        .filter(a => a.type === 'service_charge' && a.status === 'completed')
+        .reduce((sum, a) => sum + a.amount, 0);
+
+      const totalGovernmentFees = accounts
+        .filter(a => a.type === 'government_fee' && a.status === 'completed')
+        .reduce((sum, a) => sum + a.amount, 0);
+
+      const totalExpenses = accounts
+        .filter(a => a.type === 'expense' && a.status === 'completed')
+        .reduce((sum, a) => sum + a.amount, 0);
+
+      const totalRefunds = accounts
+        .filter(a => a.type === 'refund' && a.status === 'completed')
+        .reduce((sum, a) => sum + a.amount, 0);
+
+      const totalGST = accounts
+        .filter(a => a.status === 'completed')
+        .reduce((sum, a) => sum + (a.gstAmount || 0), 0);
+
+      const netRevenue = totalServiceCharges - totalExpenses - totalRefunds;
+
+      // Create report content
+      const reportContent = [
+        'FINANCIAL REPORT',
+        `Generated on: ${new Date().toLocaleDateString()}`,
+        '',
+        'SUMMARY',
+        '========',
+        `Total Service Charges: AED ${totalServiceCharges.toLocaleString()}`,
+        `Total Government Fees: AED ${totalGovernmentFees.toLocaleString()}`,
+        `Total Expenses: AED ${totalExpenses.toLocaleString()}`,
+        `Total Refunds: AED ${totalRefunds.toLocaleString()}`,
+        `Total GST Collected: AED ${totalGST.toLocaleString()}`,
+        `Net Revenue: AED ${netRevenue.toLocaleString()}`,
+        '',
+        'TRANSACTION DETAILS',
+        '==================',
+        'Date,Description,Type,Amount,Status',
+        ...accounts.map(account =>
+          `${account.date},"${account.description}",${account.type.replace('_', ' ')},${account.amount},${account.status}`
+        )
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `financial_report_${new Date().toISOString().split('T')[0]}.txt`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert('Financial report exported successfully!');
+    } catch (error) {
+      console.error('Error exporting report:', error);
+      alert('Error exporting report. Please try again.');
+    }
+  };
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -413,7 +739,10 @@ const AccountManagement: React.FC = () => {
             <p className="text-gray-600 mt-1">Comprehensive financial tracking with dual collection system</p>
           </div>
           <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+            <button
+              onClick={handleExportData}
+              className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
               <Download className="w-4 h-4" />
               <span>Export</span>
             </button>
@@ -421,7 +750,10 @@ const AccountManagement: React.FC = () => {
               <Settings className="w-4 h-4" />
               <span>Settings</span>
             </button>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white px-6 py-2 rounded-lg hover:from-amber-700 hover:to-amber-800 transition-all duration-200 shadow-lg">
+            <button
+              onClick={() => setShowAddTransaction(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white px-6 py-2 rounded-lg hover:from-amber-700 hover:to-amber-800 transition-all duration-200 shadow-lg"
+            >
               <Plus className="w-5 h-5" />
               <span>Add Transaction</span>
             </button>
@@ -457,6 +789,507 @@ const AccountManagement: React.FC = () => {
       {activeTab === 'transactions' && renderTransactions()}
       {activeTab === 'government' && renderGovernmentAccess()}
       {activeTab === 'reports' && renderReports()}
+
+      {/* Add Transaction Modal */}
+      {showAddTransaction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Add New Transaction</h2>
+                <button
+                  onClick={() => setShowAddTransaction(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateTransaction(); }} className="space-y-6">
+                {/* Transaction Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Transaction Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={transactionForm.type}
+                    onChange={(e) => setTransactionForm(prev => ({ ...prev, type: e.target.value as any }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="service_charge">Service Charge</option>
+                    <option value="government_fee">Government Fee</option>
+                    <option value="expense">Expense</option>
+                    <option value="refund">Refund</option>
+                  </select>
+                </div>
+
+                {/* Category and Amount */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Category <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={transactionForm.category}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      placeholder="e.g., Visa Processing, Office Rent"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount (AED) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={transactionForm.amount}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, amount: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={transactionForm.description}
+                    onChange={(e) => setTransactionForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="Enter transaction description"
+                    rows={3}
+                    required
+                  />
+                </div>
+
+                {/* Date and Payment Method */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Transaction Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={transactionForm.date}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Method
+                    </label>
+                    <select
+                      value={transactionForm.paymentMethod}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="card">Card</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Reference Number and GST Rate */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Reference Number
+                    </label>
+                    <input
+                      type="text"
+                      value={transactionForm.reference}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, reference: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      placeholder="Optional reference number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      GST Rate (%)
+                    </label>
+                    <select
+                      value={transactionForm.gstRate}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, gstRate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    >
+                      <option value="0">0% (No GST)</option>
+                      <option value="5">5% (Standard)</option>
+                      <option value="15">15% (Luxury)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* GST Amount Display */}
+                {transactionForm.amount && parseFloat(transactionForm.amount) > 0 && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">Amount:</span>
+                      <span className="font-medium">AED {parseFloat(transactionForm.amount).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">GST ({transactionForm.gstRate}%):</span>
+                      <span className="font-medium">AED {((parseFloat(transactionForm.amount) * parseFloat(transactionForm.gstRate)) / 100).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-semibold border-t border-gray-200 pt-2 mt-2">
+                      <span>Total Amount:</span>
+                      <span>AED {(parseFloat(transactionForm.amount) + (parseFloat(transactionForm.amount) * parseFloat(transactionForm.gstRate)) / 100).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={transactionForm.notes}
+                    onChange={(e) => setTransactionForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="Additional notes or comments"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetTransactionForm();
+                      setShowAddTransaction(false);
+                    }}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!transactionForm.description.trim() || !transactionForm.amount || !transactionForm.category.trim()}
+                    className="px-6 py-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-lg hover:from-amber-700 hover:to-amber-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Create Transaction
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Details Modal */}
+      {showTransactionDetails && selectedTransaction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Transaction Details</h2>
+                <button
+                  onClick={() => setShowTransactionDetails(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedTransaction.description}</h3>
+                  <p className="text-2xl font-bold text-amber-600">AED {selectedTransaction.amount.toLocaleString()}</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <p className="text-gray-900 capitalize">{selectedTransaction.type.replace('_', ' ')}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <p className="text-gray-900">{selectedTransaction.category}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <p className="text-gray-900">{selectedTransaction.date}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                    <p className="text-gray-900 capitalize">{selectedTransaction.paymentMethod.replace('_', ' ')}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <p className="text-gray-900 capitalize">{selectedTransaction.status}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Created By</label>
+                    <p className="text-gray-900">{selectedTransaction.createdBy}</p>
+                  </div>
+                </div>
+                {selectedTransaction.reference && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                    <p className="text-gray-900">{selectedTransaction.reference}</p>
+                  </div>
+                )}
+                {selectedTransaction.notes && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <p className="text-gray-900">{selectedTransaction.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Transaction Modal */}
+      {showEditTransaction && selectedTransaction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Edit Transaction</h2>
+                <button
+                  onClick={() => setShowEditTransaction(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleUpdateTransaction(); }} className="space-y-6">
+                {/* Transaction Type and Category */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Transaction Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editTransactionForm.type}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="service_charge">Service Charge</option>
+                      <option value="government_fee">Government Fee</option>
+                      <option value="expense">Expense</option>
+                      <option value="refund">Refund</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Category
+                    </label>
+                    <input
+                      type="text"
+                      value={editTransactionForm.category}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Transaction category"
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editTransactionForm.description}
+                    onChange={(e) => setEditTransactionForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Transaction description"
+                    required
+                  />
+                </div>
+
+                {/* Amount and Date */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount (AED) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editTransactionForm.amount}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={editTransactionForm.date}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Payment Method and Status */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Method
+                    </label>
+                    <select
+                      value={editTransactionForm.paymentMethod}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="card">Card</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={editTransactionForm.status}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, status: e.target.value as any }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Reference and GST */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Reference
+                    </label>
+                    <input
+                      type="text"
+                      value={editTransactionForm.reference}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, reference: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Reference number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      GST Amount (AED)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editTransactionForm.gstAmount}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, gstAmount: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={editTransactionForm.notes}
+                    onChange={(e) => setEditTransactionForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Additional notes"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditTransaction(false)}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!editTransactionForm.description.trim() || editTransactionForm.amount <= 0 || !editTransactionForm.date}
+                    className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Update Transaction
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Delete Transaction</h3>
+                  <p className="text-gray-600">Are you sure you want to delete this transaction?</p>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteTransaction}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -564,13 +1397,25 @@ const AccountManagement: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
-                          <button className="p-1 text-gray-400 hover:text-blue-600">
+                          <button
+                            onClick={() => handleViewTransaction(account)}
+                            className="p-1 text-gray-400 hover:text-blue-600"
+                            title="View Transaction"
+                          >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button className="p-1 text-gray-400 hover:text-green-600">
+                          <button
+                            onClick={() => handleEditTransaction(account)}
+                            className="p-1 text-gray-400 hover:text-green-600"
+                            title="Edit Transaction"
+                          >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button className="p-1 text-gray-400 hover:text-red-600">
+                          <button
+                            onClick={() => handleDeleteTransaction(account.id)}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                            title="Delete Transaction"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -690,7 +1535,10 @@ const AccountManagement: React.FC = () => {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Financial Reports</h3>
-            <button className="flex items-center space-x-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white px-4 py-2 rounded-lg hover:from-amber-700 hover:to-amber-800 transition-all duration-200">
+            <button
+              onClick={handleExportReport}
+              className="flex items-center space-x-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white px-4 py-2 rounded-lg hover:from-amber-700 hover:to-amber-800 transition-all duration-200"
+            >
               <Download className="w-4 h-4" />
               <span>Export Report</span>
             </button>
