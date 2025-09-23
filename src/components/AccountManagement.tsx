@@ -22,7 +22,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  MoreVertical
+  MoreVertical,
+  AlertTriangle
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 
