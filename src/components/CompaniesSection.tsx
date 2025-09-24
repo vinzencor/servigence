@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, Edit, Trash2, Phone, Mail, FileText, Users, Eye, MoreVertical, Building2, Calendar, DollarSign, UserPlus, FileEdit } from 'lucide-react';
 import { Company } from '../types';
 import { dbHelpers } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CompaniesSectionProps {
   companies: Company[];
@@ -16,6 +17,7 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   onEditCompany,
   onManageDocuments
 }) => {
+  const { user, isSuperAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [sortBy, setSortBy] = useState('name');
@@ -45,7 +47,7 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   const loadCompanies = async () => {
     setLoading(true);
     try {
-      const supabaseCompanies = await dbHelpers.getCompanies();
+      const supabaseCompanies = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
       // Transform Supabase data to match our Company interface
       const transformedCompanies = supabaseCompanies.map((company: any) => ({
         id: company.id,
@@ -91,7 +93,7 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
 
   const loadIndividuals = async () => {
     try {
-      const supabaseIndividuals = await dbHelpers.getIndividuals();
+      const supabaseIndividuals = await dbHelpers.getIndividuals(user?.service_employee_id, user?.role);
       console.log('Loaded individuals:', supabaseIndividuals);
       setIndividuals(supabaseIndividuals || []);
     } catch (error) {

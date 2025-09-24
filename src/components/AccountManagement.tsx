@@ -26,11 +26,12 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Account {
   id: string;
   companyId: string;
-  type: 'service_charge' | 'government_fee' | 'expense' | 'refund';
+  type: 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment';
   category: string;
   description: string;
   amount: number;
@@ -48,6 +49,7 @@ interface Account {
 }
 
 const AccountManagement: React.FC = () => {
+  const { user, isSuperAdmin } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -134,7 +136,7 @@ const AccountManagement: React.FC = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'government' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'government' | 'vendors' | 'reports'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
@@ -147,7 +149,7 @@ const AccountManagement: React.FC = () => {
 
   // Transaction Form State
   const [transactionForm, setTransactionForm] = useState({
-    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
+    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment',
     category: '',
     description: '',
     amount: '',
@@ -246,7 +248,7 @@ const AccountManagement: React.FC = () => {
 
   // Edit Transaction Form State
   const [editTransactionForm, setEditTransactionForm] = useState({
-    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
+    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment',
     category: '',
     description: '',
     amount: 0,
@@ -471,6 +473,7 @@ const AccountManagement: React.FC = () => {
       case 'government_fee': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'expense': return 'bg-red-100 text-red-800 border-red-200';
       case 'refund': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'vendor_payment': return 'bg-orange-100 text-orange-800 border-orange-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -513,9 +516,12 @@ const AccountManagement: React.FC = () => {
   const totalRevenue = serviceCharges + governmentFees;
   const totalExpenses = accounts.filter(a => a.type === 'expense' && a.status === 'completed')
                                .reduce((sum, a) => sum + a.amount, 0);
+  const vendorPayments = accounts.filter(a => a.type === 'vendor_payment' && a.status === 'completed')
+                                .reduce((sum, a) => sum + a.amount, 0);
   const totalGST = accounts.filter(a => a.status === 'completed')
                           .reduce((sum, a) => sum + (a.gstAmount || 0), 0);
   const totalProfit = serviceCharges; // Only service charges are profit, government fees are pass-through
+  const netProfit = totalProfit - totalExpenses - vendorPayments; // Profit minus all expenses
 
   console.log('Account calculations:', {
     accounts: accounts.length,
@@ -550,9 +556,16 @@ const AccountManagement: React.FC = () => {
       color: 'purple'
     },
     {
+      title: 'Vendor Expenses',
+      value: `AED ${vendorPayments.toLocaleString()}`,
+      change: `${accounts.filter(a => a.type === 'vendor_payment' && a.status === 'completed').length} payments`,
+      icon: Building,
+      color: 'orange'
+    },
+    {
       title: 'Net Profit',
-      value: `AED ${(totalRevenue - totalExpenses).toLocaleString()}`,
-      change: `${totalExpenses > 0 ? ((totalRevenue - totalExpenses) / totalRevenue * 100).toFixed(1) : '100'}% margin`,
+      value: `AED ${netProfit.toLocaleString()}`,
+      change: `${netProfit > 0 ? ((netProfit / totalRevenue * 100).toFixed(1)) : '0'}% margin`,
       icon: PieChart,
       color: 'green'
     }
@@ -562,8 +575,8 @@ const AccountManagement: React.FC = () => {
     <div className="space-y-6">
       {/* Stats Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="animate-pulse">
                 <div className="flex items-center justify-between">
@@ -579,7 +592,7 @@ const AccountManagement: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -727,6 +740,7 @@ const AccountManagement: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'government', label: 'Government Access', icon: FileText },
+    { id: 'vendors', label: 'Vendor Expenses', icon: Building },
     { id: 'reports', label: 'Reports', icon: TrendingUp }
   ];
 
@@ -789,6 +803,7 @@ const AccountManagement: React.FC = () => {
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'transactions' && renderTransactions()}
       {activeTab === 'government' && renderGovernmentAccess()}
+      {activeTab === 'vendors' && renderVendors()}
       {activeTab === 'reports' && renderReports()}
 
       {/* Add Transaction Modal */}
@@ -823,6 +838,7 @@ const AccountManagement: React.FC = () => {
                     <option value="government_fee">Government Fee</option>
                     <option value="expense">Expense</option>
                     <option value="refund">Refund</option>
+                    <option value="vendor_payment">Vendor Payment</option>
                   </select>
                 </div>
 
@@ -1093,6 +1109,7 @@ const AccountManagement: React.FC = () => {
                       <option value="government_fee">Government Fee</option>
                       <option value="expense">Expense</option>
                       <option value="refund">Refund</option>
+                      <option value="vendor_payment">Vendor Payment</option>
                     </select>
                   </div>
 
@@ -1322,6 +1339,7 @@ const AccountManagement: React.FC = () => {
                   <option value="government_fee">Government Fee</option>
                   <option value="expense">Expense</option>
                   <option value="refund">Refund</option>
+                  <option value="vendor_payment">Vendor Payment</option>
                 </select>
                 <select
                   value={filterStatus}
@@ -1434,7 +1452,7 @@ const AccountManagement: React.FC = () => {
 
   function renderGovernmentAccess() {
     // Filter government fee transactions
-    const governmentTransactions = accounts.filter(a => a.category === 'Government Charges' || (a as any).transaction_type === 'government_fee');
+    const governmentTransactions = accounts.filter(a => a.category === 'Government Charges' || a.type === 'government_fee');
     const totalGovernmentFees = governmentTransactions.reduce((sum, t) => sum + t.amount, 0);
 
     // Group by service type
@@ -1522,6 +1540,104 @@ const AccountManagement: React.FC = () => {
                 <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Government Transactions</h3>
                 <p className="text-gray-600">Government fees will appear here when services are billed.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderVendors() {
+    // Filter vendor payment transactions
+    const vendorTransactions = accounts.filter(a => a.type === 'vendor_payment' || a.category === 'Vendor Expenses');
+    const totalVendorPayments = vendorTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    // Group by vendor
+    const vendorGroups = vendorTransactions.reduce((groups: any, transaction) => {
+      const vendor = transaction.description.split(' to ')[1]?.split(' for ')[0] || 'Unknown Vendor';
+      if (!groups[vendor]) {
+        groups[vendor] = { count: 0, total: 0, transactions: [] };
+      }
+      groups[vendor].count += 1;
+      groups[vendor].total += transaction.amount;
+      groups[vendor].transactions.push(transaction);
+      return groups;
+    }, {});
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">Vendor Expenses</h3>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="bg-orange-50 rounded-lg p-4">
+              <h4 className="font-medium text-orange-900 mb-2">Total Vendor Payments</h4>
+              <p className="text-2xl font-bold text-orange-600">AED {totalVendorPayments.toLocaleString()}</p>
+              <p className="text-sm text-orange-600">All time</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">Active Vendors</h4>
+              <p className="text-2xl font-bold text-blue-600">{Object.keys(vendorGroups).length}</p>
+              <p className="text-sm text-blue-600">Different vendors</p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <h4 className="font-medium text-purple-900 mb-2">Total Transactions</h4>
+              <p className="text-2xl font-bold text-purple-600">{vendorTransactions.length}</p>
+              <p className="text-sm text-purple-600">Vendor payments</p>
+            </div>
+          </div>
+
+          {/* Vendor Breakdown */}
+          <div className="space-y-4 mb-6">
+            <h4 className="font-medium text-gray-900">Vendor Breakdown</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(vendorGroups).map(([vendor, data]: [string, any]) => (
+                <div key={vendor} className="border border-gray-200 rounded-lg p-4">
+                  <h5 className="font-medium text-gray-900 mb-2">{vendor}</h5>
+                  <div className="space-y-1">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Total Paid:</span> AED {data.total.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Transactions:</span> {data.count}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Average:</span> AED {(data.total / data.count).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recent Vendor Transactions */}
+          <div className="space-y-4">
+            <h4 className="font-medium text-gray-900">Recent Vendor Transactions</h4>
+            {vendorTransactions.slice(0, 10).map((transaction) => (
+              <div key={transaction.id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{transaction.description}</p>
+                    <p className="text-sm text-gray-600">
+                      {new Date(transaction.date).toLocaleDateString()} • {transaction.paymentMethod}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-orange-600">AED {transaction.amount.toLocaleString()}</p>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(transaction.type)}`}>
+                      {transaction.type.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {vendorTransactions.length === 0 && (
+              <div className="text-center py-8">
+                <Building className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Vendor Transactions</h3>
+                <p className="text-gray-600">Vendor payments will appear here when services are assigned to vendors.</p>
               </div>
             )}
           </div>

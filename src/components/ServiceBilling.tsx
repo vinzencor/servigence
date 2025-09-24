@@ -3,8 +3,10 @@ import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit
 import { mockServices, mockInvoices } from '../data/mockData';
 import { Company, Individual, ServiceType, ServiceEmployee, ServiceBilling as ServiceBillingType } from '../types';
 import { dbHelpers } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 const ServiceBilling: React.FC = () => {
+  const { user, isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('billing');
   const [dateFilter, setDateFilter] = useState('this_month');
   const [showCreateBilling, setShowCreateBilling] = useState(false);
@@ -15,6 +17,7 @@ const ServiceBilling: React.FC = () => {
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
 
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,7 +36,9 @@ const ServiceBilling: React.FC = () => {
     serviceDate: new Date().toISOString().split('T')[0],
     cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
     quantity: '1',
-    notes: ''
+    notes: '',
+    assignedVendorId: '',
+    vendorCost: '0'
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -48,7 +53,9 @@ const ServiceBilling: React.FC = () => {
     serviceDate: '',
     cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
     quantity: '1',
-    notes: ''
+    notes: '',
+    assignedVendorId: '',
+    vendorCost: '0'
   });
 
   const tabs = [
@@ -73,10 +80,11 @@ const ServiceBilling: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [companiesData, individualsData, servicesData] = await Promise.all([
-        dbHelpers.getCompanies(),
-        dbHelpers.getIndividuals(),
-        dbHelpers.getServices()
+      const [companiesData, individualsData, servicesData, vendorsData] = await Promise.all([
+        dbHelpers.getCompanies(user?.service_employee_id, user?.role),
+        dbHelpers.getIndividuals(user?.service_employee_id, user?.role),
+        dbHelpers.getServices(),
+        dbHelpers.getVendors()
       ]);
 
       // Transform company data
@@ -124,7 +132,8 @@ const ServiceBilling: React.FC = () => {
       const serviceEmployeesData = await dbHelpers.getServiceEmployees();
       setServiceEmployees(serviceEmployeesData || []);
 
-
+      // Set vendors
+      setVendors(vendorsData || []);
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -135,7 +144,7 @@ const ServiceBilling: React.FC = () => {
 
   const loadServiceBillings = async () => {
     try {
-      const billingsData = await dbHelpers.getServiceBillings();
+      const billingsData = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
       setServiceBillings(billingsData || []);
     } catch (error) {
       console.error('Error loading service billings:', error);
@@ -366,12 +375,17 @@ const ServiceBilling: React.FC = () => {
             name: serviceName,
             count: 0,
             revenue: 0,
-            averageAmount: 0
+            profit: 0,
+            governmentCharges: 0,
+            averageAmount: 0,
+            averageProfit: 0
           };
         }
 
         acc[serviceName].count += 1;
         acc[serviceName].revenue += billing.total_amount || 0;
+        acc[serviceName].profit += billing.typing_charges || 0;
+        acc[serviceName].governmentCharges += billing.government_charges || 0;
 
         return acc;
       }, {});
@@ -379,6 +393,7 @@ const ServiceBilling: React.FC = () => {
       // Calculate averages
       Object.values(serviceData).forEach((service: any) => {
         service.averageAmount = service.count > 0 ? service.revenue / service.count : 0;
+        service.averageProfit = service.count > 0 ? service.profit / service.count : 0;
       });
 
       setReportData(Object.values(serviceData));
@@ -507,9 +522,12 @@ const ServiceBilling: React.FC = () => {
     `;
   };
 
-  const totalRevenue = mockInvoices.reduce((sum, inv) => sum + inv.total, 0);
-  const pendingAmount = mockInvoices.filter(inv => inv.status === 'sent').reduce((sum, inv) => sum + inv.total, 0);
-  const completedServices = mockServices.filter(s => s.status === 'completed').length;
+  // Calculate actual revenue and profit from service billings
+  const totalRevenue = serviceBillings.reduce((sum, billing) => sum + (parseFloat(billing.total_amount) || 0), 0);
+  const totalProfit = serviceBillings.reduce((sum, billing) => sum + (parseFloat(billing.typing_charges) || 0), 0);
+  const totalGovernmentCharges = serviceBillings.reduce((sum, billing) => sum + (parseFloat(billing.government_charges) || 0), 0);
+  const pendingAmount = serviceBillings.filter(billing => billing.status === 'pending').reduce((sum, billing) => sum + (parseFloat(billing.total_amount) || 0), 0);
+  const completedServices = serviceBillings.filter(billing => billing.status === 'completed').length;
 
   const isValidUUID = (uuid: string) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -574,7 +592,9 @@ const ServiceBilling: React.FC = () => {
         status: 'pending',
         notes: billingForm.notes || null,
         invoice_generated: true,
-        invoice_number: invoiceNumber
+        invoice_number: invoiceNumber,
+        assigned_vendor_id: billingForm.assignedVendorId || null,
+        vendor_cost: parseFloat(billingForm.vendorCost) || 0
       };
 
       const createdBilling = await dbHelpers.createServiceBilling(billingData);
@@ -614,6 +634,25 @@ const ServiceBilling: React.FC = () => {
         });
       }
 
+      // Create vendor transaction if vendor is assigned
+      if (billingForm.assignedVendorId && parseFloat(billingForm.vendorCost) > 0) {
+        const selectedVendor = vendors.find(v => v.id === billingForm.assignedVendorId);
+        await dbHelpers.createAccountTransaction({
+          service_billing_id: createdBilling.id,
+          company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
+          individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
+          transaction_type: 'vendor_payment',
+          category: 'Vendor Expenses',
+          description: `Vendor payment to ${selectedVendor?.name || 'Vendor'} for ${selectedService.name} (${invoiceNumber})`,
+          amount: parseFloat(billingForm.vendorCost),
+          transaction_date: billingForm.serviceDate,
+          payment_method: 'bank_transfer',
+          reference_number: invoiceNumber,
+          status: 'pending',
+          created_by: 'System'
+        });
+      }
+
       // Success feedback
       alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\n\nBilling and invoice have been generated.`);
 
@@ -639,7 +678,9 @@ const ServiceBilling: React.FC = () => {
       serviceDate: new Date().toISOString().split('T')[0],
       cashType: 'cash',
       quantity: '1',
-      notes: ''
+      notes: '',
+      assignedVendorId: '',
+      vendorCost: '0'
     });
     setErrors({});
   };
@@ -707,7 +748,7 @@ const ServiceBilling: React.FC = () => {
 
         {/* Stats Cards */}
         <div className="p-6 bg-gray-50">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -719,11 +760,35 @@ const ServiceBilling: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Profit (Service Charges)</p>
+                  <p className="text-2xl font-bold text-purple-900">AED {totalProfit.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-orange-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Government Charges</p>
+                  <p className="text-2xl font-bold text-orange-900">AED {totalGovernmentCharges.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-lg p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-blue-600" />
+                  <Calendar className="w-6 h-6 text-blue-600" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Pending Amount</p>
@@ -731,27 +796,15 @@ const ServiceBilling: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-white rounded-lg p-6 border border-gray-200">
               <div className="flex items-center">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-purple-600" />
+                <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-amber-600" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Completed Services</p>
                   <p className="text-2xl font-bold text-gray-900">{completedServices}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-6 border border-gray-200">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-amber-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Active Services</p>
-                  <p className="text-2xl font-bold text-gray-900">{mockServices.filter(s => s.status === 'in_progress').length}</p>
                 </div>
               </div>
             </div>
@@ -1287,6 +1340,39 @@ const ServiceBilling: React.FC = () => {
                   )}
                 </div>
 
+                {/* Vendor Assignment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assign Vendor (Optional)</label>
+                  <select
+                    name="assignedVendorId"
+                    value={billingForm.assignedVendorId}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">No vendor assigned</option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name} - {vendor.service_category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Vendor Cost */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Cost (AED)</label>
+                  <input
+                    type="number"
+                    name="vendorCost"
+                    value={billingForm.vendorCost}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
                 {/* Notes */}
                 <div className="lg:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
@@ -1733,7 +1819,7 @@ const ServiceBilling: React.FC = () => {
                       <thead>
                         <tr className="bg-gray-50">
                           <th className="border border-gray-300 px-4 py-2 text-left">Month</th>
-                          <th className="border border-gray-300 px-4 py-2 text-right">Service Revenue</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Service Revenue (Profit)</th>
                           <th className="border border-gray-300 px-4 py-2 text-right">Government Charges</th>
                           <th className="border border-gray-300 px-4 py-2 text-right">Total Revenue</th>
                           <th className="border border-gray-300 px-4 py-2 text-right">Billings Count</th>
@@ -1772,7 +1858,7 @@ const ServiceBilling: React.FC = () => {
                       <p className="text-2xl font-bold text-green-600">AED {reportData.totalRevenue.toLocaleString()}</p>
                     </div>
                     <div className="bg-purple-50 p-4 rounded-lg">
-                      <h4 className="font-semibold text-purple-900">Service Revenue</h4>
+                      <h4 className="font-semibold text-purple-900">Service Revenue (Profit)</h4>
                       <p className="text-2xl font-bold text-purple-600">AED {reportData.serviceRevenue.toLocaleString()}</p>
                     </div>
                     <div className="bg-orange-50 p-4 rounded-lg">
@@ -1814,7 +1900,9 @@ const ServiceBilling: React.FC = () => {
                           <th className="border border-gray-300 px-4 py-2 text-left">Service Name</th>
                           <th className="border border-gray-300 px-4 py-2 text-right">Count</th>
                           <th className="border border-gray-300 px-4 py-2 text-right">Total Revenue</th>
-                          <th className="border border-gray-300 px-4 py-2 text-right">Average Amount</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Profit</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Government Charges</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Avg. Profit</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1823,7 +1911,9 @@ const ServiceBilling: React.FC = () => {
                             <td className="border border-gray-300 px-4 py-2">{service.name}</td>
                             <td className="border border-gray-300 px-4 py-2 text-right">{service.count}</td>
                             <td className="border border-gray-300 px-4 py-2 text-right">AED {service.revenue.toLocaleString()}</td>
-                            <td className="border border-gray-300 px-4 py-2 text-right">AED {service.averageAmount.toFixed(2)}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right font-medium text-green-600">AED {service.profit.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right text-blue-600">AED {service.governmentCharges.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {service.averageProfit.toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1839,12 +1929,14 @@ const ServiceBilling: React.FC = () => {
                     const csvData = reportType === 'monthly-revenue'
                       ? reportData.map((row: any) => [row.month, row.serviceRevenue, row.governmentCharges, row.totalRevenue, row.billingsCount])
                       : reportType === 'service-performance'
-                      ? reportData.map((service: any) => [service.name, service.count, service.revenue, service.averageAmount])
+                      ? reportData.map((service: any) => [service.name, service.count, service.revenue, service.profit, service.governmentCharges, service.averageProfit])
                       : [];
 
                     if (csvData.length > 0) {
                       const headers = reportType === 'monthly-revenue'
-                        ? ['Month', 'Service Revenue', 'Government Charges', 'Total Revenue', 'Billings Count']
+                        ? ['Month', 'Service Revenue (Profit)', 'Government Charges', 'Total Revenue', 'Billings Count']
+                        : reportType === 'service-performance'
+                        ? ['Service Name', 'Count', 'Total Revenue', 'Profit', 'Government Charges', 'Average Profit']
                         : ['Service Name', 'Count', 'Total Revenue', 'Average Amount'];
 
                       const csvContent = [

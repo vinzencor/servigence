@@ -12,14 +12,23 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 // Database helper functions
 export const dbHelpers = {
   // Companies
-  async getCompanies() {
-    const { data, error } = await supabase
+  async getCompanies(userId?: string, userRole?: string) {
+    let query = supabase
       .from('companies')
-      .select('*')
-      .order('created_at', { ascending: false })
-    
-    if (error) throw error
-    return data
+      .select(`
+        *,
+        assigned_employee:service_employees(id, name, email)
+      `)
+      .order('created_at', { ascending: false });
+
+    // Filter by assigned user if not super admin
+    if (userId && userRole !== 'super_admin') {
+      query = query.eq('assigned_to', userId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
   },
 
   async createCompany(company: any) {
@@ -229,14 +238,23 @@ export const dbHelpers = {
   },
 
   // Individuals
-  async getIndividuals() {
-    const { data, error } = await supabase
+  async getIndividuals(userId?: string, userRole?: string) {
+    let query = supabase
       .from('individuals')
-      .select('*')
-      .order('created_at', { ascending: false })
-    
-    if (error) throw error
-    return data
+      .select(`
+        *,
+        assigned_employee:service_employees(id, name, email)
+      `)
+      .order('created_at', { ascending: false });
+
+    // Filter by assigned user if not super admin
+    if (userId && userRole !== 'super_admin') {
+      query = query.eq('assigned_to', userId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
   },
 
   async createIndividual(individual: any) {
@@ -484,20 +502,26 @@ export const dbHelpers = {
   },
 
   // Service Billings
-  async getServiceBillings() {
-    const { data, error } = await supabase
+  async getServiceBillings(userId?: string, userRole?: string) {
+    let query = supabase
       .from('service_billings')
       .select(`
         *,
-        company:companies(company_name),
-        individual:individuals(individual_name),
+        company:companies(company_name, assigned_to),
+        individual:individuals(individual_name, assigned_to),
         service_type:service_types(name, typing_charges, government_charges),
         assigned_employee:service_employees(name)
       `)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false });
 
-    if (error) throw error
-    return data
+    // Filter by assigned user if not super admin
+    if (userId && userRole !== 'super_admin') {
+      query = query.or(`assigned_employee_id.eq.${userId},company.assigned_to.eq.${userId},individual.assigned_to.eq.${userId}`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
   },
 
   async createServiceBilling(billing: any) {
@@ -549,29 +573,12 @@ export const dbHelpers = {
     return data
   },
 
-  // Documents
-  async uploadDocument(file: File, path: string) {
-    const { data, error } = await supabase.storage
-      .from('documents')
-      .upload(path, file)
-    
-    if (error) throw error
-    return data
-  },
-
-  async getDocumentUrl(path: string) {
-    const { data } = supabase.storage
-      .from('documents')
-      .getPublicUrl(path)
-
-    return data.publicUrl
-  },
-
   // Vendors
   async getVendors() {
     const { data, error } = await supabase
       .from('vendors')
       .select('*')
+      .eq('is_active', true)
       .order('name')
 
     if (error) throw error
@@ -589,11 +596,60 @@ export const dbHelpers = {
     return data
   },
 
-  async updateVendor(id: string, updates: any) {
+  // Chat Functions
+  async getConversations(userId: string) {
     const { data, error } = await supabase
-      .from('vendors')
-      .update(updates)
-      .eq('id', id)
+      .from('chat_conversations')
+      .select(`
+        *,
+        participant_1:service_employees!participant_1_id(id, name, email, department),
+        participant_2:service_employees!participant_2_id(id, name, email, department),
+        last_message:chat_messages(
+          id, content, message_type, created_at, sender_id,
+          sender:service_employees(name)
+        )
+      `)
+      .or(`participant_1_id.eq.${userId},participant_2_id.eq.${userId}`)
+      .order('last_message_at', { ascending: false })
+
+    if (error) throw error
+
+    // Get unread counts for each conversation
+    if (data) {
+      const conversationsWithUnreadCounts = await Promise.all(
+        data.map(async (conversation) => {
+          const unreadCount = await this.getUnreadCount(conversation.id, userId);
+          return {
+            ...conversation,
+            unread_count: unreadCount
+          };
+        })
+      );
+      return conversationsWithUnreadCounts;
+    }
+
+    return data
+  },
+
+  async getOrCreateConversation(participant1Id: string, participant2Id: string) {
+    // First try to find existing conversation
+    const { data: existing, error: findError } = await supabase
+      .from('chat_conversations')
+      .select('*')
+      .or(`and(participant_1_id.eq.${participant1Id},participant_2_id.eq.${participant2Id}),and(participant_1_id.eq.${participant2Id},participant_2_id.eq.${participant1Id})`)
+      .single()
+
+    if (existing) {
+      return existing
+    }
+
+    // Create new conversation if not found
+    const { data, error } = await supabase
+      .from('chat_conversations')
+      .insert([{
+        participant_1_id: participant1Id,
+        participant_2_id: participant2Id
+      }])
       .select()
       .single()
 
@@ -601,13 +657,106 @@ export const dbHelpers = {
     return data
   },
 
-  async deleteVendor(id: string) {
-    const { error } = await supabase
-      .from('vendors')
-      .delete()
-      .eq('id', id)
+  async getMessages(conversationId: string, limit: number = 50) {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select(`
+        *,
+        sender:service_employees(id, name, email)
+      `)
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .limit(limit)
 
     if (error) throw error
-    return true
+    return data
+  },
+
+  async sendMessage(message: any) {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert([message])
+      .select(`
+        *,
+        sender:service_employees(id, name, email)
+      `)
+      .single()
+
+    if (error) throw error
+
+    // Update conversation last_message_at
+    await supabase
+      .from('chat_conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', message.conversation_id)
+
+    return data
+  },
+
+  async markMessagesAsRead(conversationId: string, userId: string) {
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ is_read: true })
+      .eq('conversation_id', conversationId)
+      .neq('sender_id', userId)
+      .eq('is_read', false)
+
+    if (error) throw error
+  },
+
+  async getUnreadCount(conversationId: string, userId: string) {
+    const { count, error } = await supabase
+      .from('chat_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('conversation_id', conversationId)
+      .neq('sender_id', userId)
+      .eq('is_read', false)
+
+    if (error) throw error
+    return count || 0
+  },
+
+  async getTotalUnreadCount(userId: string) {
+    // Get all conversations for the user
+    const { data: conversations, error: convError } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .or(`participant_1_id.eq.${userId},participant_2_id.eq.${userId}`)
+
+    if (convError) throw convError
+
+    if (!conversations || conversations.length === 0) {
+      return 0;
+    }
+
+    // Get total unread count across all conversations
+    const conversationIds = conversations.map(conv => conv.id);
+    const { count, error } = await supabase
+      .from('chat_messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', conversationIds)
+      .neq('sender_id', userId)
+      .eq('is_read', false)
+
+    if (error) throw error
+    return count || 0
+  },
+
+  // Documents
+  async uploadDocument(file: File, path: string) {
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .upload(path, file)
+    
+    if (error) throw error
+    return data
+  },
+
+  async getDocumentUrl(path: string) {
+    const { data } = supabase.storage
+      .from('documents')
+      .getPublicUrl(path)
+
+    return data.publicUrl
   }
 }
