@@ -241,7 +241,22 @@ export const mockVendors: Vendor[] = [
     phone: '+971-4-555-1234',
     address: 'Insurance House, DIFC, Dubai, UAE',
     services: ['Health Insurance', 'Life Insurance', 'General Insurance'],
-    rating: 4.8
+    rating: 4.8,
+    status: 'active',
+    registrationDate: '2024-01-15',
+    contactPerson: 'Ahmed Al-Mansouri',
+    website: 'https://emiratesinsurance.ae',
+    licenseNumber: 'INS-2024-001',
+    vatNumber: 'VAT-100234567890123',
+    paymentTerms: 'Net 30',
+    notes: 'Reliable insurance provider with excellent customer service',
+    contracts: [],
+    performanceMetrics: {
+      totalJobs: 45,
+      completedJobs: 42,
+      averageRating: 4.8,
+      onTimeDelivery: 93
+    }
   },
   {
     id: '770e8400-e29b-41d4-a716-446655440002',
@@ -251,16 +266,47 @@ export const mockVendors: Vendor[] = [
     phone: '+971-4-555-5678',
     address: 'Tax Plaza, Business Bay, Dubai, UAE',
     services: ['VAT Registration', 'Tax Filing', 'Tax Advisory'],
-    rating: 4.9
+    rating: 4.9,
+    status: 'active',
+    registrationDate: '2024-01-10',
+    contactPerson: 'Fatima Al-Zahra',
+    website: 'https://gulftax.ae',
+    licenseNumber: 'TAX-2024-002',
+    vatNumber: 'VAT-200234567890123',
+    paymentTerms: 'Net 15',
+    notes: 'Expert tax consultants with deep knowledge of UAE tax laws',
+    contracts: [],
+    performanceMetrics: {
+      totalJobs: 38,
+      completedJobs: 37,
+      averageRating: 4.9,
+      onTimeDelivery: 97
+    }
   },
   {
     id: '770e8400-e29b-41d4-a716-446655440003',
     name: 'Dubai Translation Services',
-    type: 'other',
+    type: 'translation',
     email: 'services@dubaitranslation.ae',
     phone: '+971-4-555-9999',
+    address: 'Translation Center, Deira, Dubai, UAE',
     services: ['Document Translation', 'Legal Translation', 'Certified Translation'],
-    rating: 4.7
+    rating: 4.7,
+    status: 'active',
+    registrationDate: '2024-01-20',
+    contactPerson: 'Mohammed Hassan',
+    website: 'https://dubaitranslation.ae',
+    licenseNumber: 'TRN-2024-003',
+    vatNumber: 'VAT-300234567890123',
+    paymentTerms: 'Net 30',
+    notes: 'Professional translation services with certified translators',
+    contracts: [],
+    performanceMetrics: {
+      totalJobs: 52,
+      completedJobs: 48,
+      averageRating: 4.7,
+      onTimeDelivery: 92
+    }
   }
 ];
 

@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       
       // Simple password validation for super admin
-      if (email === 'rahulpradeepan77@gmail.com' && password === '123456') {
+      if (email === 'rahulpradeepan77@gmail.com' && password === 'Admin@2024!Secure') {
         const superAdminUser: User = {
           id: 'super-admin-id',
           email: 'rahulpradeepan77@gmail.com',
@@ -71,20 +71,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Try to authenticate against service employees database
       try {
+        console.log('Attempting to authenticate employee:', email);
         const { data: employees, error } = await supabase
           .from('service_employees')
           .select('*')
           .eq('email', email)
           .eq('is_active', true);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Database query error:', error);
+          throw error;
+        }
+
+        console.log('Found employees:', employees);
 
         if (employees && employees.length > 0) {
           const employee = employees[0];
+          console.log('Employee data:', {
+            id: employee.id,
+            name: employee.name,
+            email: employee.email,
+            hasPasswordHash: !!employee.password_hash
+          });
 
           // Check if employee has password hash (for new employees with login credentials)
-          if (employee.password_hash) {
+          if (employee.password_hash && employee.password_hash.trim() !== '') {
             const inputPasswordHash = btoa(password);
+            console.log('Comparing passwords:', {
+              stored: employee.password_hash,
+              input: inputPasswordHash,
+              match: employee.password_hash === inputPasswordHash
+            });
+
             if (employee.password_hash === inputPasswordHash) {
               const staffUser: User = {
                 id: employee.id,
@@ -94,11 +112,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 service_employee_id: employee.id
               };
 
+              console.log('Authentication successful for employee:', staffUser);
               setUser(staffUser);
               localStorage.setItem('user', JSON.stringify(staffUser));
               return true;
+            } else {
+              console.log('Password mismatch for employee:', employee.email);
             }
+          } else {
+            console.log('Employee has no password hash set:', employee.email);
           }
+        } else {
+          console.log('No active employees found with email:', email);
         }
       } catch (error) {
         console.error('Database authentication error:', error);

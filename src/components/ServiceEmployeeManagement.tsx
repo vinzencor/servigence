@@ -100,6 +100,8 @@ const ServiceEmployeeManagement: React.FC = () => {
 
       console.log('Clean employee data:', cleanEmployeeData);
       console.log('Form state:', employeeForm);
+      console.log('Password hash being set:', employeeForm.password ? btoa(employeeForm.password) : 'No password');
+      console.log('Is editing employee:', !!editingEmployee);
 
       if (editingEmployee) {
         // Update existing employee

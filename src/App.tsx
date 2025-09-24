@@ -19,6 +19,7 @@ import RemindersManagement from './components/RemindersManagement';
 import EmployeeLogin from './components/EmployeeLogin';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import Chat from './components/Chat';
+import PasswordChangeNotification from './components/PasswordChangeNotification';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
@@ -221,6 +222,9 @@ function AppContent() {
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>
       {renderCurrentView()}
+
+      {/* Password Change Notification */}
+      <PasswordChangeNotification />
 
       {/* Company Edit Modal */}
       {showEditCompany && selectedCompany && (

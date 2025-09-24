@@ -3,26 +3,18 @@ import {
   DollarSign,
   Plus,
   Search,
-  Filter,
   TrendingUp,
-  TrendingDown,
   PieChart,
   BarChart3,
   CreditCard,
   Receipt,
   FileText,
-  Calendar,
   Eye,
   Edit,
   Trash2,
   Download,
   Settings,
   Building,
-  User,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  MoreVertical,
   AlertTriangle
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
@@ -31,7 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface Account {
   id: string;
   companyId: string;
-  type: 'service_charge' | 'government_fee' | 'expense' | 'refund';
+  type: 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment';
   category: string;
   description: string;
   amount: number;
@@ -66,6 +58,8 @@ const AccountManagement: React.FC = () => {
       setCompanies(companiesData || []);
     } catch (error) {
       console.error('Error loading companies:', error);
+      // Set empty array to prevent undefined errors
+      setCompanies([]);
     }
   };
 
@@ -161,7 +155,7 @@ const AccountManagement: React.FC = () => {
 
   // Transaction Form State
   const [transactionForm, setTransactionForm] = useState({
-    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
+    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment',
     category: '',
     description: '',
     amount: '',

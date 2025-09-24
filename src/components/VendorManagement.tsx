@@ -25,35 +25,13 @@ import {
   MoreVertical
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-
-interface Vendor {
-  id: string;
-  name: string;
-  type: 'insurance' | 'tax_consultant' | 'tax_payer' | 'legal_services' | 'translation' | 'attestation' | 'other';
-  email: string;
-  phone: string;
-  address?: string;
-  services: string[];
-  rating: number;
-  status: 'active' | 'inactive' | 'pending';
-  registrationDate: string;
-  contactPerson?: string;
-  website?: string;
-  licenseNumber?: string;
-  vatNumber?: string;
-  paymentTerms?: string;
-  notes?: string;
-  performanceMetrics: {
-    totalJobs: number;
-    completedJobs: number;
-    averageRating: number;
-    onTimeDelivery: number;
-  };
-}
+import { mockVendors } from '../data/mockData';
+import { Vendor } from '../types';
 
 const VendorManagement: React.FC = () => {
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadVendors();
@@ -61,11 +39,19 @@ const VendorManagement: React.FC = () => {
 
   const loadVendors = async () => {
     setLoading(true);
+    setError(null);
     try {
       const vendorsData = await dbHelpers.getVendors();
       setVendors(vendorsData || []);
     } catch (error) {
       console.error('Error loading vendors:', error);
+      // If vendors table doesn't exist, fall back to mock data
+      if (error instanceof Error && (error.message.includes('relation "vendors" does not exist') || error.message.includes('table "vendors" does not exist'))) {
+        console.log('Vendors table does not exist, using mock data');
+        setVendors(mockVendors || []);
+      } else {
+        setError('Failed to load vendors. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -207,7 +193,11 @@ const VendorManagement: React.FC = () => {
       console.error('Error creating vendor:', error);
       let errorMessage = 'Error creating vendor. ';
       if (error instanceof Error) {
-        errorMessage += error.message;
+        if (error.message.includes('relation "vendors" does not exist') || error.message.includes('table "vendors" does not exist')) {
+          errorMessage = 'Vendors table does not exist in the database. Please contact your administrator to set up the database tables.';
+        } else {
+          errorMessage += error.message;
+        }
       } else {
         errorMessage += 'Please try again.';
       }
@@ -632,6 +622,38 @@ const VendorManagement: React.FC = () => {
     { id: 'contracts', label: 'Contracts', icon: FileText },
     { id: 'performance', label: 'Performance', icon: Award }
   ];
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading vendors...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+          </div>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={loadVendors}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
