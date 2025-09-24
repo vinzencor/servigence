@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   Plus,
@@ -44,51 +44,26 @@ interface Reminder {
 }
 
 const RemindersServices: React.FC = () => {
-  const [reminders] = useState<Reminder[]>([
-    {
-      id: '1',
-      title: 'Visa Renewal - Mohammed Ali',
-      description: 'Employment visa expires in 30 days',
-      type: 'visa_renewal',
-      companyId: 'comp1',
-      employeeId: 'emp1',
-      date: '2024-01-15',
-      dueDate: '2024-02-15',
-      priority: 'high',
-      status: 'pending',
-      assignedTo: 'Sarah Johnson',
-      createdBy: 'Admin',
-      createdDate: '2024-01-01'
-    },
-    {
-      id: '2',
-      title: 'Trade License Renewal - ABC Trading LLC',
-      description: 'Trade license expires in 45 days',
-      type: 'license_renewal',
-      companyId: 'comp2',
-      date: '2024-01-20',
-      dueDate: '2024-03-01',
-      priority: 'medium',
-      status: 'pending',
-      assignedTo: 'Ahmed Al Mansouri',
-      createdBy: 'Admin',
-      createdDate: '2024-01-05'
-    },
-    {
-      id: '3',
-      title: 'Insurance Payment Due',
-      description: 'Monthly insurance premium payment',
-      type: 'payment_due',
-      companyId: 'comp1',
-      date: '2024-01-25',
-      dueDate: '2024-01-30',
-      priority: 'urgent',
-      status: 'pending',
-      assignedTo: 'Finance Team',
-      createdBy: 'System',
-      createdDate: '2024-01-20'
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load reminders from database
+  const loadReminders = async () => {
+    setLoading(true);
+    try {
+      const data = await dbHelpers.getReminders();
+      console.log('Loaded reminders:', data);
+      setReminders(data || []);
+    } catch (error) {
+      console.error('Error loading reminders:', error);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    loadReminders();
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'reminders' | 'services' | 'calendar'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
@@ -185,6 +160,9 @@ const RemindersServices: React.FC = () => {
       resetReminderForm();
       setShowAddReminder(false);
       alert('✅ Reminder created successfully!');
+
+      // Reload reminders to show the new one
+      await loadReminders();
 
     } catch (error) {
       console.error('Error creating reminder:', error);
@@ -423,7 +401,7 @@ const RemindersServices: React.FC = () => {
 
   const filteredReminders = reminders.filter(reminder => {
     const matchesSearch = reminder.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         reminder.description.toLowerCase().includes(searchTerm.toLowerCase());
+                         (reminder.description && reminder.description.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesPriority = filterPriority === 'all' || reminder.priority === filterPriority;
     const matchesStatus = filterStatus === 'all' || reminder.status === filterStatus;
@@ -434,14 +412,14 @@ const RemindersServices: React.FC = () => {
   const stats = [
     {
       title: 'Active Reminders',
-      value: reminders.filter(r => r.status === 'pending').length.toString(),
-      change: '3 urgent',
+      value: reminders.filter(r => r.status === 'active').length.toString(),
+      change: `${reminders.filter(r => r.priority === 'urgent' && r.status === 'active').length} urgent`,
       icon: Bell,
       color: 'blue'
     },
     {
       title: 'Due Today',
-      value: reminders.filter(r => r.dueDate === new Date().toISOString().split('T')[0]).length.toString(),
+      value: reminders.filter(r => r.reminder_date === new Date().toISOString().split('T')[0]).length.toString(),
       change: 'Requires attention',
       icon: Clock,
       color: 'red'
@@ -506,8 +484,8 @@ const RemindersServices: React.FC = () => {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Urgent Reminders</h3>
         <div className="space-y-4">
-          {reminders.filter(r => r.priority === 'urgent' && r.status === 'pending').map((reminder) => {
-            const TypeIcon = getTypeIcon(reminder.type);
+          {reminders.filter(r => r.priority === 'urgent' && r.status === 'active').map((reminder) => {
+            const TypeIcon = getTypeIcon(reminder.reminder_type);
             return (
               <div key={reminder.id} className="flex items-center space-x-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                 <div className="p-2 bg-red-100 rounded-lg">
@@ -1298,8 +1276,20 @@ const RemindersServices: React.FC = () => {
 
         {/* Reminders List */}
         <div className="space-y-4">
-          {filteredReminders.map((reminder) => {
-            const TypeIcon = getTypeIcon(reminder.type);
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+              <p className="text-gray-500 mt-2">Loading reminders...</p>
+            </div>
+          ) : filteredReminders.length === 0 ? (
+            <div className="text-center py-8">
+              <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No reminders found</h3>
+              <p className="text-gray-600">Create a new reminder to get started.</p>
+            </div>
+          ) : (
+            filteredReminders.map((reminder) => {
+            const TypeIcon = getTypeIcon(reminder.reminder_type);
             return (
               <div key={reminder.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200">
                 <div className="flex items-start justify-between">
@@ -1362,7 +1352,7 @@ const RemindersServices: React.FC = () => {
                 </div>
               </div>
             );
-          })}
+          }))}
         </div>
       </div>
     );
@@ -1532,7 +1522,7 @@ const RemindersServices: React.FC = () => {
             {Array.from({ length: 42 }, (_, i) => {
               const date = new Date(startDate);
               date.setDate(startDate.getDate() + i);
-              const dayReminders = reminders.filter(r => r.dueDate === date.toISOString().split('T')[0]);
+              const dayReminders = reminders.filter(r => r.reminder_date === date.toISOString().split('T')[0]);
               const isCurrentMonth = date.getMonth() === currentDate.getMonth();
               const isToday = date.toDateString() === new Date().toDateString();
 

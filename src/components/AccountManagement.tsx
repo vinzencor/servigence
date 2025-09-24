@@ -51,11 +51,23 @@ interface Account {
 const AccountManagement: React.FC = () => {
   const { user, isSuperAdmin } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadAccountTransactions();
+    loadCompanies();
   }, []);
+
+  const loadCompanies = async () => {
+    try {
+      const companiesData = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
+      console.log('Loaded companies for transactions:', companiesData);
+      setCompanies(companiesData || []);
+    } catch (error) {
+      console.error('Error loading companies:', error);
+    }
+  };
 
   const loadAccountTransactions = async () => {
     setLoading(true);
@@ -190,7 +202,7 @@ const AccountManagement: React.FC = () => {
         transaction_date: transactionForm.date,
         payment_method: transactionForm.paymentMethod,
         reference_number: transactionForm.reference.trim() || null,
-        company_id: transactionForm.companyId || null,
+        company_id: transactionForm.companyId && transactionForm.companyId.trim() !== '' ? transactionForm.companyId : null,
         gst_rate: gstRate,
         gst_amount: gstAmount,
         status: 'completed',
@@ -888,6 +900,25 @@ const AccountManagement: React.FC = () => {
                     rows={3}
                     required
                   />
+                </div>
+
+                {/* Company Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company (Optional)
+                  </label>
+                  <select
+                    value={transactionForm.companyId}
+                    onChange={(e) => setTransactionForm(prev => ({ ...prev, companyId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    <option value="">Select a company (optional)</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.company_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Date and Payment Method */}

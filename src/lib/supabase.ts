@@ -13,6 +13,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export const dbHelpers = {
   // Companies
   async getCompanies(userId?: string, userRole?: string) {
+    console.log('Loading companies for user:', userId, 'role:', userRole);
+
     let query = supabase
       .from('companies')
       .select(`
@@ -22,12 +24,17 @@ export const dbHelpers = {
       .order('created_at', { ascending: false });
 
     // Filter by assigned user if not super admin
-    if (userId && userRole !== 'super_admin') {
+    if (userId && userRole === 'staff') {
       query = query.eq('assigned_to', userId);
     }
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      console.error('Error loading companies:', error);
+      throw error;
+    }
+
+    console.log('Loaded companies:', data);
     return data;
   },
 
@@ -503,6 +510,8 @@ export const dbHelpers = {
 
   // Service Billings
   async getServiceBillings(userId?: string, userRole?: string) {
+    console.log('Loading service billings for user:', userId, 'role:', userRole);
+
     let query = supabase
       .from('service_billings')
       .select(`
@@ -514,13 +523,19 @@ export const dbHelpers = {
       `)
       .order('created_at', { ascending: false });
 
-    // Filter by assigned user if not super admin
-    if (userId && userRole !== 'super_admin') {
-      query = query.or(`assigned_employee_id.eq.${userId},company.assigned_to.eq.${userId},individual.assigned_to.eq.${userId}`);
+    // Simplified filtering - only filter if user is staff role
+    if (userId && userRole === 'staff') {
+      // For staff users, show billings where they are assigned or where their assigned companies/individuals have billings
+      query = query.eq('assigned_employee_id', userId);
     }
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      console.error('Error loading service billings:', error);
+      throw error;
+    }
+
+    console.log('Loaded service billings:', data);
     return data;
   },
 
@@ -549,27 +564,41 @@ export const dbHelpers = {
 
   // Accounts
   async getAccountTransactions() {
+    console.log('Loading account transactions...');
+
     const { data, error } = await supabase
       .from('account_transactions')
       .select(`
         *,
-        company:companies(name),
+        company:companies(company_name),
         service_billing:service_billings(*)
       `)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('Error loading account transactions:', error);
+      throw error;
+    }
+
+    console.log('Loaded account transactions:', data);
     return data
   },
 
   async createAccountTransaction(transaction: any) {
+    console.log('Creating account transaction:', transaction);
+
     const { data, error } = await supabase
       .from('account_transactions')
       .insert([transaction])
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error creating account transaction:', error);
+      throw error;
+    }
+
+    console.log('Account transaction created:', data);
     return data
   },
 

@@ -87,14 +87,20 @@ const ServiceBilling: React.FC = () => {
         dbHelpers.getVendors()
       ]);
 
+      console.log('Raw companies data:', companiesData);
+      console.log('Raw services data:', servicesData);
+
       // Transform company data
-      const transformedCompanies = companiesData.map((company: any) => ({
+      const transformedCompanies = (companiesData || []).map((company: any) => ({
         id: company.id,
         companyName: company.company_name,
         phone1: company.phone1,
         email1: company.email1,
         status: company.status
       }));
+
+      console.log('Loaded companies data:', transformedCompanies);
+      console.log('Loaded services data:', servicesData);
 
       // Transform individual data
       const transformedIndividuals = individualsData?.map((individual: any) => ({
