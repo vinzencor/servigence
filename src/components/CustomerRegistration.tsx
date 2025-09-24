@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User } from 'lucide-react';
-import { Company, Individual } from '../types';
+import { Company, Individual, ServiceEmployee } from '../types';
 import { dbHelpers } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CustomerRegistrationProps {
   onSave: (company: Company) => void;
@@ -9,7 +10,9 @@ interface CustomerRegistrationProps {
 }
 
 const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onSaveIndividual }) => {
+  const { user, isSuperAdmin } = useAuth();
   const [registrationType, setRegistrationType] = useState<'company' | 'individual'>('company');
+  const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
   const [formData, setFormData] = useState({
     // Common fields
     phone1: '',
@@ -20,7 +23,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     creditLimit: '',
     creditLimitDays: '',
     dateOfRegistration: new Date().toISOString().split('T')[0],
-    createdBy: 'Sarah Khan',
+    createdBy: user?.name || 'System',
+    assignedTo: user?.service_employee_id || '',
 
     // Company specific fields
     companyName: '',
@@ -52,6 +56,19 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    loadServiceEmployees();
+  }, []);
+
+  const loadServiceEmployees = async () => {
+    try {
+      const employees = await dbHelpers.getServiceEmployees();
+      setServiceEmployees(employees || []);
+    } catch (error) {
+      console.error('Error loading service employees:', error);
+    }
+  };
+
   const companyTypes = [
     'Limited Liability Company (LLC)',
     'Free Zone Company',
@@ -71,13 +88,37 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     // Common validations
     if (!formData.phone1.trim()) newErrors.phone1 = 'Primary phone is required';
     if (!formData.email1.trim()) newErrors.email1 = 'Primary email is required';
-    if (!formData.creditLimit || parseFloat(formData.creditLimit) <= 0) {
-      newErrors.creditLimit = 'Valid credit limit is required';
+
+    // Credit limit validation - must be within database constraints (precision 10, scale 2)
+    // Maximum value is 99,999,999.99 (10^8 - 0.01)
+    if (!formData.creditLimit || formData.creditLimit.trim() === '') {
+      newErrors.creditLimit = 'Credit limit is required';
+    } else {
+      const creditLimit = parseFloat(formData.creditLimit);
+      if (isNaN(creditLimit) || creditLimit < 0) {
+        newErrors.creditLimit = 'Credit limit must be a valid positive number';
+      } else if (creditLimit >= 100000000) { // 10^8
+        newErrors.creditLimit = 'Credit limit cannot exceed 99,999,999.99';
+      }
     }
-    if (!formData.creditLimitDays || parseInt(formData.creditLimitDays) <= 0) {
-      newErrors.creditLimitDays = 'Valid credit limit days is required';
+
+    // Credit limit days validation
+    if (!formData.creditLimitDays || formData.creditLimitDays.trim() === '') {
+      newErrors.creditLimitDays = 'Credit limit days is required';
+    } else {
+      const days = parseInt(formData.creditLimitDays);
+      if (isNaN(days) || days < 0) {
+        newErrors.creditLimitDays = 'Credit limit days must be a valid positive number';
+      } else if (days > 365) {
+        newErrors.creditLimitDays = 'Credit limit days cannot exceed 365';
+      }
     }
     if (!formData.dateOfRegistration) newErrors.dateOfRegistration = 'Registration date is required';
+
+    // Assignment validation for super admin
+    if (isSuperAdmin && !formData.assignedTo) {
+      newErrors.assignedTo = 'Please assign to a staff member';
+    }
 
     // Type-specific validations
     if (registrationType === 'company') {
@@ -169,7 +210,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           date_of_registration: newCompany.dateOfRegistration,
           created_by: newCompany.createdBy,
           status: newCompany.status,
-          employee_count: newCompany.employeeCount
+          employee_count: newCompany.employeeCount,
+          assigned_to: formData.assignedTo || null
         });
 
         onSave(newCompany);
@@ -219,7 +261,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           credit_limit_days: newIndividual.creditLimitDays,
           date_of_registration: newIndividual.dateOfRegistration,
           created_by: newIndividual.createdBy,
-          status: newIndividual.status
+          status: newIndividual.status,
+          assigned_to: formData.assignedTo || null
         });
 
         if (onSaveIndividual) {
@@ -228,6 +271,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       }
 
       setShowSuccess(true);
+
+      // Trigger refresh for other components
+      localStorage.setItem('company_updated', Date.now().toString());
+      window.dispatchEvent(new StorageEvent('storage', { key: 'company_updated' }));
 
       // Auto-hide success message after 3 seconds
       setTimeout(() => {
@@ -254,7 +301,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       creditLimit: '',
       creditLimitDays: '',
       dateOfRegistration: new Date().toISOString().split('T')[0],
-      createdBy: 'Sarah Khan',
+      createdBy: user?.name || 'System',
+      assignedTo: user?.service_employee_id || '',
       companyName: '',
       vatTrnNo: '',
       companyType: '',
@@ -905,6 +953,36 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 readOnly
               />
             </div>
+
+            {isSuperAdmin && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Assign to Staff Member <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="assignedTo"
+                  value={formData.assignedTo}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.assignedTo ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  }`}
+                  required
+                >
+                  <option value="">Select staff member</option>
+                  {serviceEmployees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name} - {employee.email}
+                    </option>
+                  ))}
+                </select>
+                {errors.assignedTo && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-1" />
+                    {errors.assignedTo}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Form Actions */}

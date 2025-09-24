@@ -15,7 +15,9 @@ const ServiceEmployeeManagement: React.FC = () => {
     email: '',
     phone: '',
     department: '',
-    specialization: ''
+    specialization: '',
+    password: '',
+    confirmPassword: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -54,12 +56,25 @@ const ServiceEmployeeManagement: React.FC = () => {
     if (!employeeForm.name.trim()) newErrors.name = 'Name is required';
     if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
     if (!employeeForm.phone.trim()) newErrors.phone = 'Phone is required';
-    if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
+    // Department is optional in the database, so we don't require it
+    // if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (employeeForm.email && !emailRegex.test(employeeForm.email)) {
       newErrors.email = 'Invalid email format';
+    }
+
+    // Password validation for new employees
+    if (!editingEmployee) {
+      if (!employeeForm.password.trim()) {
+        newErrors.password = 'Password is required';
+      } else if (employeeForm.password.length < 6) {
+        newErrors.password = 'Password must be at least 6 characters';
+      }
+      if (employeeForm.password !== employeeForm.confirmPassword) {
+        newErrors.confirmPassword = 'Passwords do not match';
+      }
     }
 
     setErrors(newErrors);
@@ -77,9 +92,10 @@ const ServiceEmployeeManagement: React.FC = () => {
         name: String(employeeForm.name).trim(),
         email: String(employeeForm.email).trim(),
         phone: String(employeeForm.phone).trim(),
-        department: employeeForm.department ? String(employeeForm.department).trim() : null,
-        specialization: employeeForm.specialization ? String(employeeForm.specialization).trim() : null,
-        is_active: true
+        department: employeeForm.department && String(employeeForm.department).trim() !== '' ? String(employeeForm.department).trim() : null,
+        specialization: employeeForm.specialization && String(employeeForm.specialization).trim() !== '' ? String(employeeForm.specialization).trim() : null,
+        is_active: true,
+        ...(employeeForm.password && !editingEmployee ? { password_hash: btoa(employeeForm.password) } : {})
       };
 
       console.log('Clean employee data:', cleanEmployeeData);
@@ -97,7 +113,12 @@ const ServiceEmployeeManagement: React.FC = () => {
       resetForm();
       setShowAddEmployee(false);
       setEditingEmployee(null);
-      alert('Employee saved successfully!');
+
+      if (editingEmployee) {
+        alert('Employee updated successfully!');
+      } else {
+        alert(`Employee created successfully!\n\nLogin Credentials:\nEmail: ${employeeForm.email}\nPassword: ${employeeForm.password}\n\nThe employee can now login to the staff dashboard using these credentials.`);
+      }
     } catch (error) {
       console.error('Error saving service employee:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
@@ -116,7 +137,9 @@ const ServiceEmployeeManagement: React.FC = () => {
       email: '',
       phone: '',
       department: '',
-      specialization: ''
+      specialization: '',
+      password: '',
+      confirmPassword: ''
     });
     setErrors({});
   };
@@ -128,7 +151,9 @@ const ServiceEmployeeManagement: React.FC = () => {
       email: employee.email,
       phone: employee.phone,
       department: employee.department || '',
-      specialization: employee.specialization || ''
+      specialization: employee.specialization || '',
+      password: '',
+      confirmPassword: ''
     });
     setShowAddEmployee(true);
   };
@@ -443,6 +468,55 @@ const ServiceEmployeeManagement: React.FC = () => {
                     placeholder="e.g., Visa Processing, Document Attestation"
                   />
                 </div>
+
+                {/* Password fields for new employees */}
+                {!editingEmployee && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        name="password"
+                        value={employeeForm.password}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                          errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                        placeholder="Enter password (min 6 characters)"
+                      />
+                      {errors.password && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="w-4 h-4 mr-1" />
+                          {errors.password}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Confirm Password <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        name="confirmPassword"
+                        value={employeeForm.confirmPassword}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                          errors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                        placeholder="Confirm password"
+                      />
+                      {errors.confirmPassword && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="w-4 h-4 mr-1" />
+                          {errors.confirmPassword}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Form Actions */}

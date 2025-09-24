@@ -233,6 +233,49 @@ export interface ServiceEmployee {
   updatedAt: string;
 }
 
+export interface ChatConversation {
+  id: string;
+  participant_1_id: string;
+  participant_2_id: string;
+  participant_1?: ServiceEmployee;
+  participant_2?: ServiceEmployee;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+  last_message?: ChatMessage;
+  unread_count?: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender?: ServiceEmployee;
+  message_type: 'text' | 'voice' | 'document';
+  content?: string;
+  file_name?: string;
+  file_url?: string;
+  file_size?: number;
+  file_type?: string;
+  voice_duration?: number;
+  is_read: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatFileAttachment {
+  id: string;
+  message_id: string;
+  original_name: string;
+  stored_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+  mime_type?: string;
+  uploaded_by: string;
+  created_at: string;
+}
+
 export interface ServiceBilling {
   id: string;
   companyId?: string;

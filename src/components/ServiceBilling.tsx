@@ -1,22 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { mockServices, mockInvoices } from '../data/mockData';
 import { Company, Individual, ServiceType, ServiceEmployee, ServiceBilling as ServiceBillingType } from '../types';
-import { dbHelpers } from '../lib/supabase';
+import { dbHelpers, supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 const ServiceBilling: React.FC = () => {
+  const { user, isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('billing');
   const [dateFilter, setDateFilter] = useState('this_month');
   const [showCreateBilling, setShowCreateBilling] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showEditBilling, setShowEditBilling] = useState(false);
   const [selectedBilling, setSelectedBilling] = useState<any>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
+
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('');
+  const [reportData, setReportData] = useState<any>(null);
+  const [selectedCompanyForReport, setSelectedCompanyForReport] = useState('');
 
   const [billingForm, setBillingForm] = useState({
     clientType: 'company' as 'company' | 'individual',
@@ -27,10 +37,27 @@ const ServiceBilling: React.FC = () => {
     serviceDate: new Date().toISOString().split('T')[0],
     cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
     quantity: '1',
-    notes: ''
+    notes: '',
+    assignedVendorId: '',
+    vendorCost: '0'
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Edit billing form state
+  const [editBillingForm, setEditBillingForm] = useState({
+    clientType: 'company' as 'company' | 'individual',
+    companyId: '',
+    individualId: '',
+    serviceTypeId: '',
+    assignedEmployeeId: '',
+    serviceDate: '',
+    cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
+    quantity: '1',
+    notes: '',
+    assignedVendorId: '',
+    vendorCost: '0'
+  });
 
   const tabs = [
     { id: 'billing', label: 'Service Billing', icon: DollarSign },
@@ -47,27 +74,51 @@ const ServiceBilling: React.FC = () => {
   ];
 
   useEffect(() => {
+    console.log('ServiceBilling component mounted, user:', user);
+    console.log('Environment variables:', {
+      url: import.meta.env.VITE_SUPABASE_URL,
+      key: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Missing'
+    });
     loadData();
     loadServiceBillings();
+  }, []);
+
+  // Add a refresh mechanism that can be triggered
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'company_updated') {
+        loadData(); // Refresh companies when a company is updated
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [companiesData, individualsData, servicesData] = await Promise.all([
-        dbHelpers.getCompanies(),
-        dbHelpers.getIndividuals(),
-        dbHelpers.getServices()
+      const [companiesData, individualsData, servicesData, vendorsData] = await Promise.all([
+        dbHelpers.getCompanies(user?.service_employee_id, user?.role),
+        dbHelpers.getIndividuals(user?.service_employee_id, user?.role),
+        dbHelpers.getServices(),
+        dbHelpers.getVendors()
       ]);
 
+      console.log('Raw companies data:', companiesData);
+      console.log('Raw services data:', servicesData);
+
       // Transform company data
-      const transformedCompanies = companiesData.map((company: any) => ({
+      const transformedCompanies = (companiesData || []).map((company: any) => ({
         id: company.id,
         companyName: company.company_name,
         phone1: company.phone1,
         email1: company.email1,
         status: company.status
       }));
+
+      console.log('Loaded companies data:', transformedCompanies);
+      console.log('Loaded services data:', servicesData);
 
       // Transform individual data
       const transformedIndividuals = individualsData?.map((individual: any) => ({
@@ -105,6 +156,9 @@ const ServiceBilling: React.FC = () => {
       const serviceEmployeesData = await dbHelpers.getServiceEmployees();
       setServiceEmployees(serviceEmployeesData || []);
 
+      // Set vendors
+      setVendors(vendorsData || []);
+
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -114,10 +168,34 @@ const ServiceBilling: React.FC = () => {
 
   const loadServiceBillings = async () => {
     try {
-      const billingsData = await dbHelpers.getServiceBillings();
+      const billingsData = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
       setServiceBillings(billingsData || []);
     } catch (error) {
       console.error('Error loading service billings:', error);
+    }
+  };
+
+  const testSupabaseConnection = async () => {
+    try {
+      console.log('Testing Supabase connection...');
+
+      // Test basic connection
+      const { data: testData, error } = await supabase
+        .from('service_types')
+        .select('id, name')
+        .limit(1);
+
+      if (error) {
+        console.error('Supabase connection error:', error);
+        alert('Supabase connection failed: ' + error.message);
+        return;
+      }
+
+      console.log('Supabase connection successful:', testData);
+      alert('Supabase connection successful! Found ' + (testData?.length || 0) + ' service types');
+    } catch (error) {
+      console.error('Connection test error:', error);
+      alert('Connection test failed: ' + error);
     }
   };
 
@@ -171,9 +249,244 @@ const ServiceBilling: React.FC = () => {
     setShowInvoiceModal(true);
   };
 
+  const editBilling = (billing: any) => {
+    setSelectedBilling(billing);
+    // Populate edit form with existing billing data
+    setEditBillingForm({
+      clientType: billing.company_id ? 'company' : 'individual',
+      companyId: billing.company_id || '',
+      individualId: billing.individual_id || '',
+      serviceTypeId: billing.service_type_id || '',
+      assignedEmployeeId: billing.assigned_employee_id || '',
+      serviceDate: billing.service_date || '',
+      cashType: billing.cash_type || 'cash',
+      quantity: billing.quantity?.toString() || '1',
+      notes: billing.notes || ''
+    });
+    setShowEditBilling(true);
+  };
+
+  const handleEditBillingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedBilling) return;
+
+    try {
+      const selectedService = services.find(s => s.id === editBillingForm.serviceTypeId);
+      if (!selectedService) {
+        alert('Please select a valid service');
+        return;
+      }
+
+      const quantity = parseInt(editBillingForm.quantity);
+      const typingCharges = selectedService.typingCharges * quantity;
+      const governmentCharges = selectedService.governmentCharges * quantity;
+      const totalAmount = typingCharges + governmentCharges;
+
+      const updatedBillingData = {
+        company_id: editBillingForm.clientType === 'company' && editBillingForm.companyId ? editBillingForm.companyId : null,
+        individual_id: editBillingForm.clientType === 'individual' && editBillingForm.individualId ? editBillingForm.individualId : null,
+        service_type_id: editBillingForm.serviceTypeId || null,
+        assigned_employee_id: editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
+        service_date: editBillingForm.serviceDate,
+        cash_type: editBillingForm.cashType,
+        typing_charges: typingCharges,
+        government_charges: governmentCharges,
+        total_amount: totalAmount,
+        quantity: quantity,
+        notes: editBillingForm.notes || null
+      };
+
+      // Update billing in database
+      await dbHelpers.updateServiceBilling(selectedBilling.id, updatedBillingData);
+
+      alert('✅ Service billing updated successfully!');
+
+      setShowEditBilling(false);
+      setSelectedBilling(null);
+
+      // Reload data to show the updated billing
+      await loadServiceBillings();
+    } catch (error) {
+      console.error('Error updating service billing:', error);
+      alert(`❌ Error updating service billing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const downloadInvoice = (billing: any) => {
-    // Generate and download invoice as PDF
-    generateInvoicePDF(billing);
+    try {
+      // Generate and download invoice as PDF
+      generateInvoicePDF(billing);
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Error generating invoice. Please try again.');
+    }
+  };
+
+  const generateMonthlyRevenueReport = async () => {
+    try {
+      setLoading(true);
+
+      // Get all service billings
+      const billings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
+
+      // Filter by company if selected
+      const filteredBillings = selectedCompanyForReport
+        ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
+        : billings;
+
+      // Group by month and calculate totals
+      const monthlyData = filteredBillings.reduce((acc: any, billing: any) => {
+        const date = new Date(billing.created_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+        if (!acc[monthKey]) {
+          acc[monthKey] = {
+            month: monthKey,
+            serviceRevenue: 0,
+            governmentCharges: 0,
+            totalRevenue: 0,
+            billingsCount: 0
+          };
+        }
+
+        acc[monthKey].serviceRevenue += billing.typing_charges || 0;
+        acc[monthKey].governmentCharges += billing.government_charges || 0;
+        acc[monthKey].totalRevenue += billing.total_amount || 0;
+        acc[monthKey].billingsCount += 1;
+
+        return acc;
+      }, {});
+
+      setReportData(Object.values(monthlyData));
+      setReportType('monthly-revenue');
+      setShowReportModal(true);
+    } catch (error) {
+      console.error('Error generating monthly revenue report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generatePaymentAnalysisReport = async () => {
+    try {
+      setLoading(true);
+
+      const billings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
+      const filteredBillings = selectedCompanyForReport
+        ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
+        : billings;
+
+      // Analyze payment patterns
+      const paymentData = {
+        totalBillings: filteredBillings.length,
+        totalRevenue: filteredBillings.reduce((sum, b) => sum + (b.total_amount || 0), 0),
+        serviceRevenue: filteredBillings.reduce((sum, b) => sum + (b.typing_charges || 0), 0),
+        governmentCharges: filteredBillings.reduce((sum, b) => sum + (b.government_charges || 0), 0),
+        averageBillingAmount: filteredBillings.length > 0
+          ? filteredBillings.reduce((sum, b) => sum + (b.total_amount || 0), 0) / filteredBillings.length
+          : 0,
+        paymentMethods: filteredBillings.reduce((acc: any, billing: any) => {
+          const method = billing.cash_type || 'Unknown';
+          acc[method] = (acc[method] || 0) + 1;
+          return acc;
+        }, {})
+      };
+
+      setReportData(paymentData);
+      setReportType('payment-analysis');
+      setShowReportModal(true);
+    } catch (error) {
+      console.error('Error generating payment analysis report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportBillingList = () => {
+    try {
+      // Prepare CSV data
+      const csvData = [
+        ['Invoice Number', 'Date', 'Client', 'Service', 'Quantity', 'Service Charges', 'Government Charges', 'Total Amount', 'Status'],
+        ...serviceBillings.map((billing: any) => [
+          billing.invoice_number || 'N/A',
+          new Date(billing.service_date).toLocaleDateString(),
+          billing.company?.company_name || billing.individual?.individual_name || 'N/A',
+          billing.service_type?.name || 'N/A',
+          billing.quantity || 1,
+          parseFloat(billing.typing_charges || 0).toFixed(2),
+          parseFloat(billing.government_charges || 0).toFixed(2),
+          parseFloat(billing.total_amount || 0).toFixed(2),
+          billing.status?.replace('_', ' ').toUpperCase() || 'PENDING'
+        ])
+      ];
+
+      const csvContent = csvData.map(row => row.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `service-billings-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      alert('✅ Billing list exported successfully!');
+    } catch (error) {
+      console.error('Error exporting billing list:', error);
+      alert('❌ Error exporting billing list. Please try again.');
+    }
+  };
+
+  const generateServicePerformanceReport = async () => {
+    try {
+      setLoading(true);
+
+      const billings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
+      const filteredBillings = selectedCompanyForReport
+        ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
+        : billings;
+
+      // Group by service type
+      const serviceData = filteredBillings.reduce((acc: any, billing: any) => {
+        const serviceName = billing.service_type?.name || 'Unknown Service';
+
+        if (!acc[serviceName]) {
+          acc[serviceName] = {
+            name: serviceName,
+            count: 0,
+            revenue: 0,
+            profit: 0,
+            governmentCharges: 0,
+            averageAmount: 0,
+            averageProfit: 0
+          };
+        }
+
+        acc[serviceName].count += 1;
+        acc[serviceName].revenue += billing.total_amount || 0;
+        acc[serviceName].profit += billing.typing_charges || 0;
+        acc[serviceName].governmentCharges += billing.government_charges || 0;
+
+        return acc;
+      }, {});
+
+      // Calculate averages
+      Object.values(serviceData).forEach((service: any) => {
+        service.averageAmount = service.count > 0 ? service.revenue / service.count : 0;
+        service.averageProfit = service.count > 0 ? service.profit / service.count : 0;
+      });
+
+      setReportData(Object.values(serviceData));
+      setReportType('service-performance');
+      setShowReportModal(true);
+    } catch (error) {
+      console.error('Error generating service performance report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const generateInvoicePDF = (billing: any) => {
@@ -192,7 +505,17 @@ const ServiceBilling: React.FC = () => {
 
   const generateInvoiceHTML = (billing: any) => {
     const currentDate = new Date().toLocaleDateString();
-    const serviceDate = new Date(billing.service_date).toLocaleDateString();
+    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString() : 'N/A';
+
+    // Safely get client information
+    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
+    const serviceName = billing.service_type?.name || 'Service';
+    const invoiceNumber = billing.invoice_number || 'N/A';
+    const quantity = billing.quantity || 1;
+    const typingCharges = parseFloat(billing.typing_charges || 0);
+    const governmentCharges = parseFloat(billing.government_charges || 0);
+    const totalAmount = parseFloat(billing.total_amount || 0);
+    const cashType = billing.cash_type || 'N/A';
 
     return `
       <!DOCTYPE html>
@@ -229,15 +552,15 @@ const ServiceBilling: React.FC = () => {
         <div class="invoice-details">
           <div class="invoice-info">
             <div class="info-title">Invoice Details</div>
-            <div class="info-row"><strong>Invoice Number:</strong> ${billing.invoice_number}</div>
+            <div class="info-row"><strong>Invoice Number:</strong> ${invoiceNumber}</div>
             <div class="info-row"><strong>Invoice Date:</strong> ${currentDate}</div>
             <div class="info-row"><strong>Service Date:</strong> ${serviceDate}</div>
-            <div class="info-row"><strong>Payment Method:</strong> ${billing.cash_type?.toUpperCase()}</div>
+            <div class="info-row"><strong>Payment Method:</strong> ${cashType.toUpperCase()}</div>
           </div>
 
           <div class="client-info">
             <div class="info-title">Bill To</div>
-            <div class="info-row"><strong>Client:</strong> ${billing.company?.company_name || billing.individual?.individual_name || 'N/A'}</div>
+            <div class="info-row"><strong>Client:</strong> ${clientName}</div>
             ${billing.company ? `
               <div class="info-row"><strong>Company:</strong> ${billing.company.company_name}</div>
               <div class="info-row"><strong>Trade License:</strong> ${billing.company.trade_license_number || 'N/A'}</div>
@@ -257,19 +580,19 @@ const ServiceBilling: React.FC = () => {
           </thead>
           <tbody>
             <tr>
-              <td>${billing.service_type?.name || 'Service'}</td>
-              <td>${billing.quantity || 1}</td>
-              <td>AED ${parseFloat(billing.typing_charges || 0).toFixed(2)}</td>
-              <td>AED ${parseFloat(billing.government_charges || 0).toFixed(2)}</td>
-              <td>AED ${parseFloat(billing.total_amount || 0).toFixed(2)}</td>
+              <td>${serviceName}</td>
+              <td>${quantity}</td>
+              <td>AED ${typingCharges.toFixed(2)}</td>
+              <td>AED ${governmentCharges.toFixed(2)}</td>
+              <td>AED ${totalAmount.toFixed(2)}</td>
             </tr>
           </tbody>
         </table>
 
         <div class="total-section">
-          <div class="total-row">Service Charges: AED ${parseFloat(billing.typing_charges || 0).toFixed(2)}</div>
-          <div class="total-row">Government Charges: AED ${parseFloat(billing.government_charges || 0).toFixed(2)}</div>
-          <div class="total-final">Total Amount: AED ${parseFloat(billing.total_amount || 0).toFixed(2)}</div>
+          <div class="total-row">Service Charges: AED ${typingCharges.toFixed(2)}</div>
+          <div class="total-row">Government Charges: AED ${governmentCharges.toFixed(2)}</div>
+          <div class="total-final">Total Amount: AED ${totalAmount.toFixed(2)}</div>
         </div>
 
         <div class="footer">
@@ -281,9 +604,12 @@ const ServiceBilling: React.FC = () => {
     `;
   };
 
-  const totalRevenue = mockInvoices.reduce((sum, inv) => sum + inv.total, 0);
-  const pendingAmount = mockInvoices.filter(inv => inv.status === 'sent').reduce((sum, inv) => sum + inv.total, 0);
-  const completedServices = mockServices.filter(s => s.status === 'completed').length;
+  // Calculate actual revenue and profit from service billings
+  const totalRevenue = serviceBillings.reduce((sum, billing) => sum + (parseFloat(billing.total_amount) || 0), 0);
+  const totalProfit = serviceBillings.reduce((sum, billing) => sum + (parseFloat(billing.typing_charges) || 0), 0);
+  const totalGovernmentCharges = serviceBillings.reduce((sum, billing) => sum + (parseFloat(billing.government_charges) || 0), 0);
+  const pendingAmount = serviceBillings.filter(billing => billing.status === 'pending').reduce((sum, billing) => sum + (parseFloat(billing.total_amount) || 0), 0);
+  const completedServices = serviceBillings.filter(billing => billing.status === 'completed').length;
 
   const isValidUUID = (uuid: string) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -348,7 +674,9 @@ const ServiceBilling: React.FC = () => {
         status: 'pending',
         notes: billingForm.notes || null,
         invoice_generated: true,
-        invoice_number: invoiceNumber
+        invoice_number: invoiceNumber,
+        assigned_vendor_id: billingForm.assignedVendorId || null,
+        vendor_cost: parseFloat(billingForm.vendorCost) || 0
       };
 
       const createdBilling = await dbHelpers.createServiceBilling(billingData);
@@ -388,6 +716,25 @@ const ServiceBilling: React.FC = () => {
         });
       }
 
+      // Create vendor transaction if vendor is assigned - use 'expense' type instead of 'vendor_payment'
+      if (billingForm.assignedVendorId && parseFloat(billingForm.vendorCost) > 0) {
+        const selectedVendor = vendors.find(v => v.id === billingForm.assignedVendorId);
+        await dbHelpers.createAccountTransaction({
+          service_billing_id: createdBilling.id,
+          company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
+          individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
+          transaction_type: 'expense',
+          category: 'Vendor Expenses',
+          description: `Vendor payment to ${selectedVendor?.name || 'Vendor'} for ${selectedService.name} (${invoiceNumber})`,
+          amount: parseFloat(billingForm.vendorCost),
+          transaction_date: billingForm.serviceDate,
+          payment_method: 'bank_transfer',
+          reference_number: invoiceNumber,
+          status: 'pending',
+          created_by: 'System'
+        });
+      }
+
       // Success feedback
       alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\n\nBilling and invoice have been generated.`);
 
@@ -413,7 +760,9 @@ const ServiceBilling: React.FC = () => {
       serviceDate: new Date().toISOString().split('T')[0],
       cashType: 'cash',
       quantity: '1',
-      notes: ''
+      notes: '',
+      assignedVendorId: '',
+      vendorCost: '0'
     });
     setErrors({});
   };
@@ -481,7 +830,7 @@ const ServiceBilling: React.FC = () => {
 
         {/* Stats Cards */}
         <div className="p-6 bg-gray-50">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -493,11 +842,35 @@ const ServiceBilling: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Profit (Service Charges)</p>
+                  <p className="text-2xl font-bold text-purple-900">AED {totalProfit.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-orange-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Government Charges</p>
+                  <p className="text-2xl font-bold text-orange-900">AED {totalGovernmentCharges.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-lg p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-blue-600" />
+                  <Calendar className="w-6 h-6 text-blue-600" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Pending Amount</p>
@@ -505,27 +878,15 @@ const ServiceBilling: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-white rounded-lg p-6 border border-gray-200">
               <div className="flex items-center">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-purple-600" />
+                <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-amber-600" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Completed Services</p>
                   <p className="text-2xl font-bold text-gray-900">{completedServices}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-6 border border-gray-200">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-amber-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Active Services</p>
-                  <p className="text-2xl font-bold text-gray-900">{mockServices.filter(s => s.status === 'in_progress').length}</p>
                 </div>
               </div>
             </div>
@@ -601,9 +962,19 @@ const ServiceBilling: React.FC = () => {
                     <option value="this_quarter">This Quarter</option>
                     <option value="this_year">This Year</option>
                   </select>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+                  <button
+                    onClick={exportBillingList}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                  >
                     <Download className="w-4 h-4" />
                     <span>Export</span>
+                  </button>
+                  <button
+                    onClick={testSupabaseConnection}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                  >
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Test DB</span>
                   </button>
                 </div>
               </div>
@@ -674,10 +1045,7 @@ const ServiceBilling: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              // TODO: Implement edit functionality
-                              alert('Edit functionality coming soon!');
-                            }}
+                            onClick={() => editBilling(billing)}
                             className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                             title="Edit Billing"
                           >
@@ -718,13 +1086,41 @@ const ServiceBilling: React.FC = () => {
 
         {activeTab === 'reports' && (
           <div className="p-6">
+            {/* Company Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Filter by Company/Individual (Optional)
+              </label>
+              <select
+                value={selectedCompanyForReport}
+                onChange={(e) => setSelectedCompanyForReport(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Companies & Individuals</option>
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.companyName} (Company)
+                  </option>
+                ))}
+                {individuals.map((individual) => (
+                  <option key={individual.id} value={individual.id}>
+                    {individual.individualName} (Individual)
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <FileText className="w-12 h-12 text-blue-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Monthly Revenue Report</h3>
                 <p className="text-gray-500 mb-4">Comprehensive monthly revenue breakdown by service type</p>
-                <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Generate Report
+                <button
+                  onClick={generateMonthlyRevenueReport}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
               
@@ -732,17 +1128,25 @@ const ServiceBilling: React.FC = () => {
                 <DollarSign className="w-12 h-12 text-green-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Analysis</h3>
                 <p className="text-gray-500 mb-4">Analysis of payment patterns and outstanding amounts</p>
-                <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                  Generate Report
+                <button
+                  onClick={generatePaymentAnalysisReport}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
-              
+
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <TrendingUp className="w-12 h-12 text-purple-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Service Performance</h3>
                 <p className="text-gray-500 mb-4">Performance metrics for different service categories</p>
-                <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                  Generate Report
+                <button
+                  onClick={generateServicePerformanceReport}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
             </div>
@@ -964,6 +1368,8 @@ const ServiceBilling: React.FC = () => {
                   </select>
                 </div>
 
+
+
                 {/* Service Date */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1024,6 +1430,39 @@ const ServiceBilling: React.FC = () => {
                       {errors.quantity}
                     </p>
                   )}
+                </div>
+
+                {/* Vendor Assignment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assign Vendor (Optional)</label>
+                  <select
+                    name="assignedVendorId"
+                    value={billingForm.assignedVendorId}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">No vendor assigned</option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name} - {vendor.service_category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Vendor Cost */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Cost (AED)</label>
+                  <input
+                    type="number"
+                    name="vendorCost"
+                    value={billingForm.vendorCost}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
                 </div>
 
                 {/* Notes */}
@@ -1206,6 +1645,419 @@ const ServiceBilling: React.FC = () => {
                 >
                   <Download className="w-5 h-5" />
                   <span>Download Invoice</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Billing Modal */}
+      {showEditBilling && selectedBilling && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Edit Service Billing</h2>
+                <button
+                  onClick={() => {
+                    setShowEditBilling(false);
+                    setSelectedBilling(null);
+                  }}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditBillingSubmit} className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Client Selection */}
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="clientType"
+                        value="company"
+                        checked={editBillingForm.clientType === 'company'}
+                        onChange={(e) => setEditBillingForm(prev => ({ ...prev, clientType: e.target.value as 'company' | 'individual' }))}
+                        className="mr-2"
+                      />
+                      <Building2 className="w-4 h-4 mr-1" />
+                      Company
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="clientType"
+                        value="individual"
+                        checked={editBillingForm.clientType === 'individual'}
+                        onChange={(e) => setEditBillingForm(prev => ({ ...prev, clientType: e.target.value as 'company' | 'individual' }))}
+                        className="mr-2"
+                      />
+                      <User className="w-4 h-4 mr-1" />
+                      Individual
+                    </label>
+                  </div>
+                </div>
+
+                {/* Company/Individual Selection */}
+                {editBillingForm.clientType === 'company' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Company <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="companyId"
+                      value={editBillingForm.companyId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, companyId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select a company</option>
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.companyName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Individual <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="individualId"
+                      value={editBillingForm.individualId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, individualId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select an individual</option>
+                      {individuals.map((individual) => (
+                        <option key={individual.id} value={individual.id}>
+                          {individual.individualName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Service Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Service <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="serviceTypeId"
+                    value={editBillingForm.serviceTypeId}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, serviceTypeId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  >
+                    <option value="">Select a service</option>
+                    {services.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name} - AED {service.typingCharges + service.governmentCharges}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Employee Assignment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Employee</label>
+                  <select
+                    name="assignedEmployeeId"
+                    value={editBillingForm.assignedEmployeeId}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, assignedEmployeeId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Select an employee (optional)</option>
+                    {serviceEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Service Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="serviceDate"
+                    value={editBillingForm.serviceDate}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, serviceDate: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                </div>
+
+                {/* Cash Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Cash Type</label>
+                  <select
+                    name="cashType"
+                    value={editBillingForm.cashType}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, cashType: e.target.value as any }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    {cashTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={editBillingForm.quantity}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, quantity: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    min="1"
+                    required
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea
+                    name="notes"
+                    value={editBillingForm.notes}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    rows={3}
+                    placeholder="Additional notes or comments"
+                  />
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditBilling(false);
+                    setSelectedBilling(null);
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200"
+                >
+                  Update Billing
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && reportData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">
+                  {reportType === 'monthly-revenue' && 'Monthly Revenue Report'}
+                  {reportType === 'payment-analysis' && 'Payment Analysis Report'}
+                  {reportType === 'service-performance' && 'Service Performance Report'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportData(null);
+                    setReportType('');
+                  }}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {reportType === 'monthly-revenue' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Monthly Revenue Breakdown</h3>
+                    <p className="text-gray-600">Revenue analysis by month</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left">Month</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Service Revenue (Profit)</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Government Charges</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Total Revenue</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Billings Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.map((row: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-4 py-2">{row.month}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {row.serviceRevenue.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {row.governmentCharges.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right font-semibold">AED {row.totalRevenue.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{row.billingsCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {reportType === 'payment-analysis' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Analysis</h3>
+                    <p className="text-gray-600">Analysis of payment patterns and revenue breakdown</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-blue-900">Total Billings</h4>
+                      <p className="text-2xl font-bold text-blue-600">{reportData.totalBillings}</p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-green-900">Total Revenue</h4>
+                      <p className="text-2xl font-bold text-green-600">AED {reportData.totalRevenue.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-purple-900">Service Revenue (Profit)</h4>
+                      <p className="text-2xl font-bold text-purple-600">AED {reportData.serviceRevenue.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-orange-900">Government Charges</h4>
+                      <p className="text-2xl font-bold text-orange-600">AED {reportData.governmentCharges.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-gray-900 mb-3">Average Billing Amount</h4>
+                    <p className="text-xl font-bold text-gray-700">AED {reportData.averageBillingAmount.toFixed(2)}</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-3">Payment Methods Distribution</h4>
+                    <div className="space-y-2">
+                      {Object.entries(reportData.paymentMethods).map(([method, count]: [string, any]) => (
+                        <div key={method} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span className="capitalize">{method.replace('_', ' ')}</span>
+                          <span className="font-semibold">{count} transactions</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {reportType === 'service-performance' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Service Performance Report</h3>
+                    <p className="text-gray-600">Performance metrics for different service categories</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left">Service Name</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Count</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Total Revenue</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Profit</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Government Charges</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Avg. Profit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.map((service: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-4 py-2">{service.name}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{service.count}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {service.revenue.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right font-medium text-green-600">AED {service.profit.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right text-blue-600">AED {service.governmentCharges.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">AED {service.averageProfit.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-6">
+                <button
+                  onClick={() => {
+                    // Export report as CSV
+                    const csvData = reportType === 'monthly-revenue'
+                      ? reportData.map((row: any) => [row.month, row.serviceRevenue, row.governmentCharges, row.totalRevenue, row.billingsCount])
+                      : reportType === 'service-performance'
+                      ? reportData.map((service: any) => [service.name, service.count, service.revenue, service.profit, service.governmentCharges, service.averageProfit])
+                      : [];
+
+                    if (csvData.length > 0) {
+                      const headers = reportType === 'monthly-revenue'
+                        ? ['Month', 'Service Revenue (Profit)', 'Government Charges', 'Total Revenue', 'Billings Count']
+                        : reportType === 'service-performance'
+                        ? ['Service Name', 'Count', 'Total Revenue', 'Profit', 'Government Charges', 'Average Profit']
+                        : ['Service Name', 'Count', 'Total Revenue', 'Average Amount'];
+
+                      const csvContent = [
+                        headers.join(','),
+                        ...csvData.map((row: any[]) => row.join(','))
+                      ].join('\n');
+
+                      const blob = new Blob([csvContent], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `${reportType}-report-${new Date().toISOString().split('T')[0]}.csv`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Export CSV
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportData(null);
+                    setReportType('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>
