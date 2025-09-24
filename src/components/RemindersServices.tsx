@@ -1304,15 +1304,17 @@ const RemindersServices: React.FC = () => {
                       <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                         <div className="flex items-center space-x-1">
                           <Calendar className="w-4 h-4" />
-                          <span>Due: {reminder.dueDate}</span>
+                          <span>Due: {new Date(reminder.reminder_date).toLocaleDateString()}</span>
                         </div>
-                        <div className="flex items-center space-x-1">
-                          <User className="w-4 h-4" />
-                          <span>Assigned to: {reminder.assignedTo}</span>
-                        </div>
+                        {reminder.assigned_to && (
+                          <div className="flex items-center space-x-1">
+                            <User className="w-4 h-4" />
+                            <span>Assigned to: {reminder.assigned_to}</span>
+                          </div>
+                        )}
                         <div className="flex items-center space-x-1">
                           <Clock className="w-4 h-4" />
-                          <span>Created: {reminder.createdDate}</span>
+                          <span>Created: {new Date(reminder.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
                     </div>

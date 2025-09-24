@@ -12,6 +12,9 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) => {
   const { user, logout, isSuperAdmin } = useAuth();
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   // Load total unread count
   useEffect(() => {
@@ -32,6 +35,57 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     const interval = setInterval(loadUnreadCount, 10000);
     return () => clearInterval(interval);
   }, [user?.service_employee_id]);
+
+  const handleSearch = async (term: string) => {
+    setSearchTerm(term);
+    if (term.trim().length < 2) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    try {
+      // Search companies
+      const companies = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
+      const filteredCompanies = companies.filter((company: any) =>
+        company.company_name?.toLowerCase().includes(term.toLowerCase()) ||
+        company.license_no?.toLowerCase().includes(term.toLowerCase()) ||
+        company.email1?.toLowerCase().includes(term.toLowerCase())
+      ).map((company: any) => ({
+        ...company,
+        type: 'company',
+        displayName: company.company_name,
+        subtitle: company.license_no || company.email1
+      }));
+
+      // Search services
+      const services = await dbHelpers.getServices();
+      const filteredServices = services.filter((service: any) =>
+        service.name?.toLowerCase().includes(term.toLowerCase()) ||
+        service.category?.toLowerCase().includes(term.toLowerCase())
+      ).map((service: any) => ({
+        ...service,
+        type: 'service',
+        displayName: service.name,
+        subtitle: service.category
+      }));
+
+      setSearchResults([...filteredCompanies.slice(0, 5), ...filteredServices.slice(0, 5)]);
+      setShowSearchResults(true);
+    } catch (error) {
+      console.error('Error searching:', error);
+    }
+  };
+
+  const handleSearchResultClick = (result: any) => {
+    if (result.type === 'company') {
+      onNavigate('companies');
+    } else if (result.type === 'service') {
+      onNavigate('service-management');
+    }
+    setShowSearchResults(false);
+    setSearchTerm('');
+  };
   const allNavigationItems = [
     { id: 'dashboard', label: 'Home', icon: Home },
     { id: 'customer-registration', label: 'Customer Registration', icon: Plus },
@@ -80,8 +134,36 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
                 <input
                   type="text"
                   placeholder="Search companies, services..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  onFocus={() => searchTerm.length >= 2 && setShowSearchResults(true)}
+                  onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
                   className="pl-10 pr-4 py-2 w-80 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+
+                {/* Search Results Dropdown */}
+                {showSearchResults && searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                    {searchResults.map((result, index) => (
+                      <button
+                        key={`${result.type}-${result.id}-${index}`}
+                        onClick={() => handleSearchResultClick(result)}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-center space-x-3"
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold ${
+                          result.type === 'company' ? 'bg-blue-500' : 'bg-green-500'
+                        }`}>
+                          {result.type === 'company' ? 'C' : 'S'}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{result.displayName}</p>
+                          <p className="text-sm text-gray-500">{result.subtitle}</p>
+                        </div>
+                        <div className="text-xs text-gray-400 capitalize">{result.type}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center space-x-2">

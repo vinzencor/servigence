@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save } from 'lucide-react';
 import { mockServices, mockInvoices } from '../data/mockData';
 import { Company, Individual, ServiceType, ServiceEmployee, ServiceBilling as ServiceBillingType } from '../types';
-import { dbHelpers } from '../lib/supabase';
+import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 const ServiceBilling: React.FC = () => {
@@ -73,8 +73,25 @@ const ServiceBilling: React.FC = () => {
   ];
 
   useEffect(() => {
+    console.log('ServiceBilling component mounted, user:', user);
+    console.log('Environment variables:', {
+      url: import.meta.env.VITE_SUPABASE_URL,
+      key: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Missing'
+    });
     loadData();
     loadServiceBillings();
+  }, []);
+
+  // Add a refresh mechanism that can be triggered
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'company_updated') {
+        loadData(); // Refresh companies when a company is updated
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const loadData = async () => {
@@ -154,6 +171,30 @@ const ServiceBilling: React.FC = () => {
       setServiceBillings(billingsData || []);
     } catch (error) {
       console.error('Error loading service billings:', error);
+    }
+  };
+
+  const testSupabaseConnection = async () => {
+    try {
+      console.log('Testing Supabase connection...');
+
+      // Test basic connection
+      const { data: testData, error } = await supabase
+        .from('service_types')
+        .select('id, name')
+        .limit(1);
+
+      if (error) {
+        console.error('Supabase connection error:', error);
+        alert('Supabase connection failed: ' + error.message);
+        return;
+      }
+
+      console.log('Supabase connection successful:', testData);
+      alert('Supabase connection successful! Found ' + (testData?.length || 0) + ' service types');
+    } catch (error) {
+      console.error('Connection test error:', error);
+      alert('Connection test failed: ' + error);
     }
   };
 
@@ -286,7 +327,7 @@ const ServiceBilling: React.FC = () => {
       setLoading(true);
 
       // Get all service billings
-      const billings = await dbHelpers.getServiceBillings();
+      const billings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
 
       // Filter by company if selected
       const filteredBillings = selectedCompanyForReport
@@ -331,7 +372,7 @@ const ServiceBilling: React.FC = () => {
     try {
       setLoading(true);
 
-      const billings = await dbHelpers.getServiceBillings();
+      const billings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
       const filteredBillings = selectedCompanyForReport
         ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
         : billings;
@@ -363,11 +404,45 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
+  const exportBillingList = () => {
+    try {
+      // Prepare CSV data
+      const csvData = [
+        ['Invoice Number', 'Date', 'Client', 'Service', 'Quantity', 'Service Charges', 'Government Charges', 'Total Amount', 'Status'],
+        ...serviceBillings.map((billing: any) => [
+          billing.invoice_number || 'N/A',
+          new Date(billing.service_date).toLocaleDateString(),
+          billing.company?.company_name || billing.individual?.individual_name || 'N/A',
+          billing.service_type?.name || 'N/A',
+          billing.quantity || 1,
+          parseFloat(billing.typing_charges || 0).toFixed(2),
+          parseFloat(billing.government_charges || 0).toFixed(2),
+          parseFloat(billing.total_amount || 0).toFixed(2),
+          billing.status?.replace('_', ' ').toUpperCase() || 'PENDING'
+        ])
+      ];
+
+      const csvContent = csvData.map(row => row.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `service-billings-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      alert('✅ Billing list exported successfully!');
+    } catch (error) {
+      console.error('Error exporting billing list:', error);
+      alert('❌ Error exporting billing list. Please try again.');
+    }
+  };
+
   const generateServicePerformanceReport = async () => {
     try {
       setLoading(true);
 
-      const billings = await dbHelpers.getServiceBillings();
+      const billings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
       const filteredBillings = selectedCompanyForReport
         ? billings.filter(b => b.company_id === selectedCompanyForReport || b.individual_id === selectedCompanyForReport)
         : billings;
@@ -640,14 +715,14 @@ const ServiceBilling: React.FC = () => {
         });
       }
 
-      // Create vendor transaction if vendor is assigned
+      // Create vendor transaction if vendor is assigned - use 'expense' type instead of 'vendor_payment'
       if (billingForm.assignedVendorId && parseFloat(billingForm.vendorCost) > 0) {
         const selectedVendor = vendors.find(v => v.id === billingForm.assignedVendorId);
         await dbHelpers.createAccountTransaction({
           service_billing_id: createdBilling.id,
           company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
           individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
-          transaction_type: 'vendor_payment',
+          transaction_type: 'expense',
           category: 'Vendor Expenses',
           description: `Vendor payment to ${selectedVendor?.name || 'Vendor'} for ${selectedService.name} (${invoiceNumber})`,
           amount: parseFloat(billingForm.vendorCost),
@@ -886,9 +961,19 @@ const ServiceBilling: React.FC = () => {
                     <option value="this_quarter">This Quarter</option>
                     <option value="this_year">This Year</option>
                   </select>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+                  <button
+                    onClick={exportBillingList}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                  >
                     <Download className="w-4 h-4" />
                     <span>Export</span>
+                  </button>
+                  <button
+                    onClick={testSupabaseConnection}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                  >
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Test DB</span>
                   </button>
                 </div>
               </div>

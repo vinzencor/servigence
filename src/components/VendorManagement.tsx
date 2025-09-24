@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Plus,
@@ -24,6 +24,7 @@ import {
   Settings,
   MoreVertical
 } from 'lucide-react';
+import { dbHelpers } from '../lib/supabase';
 
 interface Vendor {
   id: string;
@@ -51,54 +52,24 @@ interface Vendor {
 }
 
 const VendorManagement: React.FC = () => {
-  const [vendors] = useState<Vendor[]>([
-    {
-      id: '1',
-      name: 'Emirates Insurance Brokers',
-      type: 'insurance',
-      email: 'info@emiratesinsurance.ae',
-      phone: '+971-4-123-4567',
-      address: 'Dubai International Financial Centre',
-      services: ['Health Insurance', 'Life Insurance', 'Property Insurance'],
-      rating: 4.8,
-      status: 'active',
-      registrationDate: '2023-01-15',
-      contactPerson: 'Ahmed Al Mansouri',
-      website: 'www.emiratesinsurance.ae',
-      licenseNumber: 'INS-2023-001',
-      vatNumber: '100123456700003',
-      paymentTerms: 'Net 30',
-      performanceMetrics: {
-        totalJobs: 45,
-        completedJobs: 43,
-        averageRating: 4.8,
-        onTimeDelivery: 95.6
-      }
-    },
-    {
-      id: '2',
-      name: 'Gulf Tax Consultancy',
-      type: 'tax_consultant',
-      email: 'contact@gulftax.ae',
-      phone: '+971-4-987-6543',
-      address: 'Business Bay, Dubai',
-      services: ['VAT Registration', 'Tax Filing', 'Compliance Review'],
-      rating: 4.6,
-      status: 'active',
-      registrationDate: '2023-02-20',
-      contactPerson: 'Sarah Johnson',
-      website: 'www.gulftax.ae',
-      licenseNumber: 'TAX-2023-002',
-      vatNumber: '100987654300003',
-      paymentTerms: 'Net 15',
-      performanceMetrics: {
-        totalJobs: 32,
-        completedJobs: 30,
-        averageRating: 4.6,
-        onTimeDelivery: 93.8
-      }
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadVendors();
+  }, []);
+
+  const loadVendors = async () => {
+    setLoading(true);
+    try {
+      const vendorsData = await dbHelpers.getVendors();
+      setVendors(vendorsData || []);
+    } catch (error) {
+      console.error('Error loading vendors:', error);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'vendors' | 'contracts' | 'performance'>('overview');
@@ -123,6 +94,30 @@ const VendorManagement: React.FC = () => {
     renewalDate: ''
   });
 
+  // Vendor Form State
+  const [vendorForm, setVendorForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    contactPerson: '',
+    serviceCategory: '',
+    paymentTerms: 'Net 30'
+  });
+  const [vendorFormErrors, setVendorFormErrors] = useState<Record<string, string>>({});
+
+  // Contract Form State
+  const [contractForm, setContractForm] = useState({
+    vendorId: '',
+    title: '',
+    contractType: '',
+    value: '',
+    startDate: '',
+    endDate: '',
+    terms: ''
+  });
+  const [contractFormErrors, setContractFormErrors] = useState<Record<string, string>>({});
+
   const getVendorTypeColor = (type: string) => {
     switch (type) {
       case 'insurance': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -143,12 +138,167 @@ const VendorManagement: React.FC = () => {
     }
   };
 
-  const filteredVendors = vendors.filter(vendor => {
-    const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         vendor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         vendor.services.some(service => service.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Vendor form validation
+  const validateVendorForm = () => {
+    const errors: Record<string, string> = {};
 
-    const matchesFilter = filterType === 'all' || vendor.type === filterType;
+    if (!vendorForm.name.trim()) {
+      errors.name = 'Vendor name is required';
+    }
+    if (!vendorForm.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorForm.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    if (!vendorForm.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    }
+    if (!vendorForm.contactPerson.trim()) {
+      errors.contactPerson = 'Contact person is required';
+    }
+    if (!vendorForm.serviceCategory.trim()) {
+      errors.serviceCategory = 'Service category is required';
+    }
+
+    setVendorFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Handle vendor form submission
+  const handleCreateVendor = async () => {
+    try {
+      if (!validateVendorForm()) {
+        return;
+      }
+
+      const vendorData = {
+        name: vendorForm.name.trim(),
+        email: vendorForm.email.trim(),
+        phone: vendorForm.phone.trim(),
+        address: vendorForm.address.trim() || null,
+        contact_person: vendorForm.contactPerson.trim(),
+        service_category: vendorForm.serviceCategory.trim(),
+        payment_terms: vendorForm.paymentTerms,
+        is_active: true
+      };
+
+      console.log('Creating vendor with data:', vendorData);
+      const result = await dbHelpers.createVendor(vendorData);
+      console.log('Vendor created successfully:', result);
+
+      // Reset form and close modal
+      setVendorForm({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        contactPerson: '',
+        serviceCategory: '',
+        paymentTerms: 'Net 30'
+      });
+      setVendorFormErrors({});
+      setShowAddVendor(false);
+      alert('✅ Vendor registered successfully!');
+
+      // Reload vendors to show the new vendor
+      await loadVendors();
+
+    } catch (error) {
+      console.error('Error creating vendor:', error);
+      let errorMessage = 'Error creating vendor. ';
+      if (error instanceof Error) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+
+  // Contract form validation
+  const validateContractForm = () => {
+    const errors: Record<string, string> = {};
+
+    if (!contractForm.vendorId) {
+      errors.vendorId = 'Please select a vendor';
+    }
+    if (!contractForm.title.trim()) {
+      errors.title = 'Contract title is required';
+    }
+    if (!contractForm.contractType) {
+      errors.contractType = 'Contract type is required';
+    }
+    if (!contractForm.value || parseFloat(contractForm.value) <= 0) {
+      errors.value = 'Please enter a valid contract value';
+    }
+    if (!contractForm.startDate) {
+      errors.startDate = 'Start date is required';
+    }
+    if (!contractForm.endDate) {
+      errors.endDate = 'End date is required';
+    }
+    if (contractForm.startDate && contractForm.endDate && new Date(contractForm.startDate) >= new Date(contractForm.endDate)) {
+      errors.endDate = 'End date must be after start date';
+    }
+
+    setContractFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Handle contract form submission
+  const handleCreateContract = async () => {
+    try {
+      if (!validateContractForm()) {
+        return;
+      }
+
+      const contractData = {
+        vendor_id: contractForm.vendorId,
+        title: contractForm.title.trim(),
+        contract_type: contractForm.contractType,
+        value: parseFloat(contractForm.value),
+        start_date: contractForm.startDate,
+        end_date: contractForm.endDate,
+        terms: contractForm.terms.trim() || null,
+        status: 'active'
+      };
+
+      console.log('Creating contract with data:', contractData);
+      const result = await dbHelpers.createContract(contractData);
+      console.log('Contract created successfully:', result);
+
+      // Reset form and close modal
+      setContractForm({
+        vendorId: '',
+        title: '',
+        contractType: '',
+        value: '',
+        startDate: '',
+        endDate: '',
+        terms: ''
+      });
+      setContractFormErrors({});
+      setShowNewContract(false);
+      alert('✅ Contract created successfully!');
+
+    } catch (error) {
+      console.error('Error creating contract:', error);
+      let errorMessage = 'Error creating contract. ';
+      if (error instanceof Error) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+
+  const filteredVendors = vendors.filter(vendor => {
+    const matchesSearch = vendor.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         vendor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         vendor.service_category?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesFilter = filterType === 'all' || vendor.service_category === filterType;
 
     return matchesSearch && matchesFilter;
   });
@@ -679,11 +829,173 @@ const VendorManagement: React.FC = () => {
               </div>
             </div>
             <div className="p-6">
-              <div className="text-center py-8">
-                <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Add Vendor Form</h3>
-                <p className="text-gray-600">Vendor registration form will be implemented here</p>
-              </div>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateVendor(); }} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Vendor Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Vendor Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={vendorForm.name}
+                      onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        vendorFormErrors.name ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter vendor name"
+                    />
+                    {vendorFormErrors.name && (
+                      <p className="text-red-500 text-sm mt-1">{vendorFormErrors.name}</p>
+                    )}
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      value={vendorForm.email}
+                      onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        vendorFormErrors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter email address"
+                    />
+                    {vendorFormErrors.email && (
+                      <p className="text-red-500 text-sm mt-1">{vendorFormErrors.email}</p>
+                    )}
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={vendorForm.phone}
+                      onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        vendorFormErrors.phone ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter phone number"
+                    />
+                    {vendorFormErrors.phone && (
+                      <p className="text-red-500 text-sm mt-1">{vendorFormErrors.phone}</p>
+                    )}
+                  </div>
+
+                  {/* Contact Person */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contact Person *
+                    </label>
+                    <input
+                      type="text"
+                      value={vendorForm.contactPerson}
+                      onChange={(e) => setVendorForm({ ...vendorForm, contactPerson: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        vendorFormErrors.contactPerson ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter contact person name"
+                    />
+                    {vendorFormErrors.contactPerson && (
+                      <p className="text-red-500 text-sm mt-1">{vendorFormErrors.contactPerson}</p>
+                    )}
+                  </div>
+
+                  {/* Service Category */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Category *
+                    </label>
+                    <select
+                      value={vendorForm.serviceCategory}
+                      onChange={(e) => setVendorForm({ ...vendorForm, serviceCategory: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        vendorFormErrors.serviceCategory ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select service category</option>
+                      <option value="Insurance">Insurance</option>
+                      <option value="Tax Consultancy">Tax Consultancy</option>
+                      <option value="Legal Services">Legal Services</option>
+                      <option value="Translation">Translation</option>
+                      <option value="Attestation">Attestation</option>
+                      <option value="Business Setup">Business Setup</option>
+                      <option value="Accounting">Accounting</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {vendorFormErrors.serviceCategory && (
+                      <p className="text-red-500 text-sm mt-1">{vendorFormErrors.serviceCategory}</p>
+                    )}
+                  </div>
+
+                  {/* Payment Terms */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Terms
+                    </label>
+                    <select
+                      value={vendorForm.paymentTerms}
+                      onChange={(e) => setVendorForm({ ...vendorForm, paymentTerms: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Net 15">Net 15</option>
+                      <option value="Net 30">Net 30</option>
+                      <option value="Net 45">Net 45</option>
+                      <option value="Net 60">Net 60</option>
+                      <option value="Due on Receipt">Due on Receipt</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address
+                  </label>
+                  <textarea
+                    value={vendorForm.address}
+                    onChange={(e) => setVendorForm({ ...vendorForm, address: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter vendor address"
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddVendor(false);
+                      setVendorForm({
+                        name: '',
+                        email: '',
+                        phone: '',
+                        address: '',
+                        contactPerson: '',
+                        serviceCategory: '',
+                        paymentTerms: 'Net 30'
+                      });
+                      setVendorFormErrors({});
+                    }}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Register Vendor
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -705,11 +1017,177 @@ const VendorManagement: React.FC = () => {
               </div>
             </div>
             <div className="p-6">
-              <div className="text-center py-8">
-                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Contract Creation Form</h3>
-                <p className="text-gray-600">Contract creation form will be implemented here</p>
-              </div>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateContract(); }} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Vendor Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Vendor *
+                    </label>
+                    <select
+                      value={contractForm.vendorId}
+                      onChange={(e) => setContractForm({ ...contractForm, vendorId: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        contractFormErrors.vendorId ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select a vendor</option>
+                      {vendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                        </option>
+                      ))}
+                    </select>
+                    {contractFormErrors.vendorId && (
+                      <p className="text-red-500 text-sm mt-1">{contractFormErrors.vendorId}</p>
+                    )}
+                  </div>
+
+                  {/* Contract Title */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contract Title *
+                    </label>
+                    <input
+                      type="text"
+                      value={contractForm.title}
+                      onChange={(e) => setContractForm({ ...contractForm, title: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        contractFormErrors.title ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter contract title"
+                    />
+                    {contractFormErrors.title && (
+                      <p className="text-red-500 text-sm mt-1">{contractFormErrors.title}</p>
+                    )}
+                  </div>
+
+                  {/* Contract Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contract Type *
+                    </label>
+                    <select
+                      value={contractForm.contractType}
+                      onChange={(e) => setContractForm({ ...contractForm, contractType: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        contractFormErrors.contractType ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select contract type</option>
+                      <option value="Service Agreement">Service Agreement</option>
+                      <option value="Maintenance Contract">Maintenance Contract</option>
+                      <option value="Consulting Agreement">Consulting Agreement</option>
+                      <option value="Supply Contract">Supply Contract</option>
+                      <option value="Partnership Agreement">Partnership Agreement</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {contractFormErrors.contractType && (
+                      <p className="text-red-500 text-sm mt-1">{contractFormErrors.contractType}</p>
+                    )}
+                  </div>
+
+                  {/* Contract Value */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contract Value (AED) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={contractForm.value}
+                      onChange={(e) => setContractForm({ ...contractForm, value: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        contractFormErrors.value ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter contract value"
+                    />
+                    {contractFormErrors.value && (
+                      <p className="text-red-500 text-sm mt-1">{contractFormErrors.value}</p>
+                    )}
+                  </div>
+
+                  {/* Start Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={contractForm.startDate}
+                      onChange={(e) => setContractForm({ ...contractForm, startDate: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        contractFormErrors.startDate ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    />
+                    {contractFormErrors.startDate && (
+                      <p className="text-red-500 text-sm mt-1">{contractFormErrors.startDate}</p>
+                    )}
+                  </div>
+
+                  {/* End Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={contractForm.endDate}
+                      onChange={(e) => setContractForm({ ...contractForm, endDate: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        contractFormErrors.endDate ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    />
+                    {contractFormErrors.endDate && (
+                      <p className="text-red-500 text-sm mt-1">{contractFormErrors.endDate}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Terms and Conditions */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Terms and Conditions
+                  </label>
+                  <textarea
+                    value={contractForm.terms}
+                    onChange={(e) => setContractForm({ ...contractForm, terms: e.target.value })}
+                    rows={4}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter contract terms and conditions"
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewContract(false);
+                      setContractForm({
+                        vendorId: '',
+                        title: '',
+                        contractType: '',
+                        value: '',
+                        startDate: '',
+                        endDate: '',
+                        terms: ''
+                      });
+                      setContractFormErrors({});
+                    }}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Create Contract
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

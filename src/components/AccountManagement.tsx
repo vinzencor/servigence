@@ -31,7 +31,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface Account {
   id: string;
   companyId: string;
-  type: 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment';
+  type: 'service_charge' | 'government_fee' | 'expense' | 'refund';
   category: string;
   description: string;
   amount: number;
@@ -161,7 +161,7 @@ const AccountManagement: React.FC = () => {
 
   // Transaction Form State
   const [transactionForm, setTransactionForm] = useState({
-    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'vendor_payment',
+    type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
     category: '',
     description: '',
     amount: '',
@@ -188,9 +188,13 @@ const AccountManagement: React.FC = () => {
         alert('Please enter a category');
         return;
       }
+      if (!transactionForm.date) {
+        alert('Please select a transaction date');
+        return;
+      }
 
       const amount = parseFloat(transactionForm.amount);
-      const gstRate = parseFloat(transactionForm.gstRate);
+      const gstRate = parseFloat(transactionForm.gstRate) || 5;
       const gstAmount = (amount * gstRate) / 100;
 
       // Prepare transaction data for database

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -68,11 +69,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       }
       
-      // For staff users, we would typically validate against the database
-      // For now, let's implement a simple check with proper service employee mapping
-      // In a real implementation, you would hash the password and compare with database
+      // Try to authenticate against service employees database
+      try {
+        const { data: employees, error } = await supabase
+          .from('service_employees')
+          .select('*')
+          .eq('email', email)
+          .eq('is_active', true);
 
-      // Mock staff user validation with service employee mapping
+        if (error) throw error;
+
+        if (employees && employees.length > 0) {
+          const employee = employees[0];
+
+          // Check if employee has password hash (for new employees with login credentials)
+          if (employee.password_hash) {
+            const inputPasswordHash = btoa(password);
+            if (employee.password_hash === inputPasswordHash) {
+              const staffUser: User = {
+                id: employee.id,
+                email: employee.email,
+                name: employee.name,
+                role: 'staff',
+                service_employee_id: employee.id
+              };
+
+              setUser(staffUser);
+              localStorage.setItem('user', JSON.stringify(staffUser));
+              return true;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Database authentication error:', error);
+      }
+
+      // Fallback to hardcoded staff users for existing users
       const staffUserMappings: Record<string, { name: string; service_employee_id: string }> = {
         'meenakshi@educare.com': { name: 'Meenakshi', service_employee_id: '4affba2f-5321-4579-a204-b767e53ca2d7' },
         'ahmed@servigence.com': { name: 'Ahmed Al-Rashid', service_employee_id: '0e39ccc9-c8a0-40f0-85fa-cbdfa0ca84a9' },

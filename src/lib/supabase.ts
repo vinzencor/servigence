@@ -625,6 +625,24 @@ export const dbHelpers = {
     return data
   },
 
+  async createContract(contract: any) {
+    console.log('Creating contract:', contract);
+
+    const { data, error } = await supabase
+      .from('contracts')
+      .insert([contract])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating contract:', error);
+      throw error;
+    }
+
+    console.log('Contract created:', data);
+    return data
+  },
+
   // Chat Functions
   async getConversations(userId: string) {
     const { data, error } = await supabase
