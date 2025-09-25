@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Edit, Trash2, Phone, Mail, FileText, Users, Eye, MoreVertical, Building2, Calendar, DollarSign, UserPlus, FileEdit } from 'lucide-react';
+import { Search, Filter, Edit, Trash2, Phone, Mail, FileText, Users, Eye, MoreVertical, Building2, Calendar, DollarSign, UserPlus, FileEdit, Download, ExternalLink, X } from 'lucide-react';
 import { Company } from '../types';
-import { dbHelpers } from '../lib/supabase';
+import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface CompaniesSectionProps {
@@ -9,13 +9,15 @@ interface CompaniesSectionProps {
   onManageEmployees?: (company: Company) => void;
   onEditCompany?: (company: Company) => void;
   onManageDocuments?: (company: Company) => void;
+  onNavigate?: (view: string) => void;
 }
 
 const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   companies = [],
   onManageEmployees,
   onEditCompany,
-  onManageDocuments
+  onManageDocuments,
+  onNavigate
 }) => {
   const { user, isSuperAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +39,8 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   const [individualToDelete, setIndividualToDelete] = useState<any>(null);
   const [showIndividualNotes, setShowIndividualNotes] = useState(false);
   const [individualNotes, setIndividualNotes] = useState('');
+  const [companyDocuments, setCompanyDocuments] = useState<any[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
 
   // Load companies and individuals from Supabase on component mount
   useEffect(() => {
@@ -145,9 +149,29 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
     }
   };
 
+  const loadCompanyDocuments = async (companyId: string) => {
+    setLoadingDocuments(true);
+    try {
+      const { data, error } = await supabase
+        .from('company_documents')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCompanyDocuments(data || []);
+    } catch (error) {
+      console.error('Error loading company documents:', error);
+      setCompanyDocuments([]);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const handleViewDetails = (company: Company) => {
     setSelectedCompany(company);
     setShowDetails(true);
+    loadCompanyDocuments(company.id);
   };
 
   const handleAddNotes = (company: Company) => {
@@ -365,7 +389,10 @@ This action cannot be undone. Are you sure?`;
                 </select>
               </div>
 
-              <button className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+              <button
+                onClick={() => onNavigate?.('customer-registration')}
+                className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+              >
                 <Plus className="w-5 h-5" />
                 <span>New Company</span>
               </button>
@@ -738,6 +765,104 @@ This action cannot be undone. Are you sure?`;
                   </div>
                 </div>
               </div>
+
+              {/* Documents Section */}
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Documents & Certificates</h3>
+
+                {loadingDocuments ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-600">Loading documents...</span>
+                  </div>
+                ) : companyDocuments.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {companyDocuments.map((doc) => (
+                      <div key={doc.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{doc.title}</h4>
+                            {doc.document_number && (
+                              <p className="text-sm text-gray-600">#{doc.document_number}</p>
+                            )}
+                          </div>
+                          {doc.file_attachments && doc.file_attachments[0] && (
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => window.open(doc.file_attachments[0].url, '_blank')}
+                                className="p-1 text-blue-600 hover:text-blue-800 transition-colors"
+                                title="View Document"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = doc.file_attachments[0].url;
+                                  link.download = doc.file_attachments[0].name || doc.title;
+                                  link.click();
+                                }}
+                                className="p-1 text-green-600 hover:text-green-800 transition-colors"
+                                title="Download Document"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 text-sm">
+                          {doc.expiry_date && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Expiry Date:</span>
+                              <span className={`font-medium ${
+                                new Date(doc.expiry_date) < new Date()
+                                  ? 'text-red-600'
+                                  : new Date(doc.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                                  ? 'text-yellow-600'
+                                  : 'text-green-600'
+                              }`}>
+                                {new Date(doc.expiry_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Uploaded:</span>
+                            <span className="text-gray-900">
+                              {new Date(doc.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+
+                          {doc.file_attachments && doc.file_attachments[0] && (
+                            <div className="mt-3">
+                              {doc.file_attachments[0].type?.startsWith('image/') ? (
+                                <img
+                                  src={doc.file_attachments[0].url}
+                                  alt={doc.title}
+                                  className="w-full h-32 object-cover rounded border border-gray-200"
+                                />
+                              ) : (
+                                <div className="flex items-center space-x-2 p-2 bg-white rounded border border-gray-200">
+                                  <FileText className="w-6 h-6 text-gray-600" />
+                                  <span className="text-sm text-gray-700 truncate">
+                                    {doc.file_attachments[0].name || doc.title}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No documents uploaded for this company</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1037,10 +1162,6 @@ const Plus = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const X = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
+
 
 export default CompaniesSection;

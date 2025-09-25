@@ -150,7 +150,7 @@ function AppContent() {
       case 'dashboard':
         return <Dashboard onNavigate={setCurrentView} />;
       case 'customer-registration':
-        return <CustomerRegistration onSave={handleSaveCompany} onSaveIndividual={handleSaveIndividual} />;
+        return <CustomerRegistration onSave={handleSaveCompany} onSaveIndividual={handleSaveIndividual} onNavigate={setCurrentView} />;
       case 'companies':
         return (
           <CompaniesSection
@@ -158,6 +158,7 @@ function AppContent() {
             onManageEmployees={handleManageEmployees}
             onEditCompany={handleEditCompany}
             onManageDocuments={handleManageDocuments}
+            onNavigate={setCurrentView}
           />
         );
       case 'company-employees':

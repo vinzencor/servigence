@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User } from 'lucide-react';
+import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User, Upload, FileText, Trash2, Eye } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { Company, Individual, ServiceEmployee } from '../types';
-import { dbHelpers } from '../lib/supabase';
+import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { emailService } from '../lib/emailService';
 
 interface CustomerRegistrationProps {
   onSave: (company: Company) => void;
   onSaveIndividual?: (individual: Individual) => void;
+  onNavigate?: (view: string) => void;
 }
 
-const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onSaveIndividual }) => {
+const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onSaveIndividual, onNavigate }) => {
   const { user, isSuperAdmin } = useAuth();
   const [registrationType, setRegistrationType] = useState<'company' | 'individual'>('company');
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
@@ -55,6 +58,18 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Document upload state
+  const [documents, setDocuments] = useState<Array<{
+    id: string;
+    title: string;
+    documentNumber: string;
+    expiryDate: string;
+    file: File | null;
+    fileUrl?: string;
+    preview?: string;
+  }>>([]);
+  const [showAddDocument, setShowAddDocument] = useState(false);
 
   useEffect(() => {
     loadServiceEmployees();
@@ -124,7 +139,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     if (registrationType === 'company') {
       if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
       if (!formData.companyType) newErrors.companyType = 'Company type is required';
-      if (!formData.companyGrade) newErrors.companyGrade = 'Company grade is required';
+      // if (!formData.companyGrade) newErrors.companyGrade = 'Company grade is required';
     } else {
       if (!formData.individualName.trim()) newErrors.individualName = 'Individual name is required';
       if (!formData.nationality?.trim()) newErrors.nationality = 'Nationality is required';
@@ -150,6 +165,133 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  // Document handling functions
+  const addDocument = () => {
+    const newDoc = {
+      id: Date.now().toString(),
+      title: '',
+      documentNumber: '',
+      expiryDate: '',
+      file: null,
+      preview: undefined
+    };
+    setDocuments([...documents, newDoc]);
+    setShowAddDocument(true);
+  };
+
+  const updateDocument = (id: string, field: string, value: any) => {
+    setDocuments(documents.map(doc =>
+      doc.id === id ? { ...doc, [field]: value } : doc
+    ));
+  };
+
+  const removeDocument = (id: string) => {
+    setDocuments(documents.filter(doc => doc.id !== id));
+  };
+
+  const handleFileUpload = (id: string, file: File) => {
+    console.log('🔄 Starting file upload:', {
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      documentId: id,
+      isImage: file.type.startsWith('image/')
+    });
+
+    // Update the file immediately
+    updateDocument(id, 'file', file);
+
+    // Generate preview for images
+    if (file.type.startsWith('image/')) {
+      console.log('📸 Processing image file...');
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        const preview = e.target?.result as string;
+        console.log('✅ Preview generated successfully:', {
+          fileName: file.name,
+          previewLength: preview?.length,
+          previewStart: preview?.substring(0, 50) + '...'
+        });
+        updateDocument(id, 'preview', preview);
+      };
+
+      reader.onerror = (error) => {
+        console.error('❌ Error reading file:', error);
+        updateDocument(id, 'preview', 'error');
+      };
+
+      reader.readAsDataURL(file);
+    } else {
+      console.log('📄 Non-image file, setting placeholder preview');
+      updateDocument(id, 'preview', 'non-image');
+    }
+  };
+
+  const uploadDocumentToSupabase = async (file: File, companyId: string, docTitle: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${companyId}/${docTitle.replace(/\s+/g, '_')}_${Date.now()}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .upload(fileName, file);
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('documents')
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  };
+
+  const createReminder = async (companyId: string, docTitle: string, expiryDate: string, documentType: string) => {
+    if (!expiryDate) {
+      console.log('⚠️ No expiry date provided, skipping reminder creation');
+      return;
+    }
+
+    console.log('📅 Creating reminder for document:', {
+      companyId,
+      docTitle,
+      expiryDate,
+      documentType
+    });
+
+    const reminderDate = new Date(expiryDate);
+    reminderDate.setDate(reminderDate.getDate() - 10); // 10 days before expiry
+
+    const reminderData = {
+      title: `${docTitle} Expiry Reminder`,
+      description: `${docTitle} for company will expire on ${new Date(expiryDate).toLocaleDateString()}. Please renew this document before the expiry date.`,
+      reminder_date: reminderDate.toISOString().split('T')[0],
+      reminder_type: 'document_expiry',
+      document_type: documentType,
+      company_id: companyId,
+      priority: 'high',
+      status: 'active', // Set to 'active' so it shows in dashboard
+      days_before_reminder: 10,
+      enabled: true, // Enable by default so it shows in reminders
+      created_by: user?.name || 'System',
+      assigned_to: user?.name || 'System'
+    };
+
+    console.log('💾 Inserting reminder data:', reminderData);
+
+    const { data, error } = await supabase
+      .from('reminders')
+      .insert([reminderData])
+      .select();
+
+    if (error) {
+      console.error('❌ Error creating reminder:', error);
+      toast.error(`Failed to create reminder for ${docTitle}`);
+    } else {
+      console.log('✅ Reminder created successfully:', data);
+      toast.success(`📅 Reminder created: ${docTitle} expires ${new Date(expiryDate).toLocaleDateString()}`);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -187,34 +329,133 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           employeeCount: 0
         };
 
-        // Save to Supabase
-        await dbHelpers.createCompany({
-          company_name: newCompany.companyName,
-          vat_trn_no: newCompany.vatTrnNo,
-          phone1: newCompany.phone1,
-          phone2: newCompany.phone2,
-          email1: newCompany.email1,
-          email2: newCompany.email2,
-          address: newCompany.address,
-          company_type: newCompany.companyType,
-          license_no: newCompany.licenseNo,
-          mohre_no: newCompany.mohreNo,
-          moi_no: newCompany.moiNo,
-          quota: newCompany.quota,
-          company_grade: newCompany.companyGrade,
-          credit_limit: newCompany.creditLimit,
-          credit_limit_days: newCompany.creditLimitDays,
-          pro_name: newCompany.proName,
-          pro_phone: newCompany.proPhone,
-          pro_email: newCompany.proEmail,
-          date_of_registration: newCompany.dateOfRegistration,
-          created_by: newCompany.createdBy,
-          status: newCompany.status,
-          employee_count: newCompany.employeeCount,
-          assigned_to: formData.assignedTo || null
-        });
+        // Save to Supabase and get the created company ID
+        const { data: createdCompany, error: companyError } = await supabase
+          .from('companies')
+          .insert([{
+            company_name: newCompany.companyName,
+            vat_trn_no: newCompany.vatTrnNo,
+            phone1: newCompany.phone1,
+            phone2: newCompany.phone2,
+            email1: newCompany.email1,
+            email2: newCompany.email2,
+            address: newCompany.address,
+            company_type: newCompany.companyType,
+            license_no: newCompany.licenseNo,
+            mohre_no: newCompany.mohreNo,
+            moi_no: newCompany.moiNo,
+            quota: newCompany.quota,
+            company_grade: newCompany.companyGrade,
+            credit_limit: newCompany.creditLimit,
+            credit_limit_days: newCompany.creditLimitDays,
+            pro_name: newCompany.proName,
+            pro_phone: newCompany.proPhone,
+            pro_email: newCompany.proEmail,
+            date_of_registration: newCompany.dateOfRegistration,
+            created_by: newCompany.createdBy,
+            status: newCompany.status,
+            employee_count: newCompany.employeeCount,
+            assigned_to: formData.assignedTo || null
+          }])
+          .select()
+          .single();
+
+        if (companyError) throw companyError;
+
+        const companyId = createdCompany.id;
+
+        // Handle document uploads and create reminders
+        console.log('📄 Processing documents:', documents.length);
+
+        for (const doc of documents) {
+          console.log('🔄 Processing document:', {
+            hasFile: !!doc.file,
+            hasTitle: !!doc.title,
+            hasDocNumber: !!doc.documentNumber,
+            hasExpiryDate: !!doc.expiryDate,
+            title: doc.title
+          });
+
+          // Process documents that have at least a title (file and document number are optional)
+          if (doc.title) {
+            try {
+              let fileUrl = null;
+
+              // Upload file to Supabase Storage if file exists
+              if (doc.file) {
+                console.log('📤 Uploading file for document:', doc.title);
+                fileUrl = await uploadDocumentToSupabase(doc.file, companyId, doc.title);
+                console.log('✅ File uploaded successfully:', fileUrl);
+              }
+
+              // Save document metadata to database
+              const documentData = {
+                company_id: companyId,
+                title: doc.title,
+                document_number: doc.documentNumber || null,
+                expiry_date: doc.expiryDate || null,
+                file_attachments: fileUrl ? [{
+                  name: doc.file?.name,
+                  url: fileUrl,
+                  type: doc.file?.type,
+                  size: doc.file?.size
+                }] : null,
+                created_by: user?.name || 'System',
+                status: 'active'
+              };
+
+              console.log('💾 Saving document to database:', documentData);
+
+              const { error: docError } = await supabase
+                .from('company_documents')
+                .insert([documentData]);
+
+              if (docError) {
+                console.error('❌ Error saving document:', docError);
+                toast.error(`Failed to save document: ${doc.title}`);
+              } else {
+                console.log('✅ Document saved successfully:', doc.title);
+
+                // Create reminder if expiry date is provided
+                if (doc.expiryDate) {
+                  console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
+                  await createReminder(companyId, doc.title, doc.expiryDate, 'company_document');
+                } else {
+                  console.log('ℹ️ No expiry date for document:', doc.title);
+                }
+              }
+            } catch (error) {
+              console.error('❌ Error processing document:', error);
+              toast.error(`Failed to process document: ${doc.title}`);
+            }
+          } else {
+            console.log('⚠️ Skipping document without title');
+          }
+        }
+
+        // Send welcome email
+        try {
+          const emailSent = await emailService.sendWelcomeEmail({
+            companyName: newCompany.companyName,
+            contactEmail: newCompany.email1
+          });
+
+          if (emailSent) {
+            toast.success('Company registered successfully! Welcome email sent.');
+          } else {
+            toast.success('Company registered successfully! (Email sending failed)');
+          }
+        } catch (emailError) {
+          console.error('Email sending failed:', emailError);
+          toast.success('Company registered successfully! (Email sending failed)');
+        }
 
         onSave(newCompany);
+
+        // Navigate back to companies list
+        setTimeout(() => {
+          onNavigate?.('companies');
+        }, 1500); // Give time for toast to show
       } else {
         const newIndividual: Individual = {
           id: Date.now().toString(),
@@ -587,7 +828,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                   />
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Company Grade <span className="text-red-500">*</span>
                   </label>
@@ -610,7 +851,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                       {errors.companyGrade}
                     </p>
                   )}
-                </div>
+                </div> */}
               </>
             )}
 
@@ -980,6 +1221,196 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                     <AlertCircle className="w-4 h-4 mr-1" />
                     {errors.assignedTo}
                   </p>
+                )}
+              </div>
+            )}
+
+            {/* Document Upload Section - Only for Companies */}
+            {registrationType === 'company' && (
+              <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Documents & Certificates</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Upload company documents and certificates (optional). Documents with expiry dates will automatically create reminders.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addDocument}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 shrink-0"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Add Document</span>
+                </button>
+              </div>
+
+                {documents.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="text-xs text-gray-500 p-2 bg-blue-50 rounded">
+                      Debug: {documents.length} documents in state
+                    </div>
+                    {documents.map((doc, index) => (
+                      <div key={`${doc.id}-${doc.file?.name || 'no-file'}-${doc.preview ? 'has-preview' : 'no-preview'}`} className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium text-gray-900">Document {index + 1}</h4>
+                          <button
+                            type="button"
+                            onClick={() => removeDocument(doc.id)}
+                            className="text-red-600 hover:text-red-800 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Document Title *
+                            </label>
+                            <input
+                              type="text"
+                              value={doc.title}
+                              onChange={(e) => updateDocument(doc.id, 'title', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="e.g., Trade License, MOH Certificate"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Document Number
+                            </label>
+                            <input
+                              type="text"
+                              value={doc.documentNumber}
+                              onChange={(e) => updateDocument(doc.id, 'documentNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Document ID/Number"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Expiry Date (Optional)
+                            </label>
+                            <input
+                              type="date"
+                              value={doc.expiryDate}
+                              onChange={(e) => updateDocument(doc.id, 'expiryDate', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Documents with expiry dates will create automatic reminders
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Upload File (Optional)
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  console.log('🎯 File selected in onChange:', {
+                                    name: file.name,
+                                    type: file.type,
+                                    size: file.size,
+                                    docId: doc.id
+                                  });
+
+                                  // Force a re-render to see current state
+                                  console.log('📊 Current document state before upload:', {
+                                    docId: doc.id,
+                                    hasFile: !!doc.file,
+                                    hasPreview: !!doc.preview,
+                                    title: doc.title
+                                  });
+
+                                  handleFileUpload(doc.id, file);
+
+                                  // Check state after a short delay
+                                  setTimeout(() => {
+                                    const updatedDoc = documents.find(d => d.id === doc.id);
+                                    console.log('📊 Document state after upload:', {
+                                      docId: doc.id,
+                                      hasFile: !!updatedDoc?.file,
+                                      hasPreview: !!updatedDoc?.preview,
+                                      previewLength: updatedDoc?.preview?.length
+                                    });
+                                  }, 100);
+                                }
+                              }}
+                              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Supported formats: PDF, JPG, PNG, DOC, DOCX (Max 10MB)
+                            </p>
+                            {doc.file && (
+                              <div className="flex items-center space-x-2 mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                                <Eye className="w-4 h-4 text-green-600" />
+                                <span className="text-sm text-green-700 font-medium">
+                                  ✓ {doc.file.name} uploaded successfully
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {doc.file && (
+                            <div className="mt-3">
+                              <div className="text-xs text-gray-500 mb-2">
+                                Preview: (File: {doc.file.name}, Type: {doc.file.type}, Has Preview: {doc.preview ? 'Yes' : 'No'})
+                              </div>
+                              {doc.file.type.startsWith('image/') ? (
+                                doc.preview && doc.preview !== 'non-image' ? (
+                                  <div className="relative">
+                                    <img
+                                      src={doc.preview}
+                                      alt="Document preview"
+                                      className="w-48 h-36 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
+                                      onLoad={() => console.log('Image loaded successfully:', doc.file?.name)}
+                                      onError={(e) => {
+                                        console.error('Image failed to load:', doc.file?.name, e);
+                                        console.log('Preview data length:', doc.preview?.length);
+                                      }}
+                                    />
+                                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                      Image
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <p className="text-sm text-yellow-700">
+                                      🖼️ Image preview loading... ({doc.file.name})
+                                    </p>
+                                  </div>
+                                )
+                              ) : (
+                                <div className="flex items-center space-x-3 p-3 bg-gray-100 rounded-lg border border-gray-200">
+                                  <FileText className="w-8 h-8 text-gray-600 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{doc.file.name}</p>
+                                    <p className="text-xs text-gray-500">
+                                      {doc.file.type || 'Unknown type'} • {(doc.file.size / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                  </div>
+                                  <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                                    Document
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

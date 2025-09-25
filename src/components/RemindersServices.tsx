@@ -20,9 +20,12 @@ import {
   Zap,
   MoreVertical,
   CalendarDays,
-  Users
+  Users,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
-import { dbHelpers } from '../lib/supabase';
+import toast from 'react-hot-toast';
+import { dbHelpers, supabase } from '../lib/supabase';
 
 interface Reminder {
   id: string;
@@ -46,12 +49,26 @@ interface Reminder {
 const RemindersServices: React.FC = () => {
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
 
   // Load reminders from database
   const loadReminders = async () => {
     setLoading(true);
     try {
-      const data = await dbHelpers.getReminders();
+      let query = supabase
+        .from('reminders')
+        .select('*')
+        .order('reminder_date', { ascending: true });
+
+      // Only show enabled reminders if email notifications are enabled
+      if (emailNotificationsEnabled) {
+        query = query.eq('enabled', true);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
       console.log('Loaded reminders:', data);
       setReminders(data || []);
     } catch (error) {
@@ -63,7 +80,29 @@ const RemindersServices: React.FC = () => {
 
   useEffect(() => {
     loadReminders();
-  }, []);
+  }, [emailNotificationsEnabled]);
+
+  // Toggle email notifications and enable/disable all reminders
+  const toggleEmailNotifications = async () => {
+    try {
+      const newState = !emailNotificationsEnabled;
+      setEmailNotificationsEnabled(newState);
+
+      // Update all reminders to enabled/disabled state
+      const { error } = await supabase
+        .from('reminders')
+        .update({ enabled: newState })
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all records
+
+      if (error) throw error;
+
+      toast.success(`Email notifications ${newState ? 'enabled' : 'disabled'} for all reminders`);
+      loadReminders(); // Reload to reflect changes
+    } catch (error) {
+      console.error('Error toggling email notifications:', error);
+      toast.error('Failed to update email notification settings');
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'reminders' | 'services' | 'calendar'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1235,6 +1274,33 @@ const RemindersServices: React.FC = () => {
       <div className="space-y-6">
         {/* Search and Filter Bar */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
+          {/* Email Notifications Toggle */}
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Email Notifications</h3>
+              <p className="text-sm text-gray-600">
+                Enable automatic email reminders 10 days before document expiry
+              </p>
+            </div>
+            <button
+              onClick={toggleEmailNotifications}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                emailNotificationsEnabled
+                  ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {emailNotificationsEnabled ? (
+                <ToggleRight className="w-5 h-5" />
+              ) : (
+                <ToggleLeft className="w-5 h-5" />
+              )}
+              <span className="font-medium">
+                {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </button>
+          </div>
+
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
               <div className="relative">

@@ -155,7 +155,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     try {
@@ -963,7 +963,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
             let idNumber = matches[0].replace(/\s/g, '');
             // Format as 784-XXXX-XXXXXXX-X
             if (idNumber.length === 15) {
-              idNumber = `${idNumber.substring(0,3)}-${idNumber.substring(3,7)}-${idNumber.substring(7,14)}-${idNumber.substring(14)}`;
+              idNumber = `${idNumber.substring(0, 3)}-${idNumber.substring(3, 7)}-${idNumber.substring(7, 14)}-${idNumber.substring(14)}`;
             }
             extractedData.emiratesId = idNumber;
             console.log('Found Emirates ID:', idNumber);
@@ -1408,9 +1408,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="employeeId"
                     value={employeeForm.employeeId}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.employeeId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.employeeId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="EMP-001"
                   />
                   {errors.employeeId && (
@@ -1430,9 +1429,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="name"
                     value={employeeForm.name}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="Enter full name"
                   />
                   {errors.name && (
@@ -1452,9 +1450,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="position"
                     value={employeeForm.position}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.position ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.position ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="Job position"
                   />
                   {errors.position && (
@@ -1474,9 +1471,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="email"
                     value={employeeForm.email}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="employee@company.com"
                   />
                   {errors.email && (
@@ -1496,9 +1492,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="phone"
                     value={employeeForm.phone}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="+971-50-000-0000"
                   />
                   {errors.phone && (
@@ -1518,9 +1513,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="nationality"
                     value={employeeForm.nationality}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.nationality ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.nationality ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="Enter nationality"
                   />
                   {errors.nationality && (
@@ -1571,71 +1565,69 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Passport Number <span className="text-red-500">*</span>
                           </label>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      name="passportNumber"
-                      value={employeeForm.passportNumber}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.passportNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                      placeholder="Passport number"
-                    />
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              name="passportNumber"
+                              value={employeeForm.passportNumber}
+                              onChange={handleInputChange}
+                              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.passportNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                }`}
+                              placeholder="Passport number"
+                            />
 
-                    {/* Document Upload */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                      <div className="text-center">
-                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600 mb-2">Upload Passport to auto-extract data</p>
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => handleDocumentUpload(e, 'passport')}
-                          className="hidden"
-                          id="passport-upload"
-                          disabled={uploadingDocument === 'passport'}
-                        />
-                        <label
-                          htmlFor="passport-upload"
-                          className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${
-                            uploadingDocument === 'passport' ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {uploadingDocument === 'passport' ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4 mr-2" />
-                              Choose File
-                            </>
-                          )}
-                        </label>
-                      </div>
-                    </div>
+                            {/* Document Upload */}
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+                              <div className="text-center">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-600 mb-2">Upload Passport to auto-extract data</p>
+                                <input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => handleDocumentUpload(e, 'passport')}
+                                  className="hidden"
+                                  id="passport-upload"
+                                  disabled={uploadingDocument === 'passport'}
+                                />
+                                <label
+                                  htmlFor="passport-upload"
+                                  className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${uploadingDocument === 'passport' ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                  {uploadingDocument === 'passport' ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="w-4 h-4 mr-2" />
+                                      Choose File
+                                    </>
+                                  )}
+                                </label>
+                              </div>
+                            </div>
 
-                    {/* Document Preview */}
-                    {pendingDocuments.filter(doc => doc.type === 'passport').length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {pendingDocuments.filter(doc => doc.type === 'passport').map((doc, index) => (
-                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
-                              {/* Document Preview */}
-                              {doc.file_path && (
-                                <div className="mb-2">
-                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
-                                    <img
-                                      src={doc.file_path}
-                                      alt={doc.name}
-                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
-                                      onClick={() => {
-                                        const newWindow = window.open();
-                                        if (newWindow) {
-                                          newWindow.document.write(`
+                            {/* Document Preview */}
+                            {pendingDocuments.filter(doc => doc.type === 'passport').length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                  {pendingDocuments.filter(doc => doc.type === 'passport').map((doc, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                      {/* Document Preview */}
+                                      {doc.file_path && (
+                                        <div className="mb-2">
+                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                            <img
+                                              src={doc.file_path}
+                                              alt={doc.name}
+                                              className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                              onClick={() => {
+                                                const newWindow = window.open();
+                                                if (newWindow) {
+                                                  newWindow.document.write(`
                                             <html>
                                               <head><title>${doc.name}</title></head>
                                               <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
@@ -1643,82 +1635,81 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                               </body>
                                             </html>
                                           `);
-                                        }
-                                      }}
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const fallback = target.nextElementSibling as HTMLElement;
-                                        if (fallback) {
-                                          fallback.style.display = 'flex';
-                                        }
-                                      }}
-                                    />
-                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
-                                      <div className="text-center">
-                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
-                                        <span className="text-sm">Preview not available</span>
+                                                }
+                                              }}
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) {
+                                                  fallback.style.display = 'flex';
+                                                }
+                                              }}
+                                            />
+                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
+                                              <div className="text-center">
+                                                <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                                <span className="text-sm">Preview not available</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Document Info */}
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                          <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                          {doc.expiry_date && (
+                                            <p className="text-xs text-gray-500">
+                                              Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                            </p>
+                                          )}
+                                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                            Valid
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => handleDeletePendingDocument(index, 'passport')}
+                                          className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                          title="Delete document"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
                                       </div>
                                     </div>
-                                  </div>
+                                  ))}
                                 </div>
-                              )}
-
-                              {/* Document Info */}
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
-                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
-                                  {doc.expiry_date && (
-                                    <p className="text-xs text-gray-500">
-                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
-                                    </p>
-                                  )}
-                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
-                                    Valid
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => handleDeletePendingDocument(index, 'passport')}
-                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                                  title="Delete document"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
-                            </div>
-                          ))}
+                            )}
+                          </div>
+                          {errors.passportNumber && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="w-4 h-4 mr-1" />
+                              {errors.passportNumber}
+                            </p>
+                          )}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                  {errors.passportNumber && (
-                    <p className="mt-1 text-sm text-red-600 flex items-center">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      {errors.passportNumber}
-                    </p>
-                  )}
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Passport Expiry <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="passportExpiry"
-                    value={employeeForm.passportExpiry}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.passportExpiry ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                  />
-                  {errors.passportExpiry && (
-                    <p className="mt-1 text-sm text-red-600 flex items-center">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      {errors.passportExpiry}
-                    </p>
-                  )}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Passport Expiry <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            name="passportExpiry"
+                            value={employeeForm.passportExpiry}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.passportExpiry ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                              }`}
+                          />
+                          {errors.passportExpiry && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="w-4 h-4 mr-1" />
+                              {errors.passportExpiry}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1748,69 +1739,68 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       <div className="p-4 space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Emirates ID</label>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      name="emiratesId"
-                      value={employeeForm.emiratesId}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="784-YYYY-XXXXXXX-X"
-                    />
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              name="emiratesId"
+                              value={employeeForm.emiratesId}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="784-YYYY-XXXXXXX-X"
+                            />
 
-                    {/* Emirates ID Upload */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                      <div className="text-center">
-                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600 mb-2">Upload Emirates ID to auto-extract data</p>
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => handleDocumentUpload(e, 'emirates-id')}
-                          className="hidden"
-                          id="emirates-id-upload"
-                          disabled={uploadingDocument === 'emirates-id'}
-                        />
-                        <label
-                          htmlFor="emirates-id-upload"
-                          className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${
-                            uploadingDocument === 'emirates-id' ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {uploadingDocument === 'emirates-id' ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4 mr-2" />
-                              Choose File
-                            </>
-                          )}
-                        </label>
-                      </div>
-                    </div>
+                            {/* Emirates ID Upload */}
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+                              <div className="text-center">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-600 mb-2">Upload Emirates ID to auto-extract data</p>
+                                <input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => handleDocumentUpload(e, 'emirates-id')}
+                                  className="hidden"
+                                  id="emirates-id-upload"
+                                  disabled={uploadingDocument === 'emirates-id'}
+                                />
+                                <label
+                                  htmlFor="emirates-id-upload"
+                                  className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${uploadingDocument === 'emirates-id' ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                  {uploadingDocument === 'emirates-id' ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="w-4 h-4 mr-2" />
+                                      Choose File
+                                    </>
+                                  )}
+                                </label>
+                              </div>
+                            </div>
 
-                    {/* Document Preview */}
-                    {pendingDocuments.filter(doc => doc.type === 'emirates-id').length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {pendingDocuments.filter(doc => doc.type === 'emirates-id').map((doc, index) => (
-                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
-                              {/* Document Preview */}
-                              {doc.file_path && (
-                                <div className="mb-2">
-                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
-                                    <img
-                                      src={doc.file_path}
-                                      alt={doc.name}
-                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
-                                      onClick={() => {
-                                        const newWindow = window.open();
-                                        if (newWindow) {
-                                          newWindow.document.write(`
+                            {/* Document Preview */}
+                            {pendingDocuments.filter(doc => doc.type === 'emirates-id').length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                  {pendingDocuments.filter(doc => doc.type === 'emirates-id').map((doc, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                      {/* Document Preview */}
+                                      {doc.file_path && (
+                                        <div className="mb-2">
+                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                            <img
+                                              src={doc.file_path}
+                                              alt={doc.name}
+                                              className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                              onClick={() => {
+                                                const newWindow = window.open();
+                                                if (newWindow) {
+                                                  newWindow.document.write(`
                                             <html>
                                               <head><title>${doc.name}</title></head>
                                               <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
@@ -1818,66 +1808,66 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                               </body>
                                             </html>
                                           `);
-                                        }
-                                      }}
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const fallback = target.nextElementSibling as HTMLElement;
-                                        if (fallback) {
-                                          fallback.style.display = 'flex';
-                                        }
-                                      }}
-                                    />
-                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
-                                      <div className="text-center">
-                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
-                                        <span className="text-sm">Preview not available</span>
+                                                }
+                                              }}
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) {
+                                                  fallback.style.display = 'flex';
+                                                }
+                                              }}
+                                            />
+                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
+                                              <div className="text-center">
+                                                <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                                <span className="text-sm">Preview not available</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Document Info */}
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                          <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                          {doc.expiry_date && (
+                                            <p className="text-xs text-gray-500">
+                                              Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                            </p>
+                                          )}
+                                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                            Valid
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => handleDeletePendingDocument(index, 'emirates-id')}
+                                          className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                          title="Delete document"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
                                       </div>
                                     </div>
-                                  </div>
+                                  ))}
                                 </div>
-                              )}
-
-                              {/* Document Info */}
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
-                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
-                                  {doc.expiry_date && (
-                                    <p className="text-xs text-gray-500">
-                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
-                                    </p>
-                                  )}
-                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
-                                    Valid
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => handleDeletePendingDocument(index, 'emirates-id')}
-                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                                  title="Delete document"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
-                            </div>
-                          ))}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Emirates ID Expiry</label>
-                  <input
-                    type="date"
-                    name="emiratesIdExpiry"
-                    value={employeeForm.emiratesIdExpiry}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Emirates ID Expiry</label>
+                          <input
+                            type="date"
+                            name="emiratesIdExpiry"
+                            value={employeeForm.emiratesIdExpiry}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
                     )}
@@ -1907,69 +1897,68 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       <div className="p-4 space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Visa Number</label>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      name="visaNumber"
-                      value={employeeForm.visaNumber}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Visa number"
-                    />
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              name="visaNumber"
+                              value={employeeForm.visaNumber}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Visa number"
+                            />
 
-                    {/* Visa Upload */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                      <div className="text-center">
-                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600 mb-2">Upload Visa to auto-extract data</p>
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => handleDocumentUpload(e, 'visa')}
-                          className="hidden"
-                          id="visa-upload"
-                          disabled={uploadingDocument === 'visa'}
-                        />
-                        <label
-                          htmlFor="visa-upload"
-                          className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${
-                            uploadingDocument === 'visa' ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {uploadingDocument === 'visa' ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4 mr-2" />
-                              Choose File
-                            </>
-                          )}
-                        </label>
-                      </div>
-                    </div>
+                            {/* Visa Upload */}
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+                              <div className="text-center">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-600 mb-2">Upload Visa to auto-extract data</p>
+                                <input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => handleDocumentUpload(e, 'visa')}
+                                  className="hidden"
+                                  id="visa-upload"
+                                  disabled={uploadingDocument === 'visa'}
+                                />
+                                <label
+                                  htmlFor="visa-upload"
+                                  className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${uploadingDocument === 'visa' ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                  {uploadingDocument === 'visa' ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="w-4 h-4 mr-2" />
+                                      Choose File
+                                    </>
+                                  )}
+                                </label>
+                              </div>
+                            </div>
 
-                    {/* Document Preview */}
-                    {pendingDocuments.filter(doc => doc.type === 'visa').length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {pendingDocuments.filter(doc => doc.type === 'visa').map((doc, index) => (
-                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
-                              {/* Document Preview */}
-                              {doc.file_path && (
-                                <div className="mb-2">
-                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
-                                    <img
-                                      src={doc.file_path}
-                                      alt={doc.name}
-                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
-                                      onClick={() => {
-                                        const newWindow = window.open();
-                                        if (newWindow) {
-                                          newWindow.document.write(`
+                            {/* Document Preview */}
+                            {pendingDocuments.filter(doc => doc.type === 'visa').length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                  {pendingDocuments.filter(doc => doc.type === 'visa').map((doc, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                      {/* Document Preview */}
+                                      {doc.file_path && (
+                                        <div className="mb-2">
+                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                            <img
+                                              src={doc.file_path}
+                                              alt={doc.name}
+                                              className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                              onClick={() => {
+                                                const newWindow = window.open();
+                                                if (newWindow) {
+                                                  newWindow.document.write(`
                                             <html>
                                               <head><title>${doc.name}</title></head>
                                               <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
@@ -1977,66 +1966,66 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                               </body>
                                             </html>
                                           `);
-                                        }
-                                      }}
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const fallback = target.nextElementSibling as HTMLElement;
-                                        if (fallback) {
-                                          fallback.style.display = 'flex';
-                                        }
-                                      }}
-                                    />
-                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
-                                      <div className="text-center">
-                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
-                                        <span className="text-sm">Preview not available</span>
+                                                }
+                                              }}
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) {
+                                                  fallback.style.display = 'flex';
+                                                }
+                                              }}
+                                            />
+                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
+                                              <div className="text-center">
+                                                <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                                <span className="text-sm">Preview not available</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Document Info */}
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                          <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                          {doc.expiry_date && (
+                                            <p className="text-xs text-gray-500">
+                                              Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                            </p>
+                                          )}
+                                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                            Valid
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => handleDeletePendingDocument(index, 'visa')}
+                                          className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                          title="Delete document"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
                                       </div>
                                     </div>
-                                  </div>
+                                  ))}
                                 </div>
-                              )}
-
-                              {/* Document Info */}
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
-                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
-                                  {doc.expiry_date && (
-                                    <p className="text-xs text-gray-500">
-                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
-                                    </p>
-                                  )}
-                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
-                                    Valid
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => handleDeletePendingDocument(index, 'visa')}
-                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                                  title="Delete document"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
-                            </div>
-                          ))}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Visa Expiry</label>
-                  <input
-                    type="date"
-                    name="visaExpiryDate"
-                    value={employeeForm.visaExpiryDate}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Visa Expiry</label>
+                          <input
+                            type="date"
+                            name="visaExpiryDate"
+                            value={employeeForm.visaExpiryDate}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
                     )}
@@ -2066,69 +2055,68 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       <div className="p-4 space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Labor Card Number</label>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      name="laborCardNumber"
-                      value={employeeForm.laborCardNumber}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Labor card number"
-                    />
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              name="laborCardNumber"
+                              value={employeeForm.laborCardNumber}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Labor card number"
+                            />
 
-                    {/* Labor Card Upload */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                      <div className="text-center">
-                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600 mb-2">Upload Labor Card to auto-extract data</p>
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => handleDocumentUpload(e, 'labor-card')}
-                          className="hidden"
-                          id="labor-card-upload"
-                          disabled={uploadingDocument === 'labor-card'}
-                        />
-                        <label
-                          htmlFor="labor-card-upload"
-                          className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${
-                            uploadingDocument === 'labor-card' ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {uploadingDocument === 'labor-card' ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4 mr-2" />
-                              Choose File
-                            </>
-                          )}
-                        </label>
-                      </div>
-                    </div>
+                            {/* Labor Card Upload */}
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+                              <div className="text-center">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-600 mb-2">Upload Labor Card to auto-extract data</p>
+                                <input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => handleDocumentUpload(e, 'labor-card')}
+                                  className="hidden"
+                                  id="labor-card-upload"
+                                  disabled={uploadingDocument === 'labor-card'}
+                                />
+                                <label
+                                  htmlFor="labor-card-upload"
+                                  className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer ${uploadingDocument === 'labor-card' ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                  {uploadingDocument === 'labor-card' ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="w-4 h-4 mr-2" />
+                                      Choose File
+                                    </>
+                                  )}
+                                </label>
+                              </div>
+                            </div>
 
-                    {/* Document Preview */}
-                    {pendingDocuments.filter(doc => doc.type === 'labor-card').length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {pendingDocuments.filter(doc => doc.type === 'labor-card').map((doc, index) => (
-                            <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
-                              {/* Document Preview */}
-                              {doc.file_path && (
-                                <div className="mb-2">
-                                  <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
-                                    <img
-                                      src={doc.file_path}
-                                      alt={doc.name}
-                                      className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
-                                      onClick={() => {
-                                        const newWindow = window.open();
-                                        if (newWindow) {
-                                          newWindow.document.write(`
+                            {/* Document Preview */}
+                            {pendingDocuments.filter(doc => doc.type === 'labor-card').length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                  {pendingDocuments.filter(doc => doc.type === 'labor-card').map((doc, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                      {/* Document Preview */}
+                                      {doc.file_path && (
+                                        <div className="mb-2">
+                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                            <img
+                                              src={doc.file_path}
+                                              alt={doc.name}
+                                              className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                                              onClick={() => {
+                                                const newWindow = window.open();
+                                                if (newWindow) {
+                                                  newWindow.document.write(`
                                             <html>
                                               <head><title>${doc.name}</title></head>
                                               <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
@@ -2136,66 +2124,66 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                               </body>
                                             </html>
                                           `);
-                                        }
-                                      }}
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const fallback = target.nextElementSibling as HTMLElement;
-                                        if (fallback) {
-                                          fallback.style.display = 'flex';
-                                        }
-                                      }}
-                                    />
-                                    <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
-                                      <div className="text-center">
-                                        <FileText className="w-8 h-8 mb-2 mx-auto" />
-                                        <span className="text-sm">Preview not available</span>
+                                                }
+                                              }}
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) {
+                                                  fallback.style.display = 'flex';
+                                                }
+                                              }}
+                                            />
+                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
+                                              <div className="text-center">
+                                                <FileText className="w-8 h-8 mb-2 mx-auto" />
+                                                <span className="text-sm">Preview not available</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Document Info */}
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                                          <p className="text-xs text-gray-500">{doc.file_name}</p>
+                                          {doc.expiry_date && (
+                                            <p className="text-xs text-gray-500">
+                                              Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                            </p>
+                                          )}
+                                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
+                                            Valid
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => handleDeletePendingDocument(index, 'labor-card')}
+                                          className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                          title="Delete document"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
                                       </div>
                                     </div>
-                                  </div>
+                                  ))}
                                 </div>
-                              )}
-
-                              {/* Document Info */}
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm text-gray-900">{doc.name}</p>
-                                  <p className="text-xs text-gray-500">{doc.file_name}</p>
-                                  {doc.expiry_date && (
-                                    <p className="text-xs text-gray-500">
-                                      Expires: {new Date(doc.expiry_date).toLocaleDateString()}
-                                    </p>
-                                  )}
-                                  <span className="inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 bg-green-100 text-green-800">
-                                    Valid
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => handleDeletePendingDocument(index, 'labor-card')}
-                                  className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                                  title="Delete document"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
-                            </div>
-                          ))}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Labor Card Expiry</label>
-                  <input
-                    type="date"
-                    name="laborCardExpiry"
-                    value={employeeForm.laborCardExpiry}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Labor Card Expiry</label>
+                          <input
+                            type="date"
+                            name="laborCardExpiry"
+                            value={employeeForm.laborCardExpiry}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
                     )}
@@ -2258,9 +2246,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                 />
                                 <label
                                   htmlFor={`custom-${customDoc.id}-upload`}
-                                  className={`inline-flex items-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 cursor-pointer ${
-                                    uploadingDocument === `custom-${customDoc.id}` ? 'opacity-50 cursor-not-allowed' : ''
-                                  }`}
+                                  className={`inline-flex items-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 cursor-pointer ${uploadingDocument === `custom-${customDoc.id}` ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
                                 >
                                   {uploadingDocument === `custom-${customDoc.id}` ? (
                                     <>
@@ -2314,7 +2301,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                                 }
                                               }}
                                             />
-                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                            <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
                                               <div className="text-center">
                                                 <FileText className="w-8 h-8 mb-2 mx-auto" />
                                                 <span className="text-sm">Preview not available</span>
@@ -2372,9 +2359,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="joinDate"
                     value={employeeForm.joinDate}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.joinDate ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.joinDate ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                   />
                   {errors.joinDate && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -2393,9 +2379,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                     name="department"
                     value={employeeForm.department}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.department ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.department ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     placeholder="Department name"
                   />
                   {errors.department && (
@@ -2432,11 +2417,11 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                 </div>
 
                 {/* Login Credentials */}
-                <div className="col-span-full mt-6">
+                {/* <div className="col-span-full mt-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Login Credentials</h3>
-                </div>
+                </div> */}
 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Password <span className="text-red-500">*</span>
                   </label>
@@ -2446,9 +2431,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       name="password"
                       value={employeeForm.password}
                       onChange={handleInputChange}
-                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
                       placeholder="Enter password for employee login"
                     />
                     <button
@@ -2465,9 +2449,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       {errors.password}
                     </p>
                   )}
-                </div>
+                </div> */}
 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password <span className="text-red-500">*</span>
                   </label>
@@ -2477,9 +2461,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       name="confirmPassword"
                       value={employeeForm.confirmPassword}
                       onChange={handleInputChange}
-                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
                       placeholder="Confirm password"
                     />
                     <button
@@ -2496,7 +2479,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       {errors.confirmPassword}
                     </p>
                   )}
-                </div>
+                </div> */}
               </div>
 
               {/* Form Actions */}
@@ -2777,7 +2760,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                     }
                                   }}
                                 />
-                                <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
                                   <div className="text-center">
                                     <FileText className="w-8 h-8 mb-2 mx-auto" />
                                     <span className="text-sm">Preview not available</span>
@@ -2799,16 +2782,15 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                   Expires: {new Date(doc.expiry_date).toLocaleDateString()}
                                 </p>
                               )}
-                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 ${
-                                doc.status === 'valid' ? 'bg-green-100 text-green-800' :
-                                doc.status === 'expired' ? 'bg-red-100 text-red-800' :
-                                doc.status === 'expiring_soon' ? 'bg-yellow-100 text-yellow-800' :
-                                doc.status === 'active' ? 'bg-green-100 text-green-800' : // Legacy support
-                                'bg-gray-100 text-gray-800'
-                              }`}>
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-2 ${doc.status === 'valid' ? 'bg-green-100 text-green-800' :
+                                  doc.status === 'expired' ? 'bg-red-100 text-red-800' :
+                                    doc.status === 'expiring_soon' ? 'bg-yellow-100 text-yellow-800' :
+                                      doc.status === 'active' ? 'bg-green-100 text-green-800' : // Legacy support
+                                        'bg-gray-100 text-gray-800'
+                                }`}>
                                 {doc.status === 'valid' ? 'Valid' :
-                                 doc.status === 'expiring_soon' ? 'Expiring Soon' :
-                                 doc.status?.replace('_', ' ') || 'Valid'}
+                                  doc.status === 'expiring_soon' ? 'Expiring Soon' :
+                                    doc.status?.replace('_', ' ') || 'Valid'}
                               </span>
                             </div>
                             <div className="flex space-x-2 mt-2">
@@ -3148,7 +3130,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                     }
                                   }}
                                 />
-                                <div className="hidden items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                                <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
                                   <div className="text-center">
                                     <FileText className="w-6 h-6 mb-1 mx-auto" />
                                     <span className="text-xs">Preview not available</span>

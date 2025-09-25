@@ -42,7 +42,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     if (!formData.phone1.trim()) newErrors.phone1 = 'Primary phone is required';
     if (!formData.email1.trim()) newErrors.email1 = 'Primary email is required';
     if (!formData.companyType.trim()) newErrors.companyType = 'Company type is required';
-    if (!formData.companyGrade.trim()) newErrors.companyGrade = 'Company grade is required';
+    // if (!formData.companyGrade.trim()) newErrors.companyGrade = 'Company grade is required';
     if (!formData.creditLimit.trim()) newErrors.creditLimit = 'Credit limit is required';
     if (!formData.creditLimitDays.trim()) newErrors.creditLimitDays = 'Credit limit days is required';
 
@@ -378,7 +378,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
               />
             </div>
 
-            <div>
+            {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Company Grade <span className="text-red-500">*</span>
               </label>
@@ -402,7 +402,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                   {errors.companyGrade}
                 </p>
               )}
-            </div>
+            </div> */}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>

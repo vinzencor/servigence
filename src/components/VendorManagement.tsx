@@ -630,7 +630,7 @@ const VendorManagement: React.FC = () => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'vendors', label: 'Vendors', icon: Users },
-    { id: 'contracts', label: 'Contracts', icon: FileText },
+    // { id: 'contracts', label: 'Contracts', icon: FileText },
     { id: 'performance', label: 'Performance', icon: Award }
   ];
 
@@ -685,7 +685,7 @@ const VendorManagement: React.FC = () => {
       {/* Main Content */}
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'vendors' && renderVendorsList()}
-      {activeTab === 'contracts' && renderContracts()}
+      {/* {activeTab === 'contracts' && renderContracts()} */}
       {activeTab === 'performance' && renderPerformance()}
 
       {/* Vendor Details Modal */}
@@ -1511,83 +1511,83 @@ const VendorManagement: React.FC = () => {
     );
   }
 
-  function renderContracts() {
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Active Contracts</h3>
-            <button
-              onClick={() => setShowNewContract(true)}
-              className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Contract</span>
-            </button>
-          </div>
+  // function renderContracts() {
+  //   return (
+  //     <div className="space-y-6">
+  //       <div className="bg-white rounded-xl border border-gray-200 p-6">
+  //         <div className="flex items-center justify-between mb-6">
+  //           <h3 className="text-lg font-semibold text-gray-900">Active Contracts</h3>
+  //           <button
+  //             onClick={() => setShowNewContract(true)}
+  //             className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+  //           >
+  //             <Plus className="w-4 h-4" />
+  //             <span>New Contract</span>
+  //           </button>
+  //         </div>
 
-          <div className="space-y-4">
-            {contracts.map((contract) => (
-              <div key={contract.id} className="border border-gray-200 rounded-lg p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">{contract.title}</h4>
-                    <p className="text-sm text-gray-600">{contract.vendor}</p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(contract.status)}`}>
-                    {contract.status.toUpperCase()}
-                  </span>
-                </div>
+  //         <div className="space-y-4">
+  //           {contracts.map((contract) => (
+  //             <div key={contract.id} className="border border-gray-200 rounded-lg p-6">
+  //               <div className="flex items-start justify-between mb-4">
+  //                 <div>
+  //                   <h4 className="font-semibold text-gray-900">{contract.title}</h4>
+  //                   <p className="text-sm text-gray-600">{contract.vendor}</p>
+  //                 </div>
+  //                 <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(contract.status)}`}>
+  //                   {contract.status.toUpperCase()}
+  //                 </span>
+  //               </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-600">Contract Value</p>
-                    <p className="font-medium text-gray-900">AED {contract.value.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Start Date</p>
-                    <p className="font-medium text-gray-900">{contract.startDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">End Date</p>
-                    <p className="font-medium text-gray-900">{contract.endDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Type</p>
-                    <p className="font-medium text-gray-900 capitalize">{contract.service_category?.replace('_', ' ') || 'N/A'}</p>
-                  </div>
-                </div>
+  //               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+  //                 <div>
+  //                   <p className="text-gray-600">Contract Value</p>
+  //                   <p className="font-medium text-gray-900">AED {contract.value.toLocaleString()}</p>
+  //                 </div>
+  //                 <div>
+  //                   <p className="text-gray-600">Start Date</p>
+  //                   <p className="font-medium text-gray-900">{contract.startDate}</p>
+  //                 </div>
+  //                 <div>
+  //                   <p className="text-gray-600">End Date</p>
+  //                   <p className="font-medium text-gray-900">{contract.endDate}</p>
+  //                 </div>
+  //                 <div>
+  //                   <p className="text-gray-600">Type</p>
+  //                   <p className="font-medium text-gray-900 capitalize">{contract.service_category?.replace('_', ' ') || 'N/A'}</p>
+  //                 </div>
+  //               </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100 flex space-x-3">
-                  <button
-                    onClick={() => handleViewContract(contract)}
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span className="text-sm">View</span>
-                  </button>
-                  <button
-                    onClick={() => handleEditContract(contract)}
-                    className="flex items-center space-x-2 text-green-600 hover:text-green-700"
-                  >
-                    <Edit className="w-4 h-4" />
-                    <span className="text-sm">Edit</span>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteContract(contract.id)}
-                    className="flex items-center space-x-2 text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="text-sm">Delete</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  //               <div className="mt-4 pt-4 border-t border-gray-100 flex space-x-3">
+  //                 <button
+  //                   onClick={() => handleViewContract(contract)}
+  //                   className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
+  //                 >
+  //                   <Eye className="w-4 h-4" />
+  //                   <span className="text-sm">View</span>
+  //                 </button>
+  //                 <button
+  //                   onClick={() => handleEditContract(contract)}
+  //                   className="flex items-center space-x-2 text-green-600 hover:text-green-700"
+  //                 >
+  //                   <Edit className="w-4 h-4" />
+  //                   <span className="text-sm">Edit</span>
+  //                 </button>
+  //                 <button
+  //                   onClick={() => handleDeleteContract(contract.id)}
+  //                   className="flex items-center space-x-2 text-red-600 hover:text-red-700"
+  //                 >
+  //                   <Trash2 className="w-4 h-4" />
+  //                   <span className="text-sm">Delete</span>
+  //                 </button>
+  //               </div>
+  //             </div>
+  //           ))}
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   function renderPerformance() {
     return (

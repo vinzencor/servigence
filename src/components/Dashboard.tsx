@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, Users, Building2, FileText, DollarSign, AlertCircle, Clock, CheckCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { mockCompanies, mockServices, mockInvoices, mockReminders } from '../data/mockData';
 import { dbHelpers } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  const { user, isSuperAdmin } = useAuth();
   const [realReminders, setRealReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -200,7 +202,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-8 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome back, Sarah!</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              Welcome back, {isSuperAdmin ? 'Super Admin' : user?.name || 'User'}!
+            </h1>
             <p className="text-blue-100 text-lg">Here's what's happening with your business today.</p>
           </div>
           <div className="flex items-center space-x-4">
