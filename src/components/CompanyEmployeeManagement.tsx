@@ -92,12 +92,10 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
     if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
     if (!employeeForm.phone.trim()) newErrors.phone = 'Phone is required';
     if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
-    if (!employeeForm.passportNumber.trim()) newErrors.passportNumber = 'Passport number is required';
-    if (!employeeForm.passportExpiry) newErrors.passportExpiry = 'Passport expiry is required';
+    // Document fields are now optional - removed passport validation
     if (!employeeForm.joinDate) newErrors.joinDate = 'Join date is required';
     if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
-    if (!employeeForm.password.trim()) newErrors.password = 'Password is required';
-    if (!employeeForm.confirmPassword.trim()) newErrors.confirmPassword = 'Confirm password is required';
+    // Password fields are now optional - removed password validation
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -160,7 +158,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
     try {
       // Simple password hashing (in production, use proper bcrypt)
-      const passwordHash = btoa(employeeForm.password); // Base64 encoding for demo
+      const passwordHash = employeeForm.password ? btoa(employeeForm.password) : null; // Base64 encoding for demo
 
       const newEmployee = {
         company_id: company.id,
@@ -170,8 +168,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         email: employeeForm.email,
         phone: employeeForm.phone,
         nationality: employeeForm.nationality,
-        passport_number: employeeForm.passportNumber,
-        passport_expiry: employeeForm.passportExpiry,
+        passport_number: employeeForm.passportNumber || null,
+        passport_expiry: employeeForm.passportExpiry || null,
         visa_type: employeeForm.visaType,
         visa_number: employeeForm.visaNumber || null,
         visa_issue_date: employeeForm.visaIssueDate || null,
@@ -180,7 +178,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         emirates_id_expiry: employeeForm.emiratesIdExpiry || null,
         labor_card_number: employeeForm.laborCardNumber || null,
         labor_card_expiry: employeeForm.laborCardExpiry || null,
-        join_date: employeeForm.joinDate,
+        join_date: employeeForm.joinDate || new Date().toISOString().split('T')[0],
         salary: employeeForm.salary ? parseFloat(employeeForm.salary) : null,
         department: employeeForm.department,
         manager: employeeForm.manager || null,
@@ -1563,7 +1561,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                       <div className="p-4 space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Passport Number <span className="text-red-500">*</span>
+                            Passport Number
                           </label>
                           <div className="space-y-3">
                             <input
@@ -1571,8 +1569,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                               name="passportNumber"
                               value={employeeForm.passportNumber}
                               onChange={handleInputChange}
-                              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.passportNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                                }`}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Passport number"
                             />
 
@@ -1684,32 +1681,21 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                               </div>
                             )}
                           </div>
-                          {errors.passportNumber && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="w-4 h-4 mr-1" />
-                              {errors.passportNumber}
-                            </p>
-                          )}
+
                         </div>
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Passport Expiry <span className="text-red-500">*</span>
+                            Passport Expiry
                           </label>
                           <input
                             type="date"
                             name="passportExpiry"
                             value={employeeForm.passportExpiry}
                             onChange={handleInputChange}
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.passportExpiry ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                              }`}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
-                          {errors.passportExpiry && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="w-4 h-4 mr-1" />
-                              {errors.passportExpiry}
-                            </p>
-                          )}
+
                         </div>
                       </div>
                     )}
@@ -1788,34 +1774,35 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                   {pendingDocuments.filter(doc => doc.type === 'emirates-id').map((doc, index) => (
-                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
                                       {/* Document Preview */}
                                       {doc.file_path && (
-                                        <div className="mb-2">
-                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                        <div className="mb-3">
+                                          <div className="w-full h-32 bg-gray-50 rounded border overflow-hidden">
                                             <img
                                               src={doc.file_path}
-                                              alt={doc.name}
+                                              alt={doc.name || 'Emirates ID Document'}
                                               className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
-                                              onClick={() => {
-                                                const newWindow = window.open();
-                                                if (newWindow) {
-                                                  newWindow.document.write(`
-                                            <html>
-                                              <head><title>${doc.name}</title></head>
-                                              <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
-                                                <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
-                                              </body>
-                                            </html>
-                                          `);
-                                                }
-                                              }}
                                               onError={(e) => {
+                                                console.error('Image failed to load:', doc.file_path);
                                                 const target = e.target as HTMLImageElement;
                                                 target.style.display = 'none';
                                                 const fallback = target.nextElementSibling as HTMLElement;
                                                 if (fallback) {
                                                   fallback.style.display = 'flex';
+                                                }
+                                              }}
+                                              onClick={() => {
+                                                const newWindow = window.open();
+                                                if (newWindow) {
+                                                  newWindow.document.write(`
+                                            <html>
+                                              <head><title>${doc.name || 'Emirates ID Document'}</title></head>
+                                              <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
+                                                <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name || 'Emirates ID Document'}" />
+                                              </body>
+                                            </html>
+                                          `);
                                                 }
                                               }}
                                             />
@@ -2104,14 +2091,14 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Documents:</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                   {pendingDocuments.filter(doc => doc.type === 'labor-card').map((doc, index) => (
-                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                    <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
                                       {/* Document Preview */}
                                       {doc.file_path && (
-                                        <div className="mb-2">
-                                          <div className="w-full h-24 bg-gray-50 rounded border overflow-hidden">
+                                        <div className="mb-3">
+                                          <div className="w-full h-32 bg-gray-50 rounded border overflow-hidden">
                                             <img
                                               src={doc.file_path}
-                                              alt={doc.name}
+                                              alt={doc.name || 'Labor Card Document'}
                                               className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
                                               onClick={() => {
                                                 const newWindow = window.open();

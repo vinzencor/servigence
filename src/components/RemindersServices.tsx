@@ -378,12 +378,30 @@ const RemindersServices: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
-  const confirmDeleteReminder = () => {
+  const confirmDeleteReminder = async () => {
     if (reminderToDelete) {
-      // In a real app, this would call an API to delete the reminder
-      console.log('Deleting reminder:', reminderToDelete);
-      setReminderToDelete(null);
-      setShowDeleteConfirm(false);
+      try {
+        console.log('🗑️ Deleting reminder:', reminderToDelete);
+
+        const { error } = await supabase
+          .from('reminders')
+          .delete()
+          .eq('id', reminderToDelete);
+
+        if (error) throw error;
+
+        console.log('✅ Reminder deleted successfully');
+        toast.success('Reminder deleted successfully');
+
+        // Reload reminders to reflect the deletion
+        await loadReminders();
+
+        setReminderToDelete(null);
+        setShowDeleteConfirm(false);
+      } catch (error) {
+        console.error('❌ Error deleting reminder:', error);
+        toast.error('Failed to delete reminder');
+      }
     }
   };
 
