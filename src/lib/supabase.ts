@@ -516,10 +516,11 @@ export const dbHelpers = {
       .from('service_billings')
       .select(`
         *,
-        company:companies(company_name, assigned_to),
-        individual:individuals(individual_name, assigned_to),
+        company:companies(company_name, assigned_to, credit_limit, credit_limit_days),
+        individual:individuals(individual_name, assigned_to, credit_limit, credit_limit_days),
         service_type:service_types(name, typing_charges, government_charges),
-        assigned_employee:service_employees(name)
+        assigned_employee:service_employees(name),
+        company_employee:employees(name, employee_id, position)
       `)
       .order('created_at', { ascending: false });
 
@@ -641,6 +642,178 @@ export const dbHelpers = {
 
     console.log('Contract created:', data);
     return data
+  },
+
+  // Dues Management
+  async getDues(userId?: string, userRole?: string) {
+    console.log('Loading dues for user:', userId, 'role:', userRole);
+
+    let query = supabase
+      .from('dues')
+      .select(`
+        *,
+        company:companies(company_name, credit_limit, credit_limit_days),
+        employee:employees(name, employee_id, position),
+        service_billing:service_billings(invoice_number, service_date, total_amount)
+      `)
+      .order('created_at', { ascending: false });
+
+    // Filter based on user role if needed
+    if (userId && userRole === 'staff') {
+      // For staff users, show dues for companies they are assigned to
+      query = query.in('company_id',
+        supabase
+          .from('companies')
+          .select('id')
+          .eq('assigned_to', userId)
+      );
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error loading dues:', error);
+      throw error;
+    }
+
+    console.log('Loaded dues:', data);
+    return data;
+  },
+
+  async createDue(due: any) {
+    console.log('Creating due record:', due);
+
+    const { data, error } = await supabase
+      .from('dues')
+      .insert([due])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating due:', error);
+      throw error;
+    }
+
+    console.log('Due created:', data);
+    return data;
+  },
+
+  async updateDue(id: string, updates: any) {
+    console.log('Updating due:', id, updates);
+
+    const { data, error } = await supabase
+      .from('dues')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating due:', error);
+      throw error;
+    }
+
+    console.log('Due updated:', data);
+    return data;
+  },
+
+  async markDueAsPaid(id: string, paymentAmount: number, paymentMethod: string, paymentReference?: string) {
+    console.log('Marking due as paid:', id, paymentAmount);
+
+    // First get the current due record
+    const { data: currentDue, error: fetchError } = await supabase
+      .from('dues')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching due:', fetchError);
+      throw fetchError;
+    }
+
+    const newPaidAmount = currentDue.paid_amount + paymentAmount;
+    const newDueAmount = currentDue.original_amount - newPaidAmount;
+
+    let status = 'pending';
+    if (newDueAmount <= 0) {
+      status = 'paid';
+    } else if (newPaidAmount > 0) {
+      status = 'partial';
+    }
+
+    const updates = {
+      paid_amount: newPaidAmount,
+      due_amount: Math.max(0, newDueAmount),
+      status: status,
+      last_payment_date: new Date().toISOString().split('T')[0],
+      payment_method: paymentMethod,
+      payment_reference: paymentReference,
+      updated_by: 'System',
+      updated_at: new Date().toISOString()
+    };
+
+    return this.updateDue(id, updates);
+  },
+
+  async getDuesByCompany(companyId: string) {
+    console.log('Loading dues for company:', companyId);
+
+    const { data, error } = await supabase
+      .from('dues')
+      .select(`
+        *,
+        employee:employees(name, employee_id, position),
+        service_billing:service_billings(invoice_number, service_date, total_amount)
+      `)
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading company dues:', error);
+      throw error;
+    }
+
+    return data;
+  },
+
+  async getCompanyCreditUsage(companyId: string) {
+    console.log('Calculating credit usage for company:', companyId);
+
+    // Get total outstanding dues
+    const { data: dues, error: duesError } = await supabase
+      .from('dues')
+      .select('due_amount')
+      .eq('company_id', companyId)
+      .in('status', ['pending', 'partial', 'overdue']);
+
+    if (duesError) {
+      console.error('Error loading company dues for credit calculation:', duesError);
+      throw duesError;
+    }
+
+    const totalOutstanding = dues?.reduce((sum, due) => sum + due.due_amount, 0) || 0;
+
+    // Get company credit limit
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('credit_limit')
+      .eq('id', companyId)
+      .single();
+
+    if (companyError) {
+      console.error('Error loading company for credit calculation:', companyError);
+      throw companyError;
+    }
+
+    const creditLimit = company?.credit_limit || 0;
+    const availableCredit = Math.max(0, creditLimit - totalOutstanding);
+
+    return {
+      creditLimit,
+      totalOutstanding,
+      availableCredit,
+      creditUsagePercentage: creditLimit > 0 ? (totalOutstanding / creditLimit) * 100 : 0
+    };
   },
 
   // Chat Functions

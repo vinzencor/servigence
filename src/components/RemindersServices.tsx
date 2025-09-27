@@ -22,10 +22,12 @@ import {
   CalendarDays,
   Users,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  DollarSign
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { dbHelpers, supabase } from '../lib/supabase';
+import { emailService } from '../lib/emailService';
 
 interface Reminder {
   id: string;
@@ -48,6 +50,7 @@ interface Reminder {
 
 const RemindersServices: React.FC = () => {
   const [reminders, setReminders] = useState<any[]>([]);
+  const [dues, setDues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
 
@@ -78,9 +81,152 @@ const RemindersServices: React.FC = () => {
     }
   };
 
+  // Load dues from database
+  const loadDues = async () => {
+    setLoading(true);
+    try {
+      const data = await dbHelpers.getDues();
+      console.log('Loaded dues:', data);
+      setDues(data || []);
+    } catch (error) {
+      console.error('Error loading dues:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadReminders();
+    loadDues();
+    if (emailNotificationsEnabled) {
+      checkAndSendDueReminders();
+      checkAndSendDocumentReminders();
+    }
   }, [emailNotificationsEnabled]);
+
+  // Check and send due reminder emails
+  const checkAndSendDueReminders = async () => {
+    if (!emailNotificationsEnabled) return;
+
+    try {
+      const today = new Date();
+      const tenDaysFromNow = new Date();
+      tenDaysFromNow.setDate(today.getDate() + 10);
+
+      // Get dues that are due within 10 days and haven't been reminded recently
+      const duesToRemind = dues.filter(due => {
+        const dueDate = new Date(due.due_date);
+        const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Send reminder if due within 10 days and status is pending or partial
+        return daysUntilDue <= 10 && daysUntilDue >= 0 &&
+               (due.status === 'pending' || due.status === 'partial');
+      });
+
+      for (const due of duesToRemind) {
+        try {
+          const dueDate = new Date(due.due_date);
+          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Get company email
+          const companyEmail = due.company?.email1 || due.company?.email2;
+          if (!companyEmail) continue;
+
+          await emailService.sendDueReminderEmail({
+            recipientEmail: companyEmail,
+            companyName: due.company?.company_name || 'Unknown Company',
+            dueAmount: due.due_amount,
+            originalAmount: due.original_amount,
+            serviceName: due.service_name || 'Service',
+            dueDate: due.due_date,
+            daysUntilDue: daysUntilDue
+          });
+
+          console.log(`Due reminder email sent to ${companyEmail} for ${due.company?.company_name}`);
+        } catch (emailError) {
+          console.error('Error sending due reminder email:', emailError);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking due reminders:', error);
+    }
+  };
+
+  // Check and send document expiry reminder emails
+  const checkAndSendDocumentReminders = async () => {
+    try {
+      const today = new Date();
+      const tenDaysFromNow = new Date();
+      tenDaysFromNow.setDate(today.getDate() + 10);
+
+      // Get reminders that are due within 10 days and are enabled
+      const remindersToSend = reminders.filter(reminder => {
+        if (!reminder.enabled) return false;
+
+        const reminderDate = new Date(reminder.reminder_date);
+        const daysUntilExpiry = Math.ceil((reminderDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Send reminder if due within 10 days and status is active
+        return daysUntilExpiry <= 10 && daysUntilExpiry >= 0 && reminder.status === 'active';
+      });
+
+      for (const reminder of remindersToSend) {
+        try {
+          const reminderDate = new Date(reminder.reminder_date);
+          const daysUntilExpiry = Math.ceil((reminderDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Get recipient email - try company first, then individual
+          let recipientEmail = '';
+          let recipientName = '';
+          let companyName = '';
+
+          if (reminder.company_id) {
+            // Get company details
+            const { data: company } = await supabase
+              .from('companies')
+              .select('company_name, email1, email2')
+              .eq('id', reminder.company_id)
+              .single();
+
+            if (company) {
+              recipientEmail = company.email1 || company.email2 || '';
+              recipientName = company.company_name;
+              companyName = company.company_name;
+            }
+          } else if (reminder.individual_id) {
+            // Get individual details
+            const { data: individual } = await supabase
+              .from('individuals')
+              .select('individual_name, email1, email2')
+              .eq('id', reminder.individual_id)
+              .single();
+
+            if (individual) {
+              recipientEmail = individual.email1 || individual.email2 || '';
+              recipientName = individual.individual_name;
+            }
+          }
+
+          if (!recipientEmail) continue;
+
+          await emailService.sendReminderEmail({
+            recipientEmail: recipientEmail,
+            recipientName: recipientName,
+            documentType: reminder.document_type || reminder.reminder_type,
+            expiryDate: reminder.reminder_date,
+            companyName: companyName,
+            daysUntilExpiry: daysUntilExpiry
+          });
+
+          console.log(`Document reminder email sent to ${recipientEmail} for ${reminder.title}`);
+        } catch (emailError) {
+          console.error('Error sending document reminder email:', emailError);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking document reminders:', error);
+    }
+  };
 
   // Toggle email notifications and enable/disable all reminders
   const toggleEmailNotifications = async () => {
@@ -104,7 +250,27 @@ const RemindersServices: React.FC = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'reminders' | 'services' | 'calendar'>('overview');
+  // Toggle individual reminder notification
+  const toggleReminderNotification = async (reminderId: string, currentState: boolean) => {
+    try {
+      const newState = !currentState;
+
+      const { error } = await supabase
+        .from('reminders')
+        .update({ enabled: newState })
+        .eq('id', reminderId);
+
+      if (error) throw error;
+
+      toast.success(`Reminder notification ${newState ? 'enabled' : 'disabled'}`);
+      loadReminders(); // Reload to reflect changes
+    } catch (error) {
+      console.error('Error toggling reminder notification:', error);
+      toast.error('Failed to update reminder notification setting');
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'reminders' | 'services' | 'calendar' | 'dues'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
@@ -228,6 +394,14 @@ const RemindersServices: React.FC = () => {
   const [reminderToDelete, setReminderToDelete] = useState<string | null>(null);
   const [showReminderMenu, setShowReminderMenu] = useState<string | null>(null);
   const [showAddService, setShowAddService] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedDue, setSelectedDue] = useState<any>(null);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paymentMethod: 'bank_transfer',
+    reference: '',
+    notes: ''
+  });
 
   // Add Service Form State
   const [newService, setNewService] = useState({
@@ -378,6 +552,57 @@ const RemindersServices: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
+  const handleRecordPayment = (due: any) => {
+    setSelectedDue(due);
+    setPaymentForm({
+      amount: due.due_amount.toString(),
+      paymentMethod: 'bank_transfer',
+      reference: '',
+      notes: ''
+    });
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSubmit = async () => {
+    if (!selectedDue || !paymentForm.amount) {
+      alert('Please enter a payment amount');
+      return;
+    }
+
+    try {
+      const paymentAmount = parseFloat(paymentForm.amount);
+      if (paymentAmount <= 0 || paymentAmount > selectedDue.due_amount) {
+        alert('Please enter a valid payment amount');
+        return;
+      }
+
+      await dbHelpers.markDueAsPaid(
+        selectedDue.id,
+        paymentAmount,
+        paymentForm.paymentMethod,
+        paymentForm.reference || undefined
+      );
+
+      // Reload dues to show updated information
+      await loadDues();
+
+      // Close modal and reset form
+      setShowPaymentModal(false);
+      setSelectedDue(null);
+      setPaymentForm({
+        amount: '',
+        paymentMethod: 'bank_transfer',
+        reference: '',
+        notes: ''
+      });
+
+      alert('✅ Payment recorded successfully!');
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      alert('❌ Error recording payment. Please try again.');
+    }
+  };
+
   const confirmDeleteReminder = async () => {
     if (reminderToDelete) {
       try {
@@ -416,6 +641,42 @@ const RemindersServices: React.FC = () => {
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'low': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getDaysUntilDue = (reminderDate: string) => {
+    const today = new Date();
+    const dueDate = new Date(reminderDate);
+    const diffTime = dueDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return `Overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) !== 1 ? 's' : ''}`;
+    } else if (diffDays === 0) {
+      return 'Due today';
+    } else if (diffDays === 1) {
+      return 'Due tomorrow';
+    } else {
+      return `Due in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+    }
+  };
+
+  const getDueDateColor = (reminderDate: string) => {
+    const today = new Date();
+    const dueDate = new Date(reminderDate);
+    const diffTime = dueDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return 'text-red-600 font-semibold'; // Overdue
+    } else if (diffDays === 0) {
+      return 'text-red-500 font-medium'; // Due today
+    } else if (diffDays <= 3) {
+      return 'text-orange-500 font-medium'; // Due soon
+    } else if (diffDays <= 7) {
+      return 'text-yellow-600'; // Due this week
+    } else {
+      return 'text-gray-500'; // Due later
     }
   };
 
@@ -466,6 +727,10 @@ const RemindersServices: React.FC = () => {
     return matchesSearch && matchesPriority && matchesStatus;
   });
 
+  const totalOutstandingDues = dues.reduce((sum, due) => sum + due.due_amount, 0);
+  const pendingDues = dues.filter(d => d.status === 'pending' || d.status === 'partial');
+  const overdueDues = dues.filter(d => d.status === 'overdue' || new Date(d.due_date) < new Date());
+
   const stats = [
     {
       title: 'Active Reminders',
@@ -475,10 +740,10 @@ const RemindersServices: React.FC = () => {
       color: 'blue'
     },
     {
-      title: 'Due Today',
-      value: reminders.filter(r => r.reminder_date === new Date().toISOString().split('T')[0]).length.toString(),
-      change: 'Requires attention',
-      icon: Clock,
+      title: 'Outstanding Dues',
+      value: `AED ${totalOutstandingDues.toFixed(0)}`,
+      change: `${pendingDues.length} pending`,
+      icon: DollarSign,
       color: 'red'
     },
     {
@@ -643,8 +908,194 @@ const RemindersServices: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'reminders', label: 'Reminders', icon: Bell },
     { id: 'services', label: 'Services', icon: Target },
+    { id: 'dues', label: 'Due', icon: DollarSign },
     { id: 'calendar', label: 'Calendar', icon: CalendarDays }
   ];
+
+  // Render Dues List
+  const renderDuesList = () => {
+    const filteredDues = dues.filter(due => {
+      const matchesSearch = searchTerm === '' ||
+        due.company?.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        due.employee?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        due.service_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        due.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesPriority = filterPriority === 'all' || due.priority === filterPriority;
+      const matchesStatus = filterStatus === 'all' || due.status === filterStatus;
+
+      return matchesSearch && matchesPriority && matchesStatus;
+    });
+
+    const getDueStatusColor = (status: string) => {
+      switch (status) {
+        case 'pending': return 'bg-yellow-100 text-yellow-800';
+        case 'partial': return 'bg-blue-100 text-blue-800';
+        case 'paid': return 'bg-green-100 text-green-800';
+        case 'overdue': return 'bg-red-100 text-red-800';
+        case 'cancelled': return 'bg-gray-100 text-gray-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    };
+
+    const getPriorityColor = (priority: string) => {
+      switch (priority) {
+        case 'urgent': return 'bg-red-100 text-red-800';
+        case 'high': return 'bg-orange-100 text-orange-800';
+        case 'medium': return 'bg-yellow-100 text-yellow-800';
+        case 'low': return 'bg-green-100 text-green-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Search and Filter Bar */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 mb-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Outstanding Dues</h3>
+              <p className="text-sm text-gray-600">
+                Track unpaid amounts when companies exceed their credit limits
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="text-sm text-gray-600">
+                Total Outstanding: AED {dues.reduce((sum, due) => sum + due.due_amount, 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row lg:items-center space-y-4 lg:space-y-0 lg:space-x-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search dues by company, employee, service, or invoice..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div className="flex items-center space-x-3">
+              <select
+                value={filterPriority}
+                onChange={(e) => setFilterPriority(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="all">All Priorities</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Dues List */}
+        <div className="space-y-4">
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+              <p className="text-gray-500 mt-2">Loading dues...</p>
+            </div>
+          ) : filteredDues.length === 0 ? (
+            <div className="text-center py-8">
+              <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No dues found</h3>
+              <p className="text-gray-600">All companies are within their credit limits.</p>
+            </div>
+          ) : (
+            filteredDues.map((due) => (
+              <div key={due.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <h4 className="text-lg font-semibold text-gray-900">
+                        {due.company?.company_name || 'Unknown Company'}
+                      </h4>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDueStatusColor(due.status)}`}>
+                        {due.status}
+                      </span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(due.priority)}`}>
+                        {due.priority}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p><strong>Service:</strong> {due.service_name || 'N/A'}</p>
+                      <p><strong>Employee:</strong> {due.employee?.name || 'N/A'}</p>
+                      <p><strong>Invoice:</strong> {due.invoice_number || 'N/A'}</p>
+                      <p><strong>Service Date:</strong> {new Date(due.service_date).toLocaleDateString()}</p>
+                      <p><strong>Due Date:</strong> {new Date(due.due_date).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-sm text-gray-600">Original Amount</p>
+                        <p className="text-lg font-semibold text-gray-900">AED {due.original_amount.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Paid Amount</p>
+                        <p className="text-lg font-semibold text-green-600">AED {due.paid_amount.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Due Amount</p>
+                        <p className="text-xl font-bold text-red-600">AED {due.due_amount.toFixed(2)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {due.notes && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-700">{due.notes}</p>
+                  </div>
+                )}
+
+                <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-200">
+                  <div className="text-sm text-gray-500">
+                    Created: {new Date(due.created_at).toLocaleDateString()}
+                    {due.last_payment_date && (
+                      <span className="ml-4">
+                        Last Payment: {new Date(due.last_payment_date).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-sm">
+                      <Eye className="w-4 h-4" />
+                      <span>View Details</span>
+                    </button>
+                    <button
+                      onClick={() => handleRecordPayment(due)}
+                      className="flex items-center space-x-1 text-green-600 hover:text-green-800 text-sm"
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      <span>Record Payment</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -698,6 +1149,7 @@ const RemindersServices: React.FC = () => {
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'reminders' && renderRemindersList()}
       {activeTab === 'services' && renderServiceTracking()}
+      {activeTab === 'dues' && renderDuesList()}
       {activeTab === 'calendar' && renderCalendarView()}
 
       {/* Add Reminder Modal */}
@@ -1284,6 +1736,109 @@ const RemindersServices: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Payment Recording Modal */}
+      {showPaymentModal && selectedDue && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Record Payment</h2>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-white rotate-45" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="mb-4">
+                <h3 className="font-semibold text-gray-900">{selectedDue.company?.company_name}</h3>
+                <p className="text-sm text-gray-600">Outstanding: AED {selectedDue.due_amount.toFixed(2)}</p>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); handlePaymentSubmit(); }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Amount (AED) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={selectedDue.due_amount}
+                    value={paymentForm.amount}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Method
+                  </label>
+                  <select
+                    value={paymentForm.paymentMethod}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="card">Card</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentForm.reference}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, reference: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Transaction reference"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={paymentForm.notes}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Additional notes"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentModal(false)}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!paymentForm.amount}
+                    className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Record Payment
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1390,6 +1945,10 @@ const RemindersServices: React.FC = () => {
                           <Calendar className="w-4 h-4" />
                           <span>Due: {new Date(reminder.reminder_date).toLocaleDateString()}</span>
                         </div>
+                        <div className={`flex items-center space-x-1 ${getDueDateColor(reminder.reminder_date)}`}>
+                          <Clock className="w-4 h-4" />
+                          <span>{getDaysUntilDue(reminder.reminder_date)}</span>
+                        </div>
                         {reminder.assigned_to && (
                           <div className="flex items-center space-x-1">
                             <User className="w-4 h-4" />
@@ -1412,6 +1971,17 @@ const RemindersServices: React.FC = () => {
                       {reminder.status.toUpperCase()}
                     </span>
                     <div className="flex space-x-1">
+                      <button
+                        onClick={() => toggleReminderNotification(reminder.id, reminder.enabled)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          reminder.enabled
+                            ? 'text-green-600 hover:bg-green-50'
+                            : 'text-gray-400 hover:bg-gray-50'
+                        }`}
+                        title={reminder.enabled ? 'Disable Notifications' : 'Enable Notifications'}
+                      >
+                        {reminder.enabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                      </button>
                       <button
                         onClick={() => handleViewReminder(reminder)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"

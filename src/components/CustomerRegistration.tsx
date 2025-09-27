@@ -117,10 +117,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       }
     }
 
-    // Credit limit days validation
-    if (!formData.creditLimitDays || formData.creditLimitDays.trim() === '') {
-      newErrors.creditLimitDays = 'Credit limit days is required';
-    } else {
+    // Credit limit days validation (optional)
+    if (formData.creditLimitDays && formData.creditLimitDays.trim() !== '') {
       const days = parseInt(formData.creditLimitDays);
       if (isNaN(days) || days < 0) {
         newErrors.creditLimitDays = 'Credit limit days must be a valid positive number';
@@ -189,6 +187,101 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
   const removeDocument = (id: string) => {
     setDocuments(documents.filter(doc => doc.id !== id));
+  };
+
+  const createIndividualDocumentReminders = async (individualId: string, individual: any) => {
+    try {
+      console.log('🔔 Creating reminders for individual documents:', individual);
+
+      const documentReminders = [];
+
+      // Passport expiry reminder
+      if (individual.passportExpiry) {
+        const expiryDate = new Date(individual.passportExpiry);
+        const reminderDate = new Date(expiryDate);
+        reminderDate.setDate(reminderDate.getDate() - 10); // 10 days before expiry
+
+        documentReminders.push({
+          title: 'Passport Expiry Reminder',
+          description: `Passport for ${individual.individualName} will expire on ${expiryDate.toLocaleDateString()}. Please renew this document before the expiry date.`,
+          reminder_date: reminderDate.toISOString().split('T')[0],
+          reminder_type: 'document_expiry',
+          document_type: 'passport',
+          individual_id: individualId,
+          priority: 'high',
+          status: 'active',
+          days_before_reminder: 10,
+          enabled: true,
+          created_by: user?.name || 'System',
+          assigned_to: user?.name || 'System'
+        });
+      }
+
+      // Emirates ID expiry reminder
+      if (individual.emiratesIdExpiry) {
+        const expiryDate = new Date(individual.emiratesIdExpiry);
+        const reminderDate = new Date(expiryDate);
+        reminderDate.setDate(reminderDate.getDate() - 10);
+
+        documentReminders.push({
+          title: 'Emirates ID Expiry Reminder',
+          description: `Emirates ID for ${individual.individualName} will expire on ${expiryDate.toLocaleDateString()}. Please renew this document before the expiry date.`,
+          reminder_date: reminderDate.toISOString().split('T')[0],
+          reminder_type: 'document_expiry',
+          document_type: 'emirates_id',
+          individual_id: individualId,
+          priority: 'high',
+          status: 'active',
+          days_before_reminder: 10,
+          enabled: true,
+          created_by: user?.name || 'System',
+          assigned_to: user?.name || 'System'
+        });
+      }
+
+      // Visa expiry reminder
+      if (individual.visaExpiry) {
+        const expiryDate = new Date(individual.visaExpiry);
+        const reminderDate = new Date(expiryDate);
+        reminderDate.setDate(reminderDate.getDate() - 10);
+
+        documentReminders.push({
+          title: 'Visa Expiry Reminder',
+          description: `Visa for ${individual.individualName} will expire on ${expiryDate.toLocaleDateString()}. Please renew this document before the expiry date.`,
+          reminder_date: reminderDate.toISOString().split('T')[0],
+          reminder_type: 'document_expiry',
+          document_type: 'visa',
+          individual_id: individualId,
+          priority: 'high',
+          status: 'active',
+          days_before_reminder: 10,
+          enabled: true,
+          created_by: user?.name || 'System',
+          assigned_to: user?.name || 'System'
+        });
+      }
+
+      // Insert all reminders
+      if (documentReminders.length > 0) {
+        console.log('💾 Inserting individual document reminders:', documentReminders);
+
+        const { data: reminderResults, error: reminderError } = await supabase
+          .from('reminders')
+          .insert(documentReminders)
+          .select();
+
+        if (reminderError) {
+          console.error('❌ Error creating individual reminders:', reminderError);
+          throw reminderError;
+        }
+
+        console.log('✅ Individual reminders created successfully:', reminderResults);
+        toast.success(`${documentReminders.length} document reminder(s) created for ${individual.individualName}`);
+      }
+    } catch (error) {
+      console.error('❌ Error creating individual document reminders:', error);
+      toast.error('Failed to create some reminders');
+    }
   };
 
   const handleFileUpload = (id: string, file: File) => {
@@ -319,7 +412,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           quota: formData.quota || undefined,
           companyGrade: formData.companyGrade,
           creditLimit: parseFloat(formData.creditLimit),
-          creditLimitDays: parseInt(formData.creditLimitDays),
+          creditLimitDays: formData.creditLimitDays ? parseInt(formData.creditLimitDays) : undefined,
           proName: formData.proName || undefined,
           proPhone: formData.proPhone || undefined,
           proEmail: formData.proEmail || undefined,
@@ -347,7 +440,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
             quota: newCompany.quota,
             company_grade: newCompany.companyGrade,
             credit_limit: newCompany.creditLimit,
-            credit_limit_days: newCompany.creditLimitDays,
+            credit_limit_days: newCompany.creditLimitDays || null,
             pro_name: newCompany.proName,
             pro_phone: newCompany.proPhone,
             pro_email: newCompany.proEmail,
@@ -435,19 +528,22 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
         // Send welcome email
         try {
+          console.log('🔄 Attempting to send welcome email for company:', newCompany.companyName);
+
           const emailSent = await emailService.sendWelcomeEmail({
             companyName: newCompany.companyName,
-            contactEmail: newCompany.email1
+            primaryEmail: newCompany.email1,
+            secondaryEmail: newCompany.email2
           });
 
           if (emailSent) {
-            toast.success('Company registered successfully! Welcome email sent.');
+            toast.success(`✅ Company registered successfully! Welcome email sent to ${newCompany.email1}${newCompany.email2 ? ` and ${newCompany.email2}` : ''}.`);
           } else {
-            toast.success('Company registered successfully! (Email sending failed)');
+            toast.success('⚠️ Company registered successfully! (Email sending failed - please check email server)');
           }
         } catch (emailError) {
-          console.error('Email sending failed:', emailError);
-          toast.success('Company registered successfully! (Email sending failed)');
+          console.error('❌ Email sending failed:', emailError);
+          toast.success('⚠️ Company registered successfully! (Email sending failed - please check email server)');
         }
 
         onSave(newCompany);
@@ -475,14 +571,14 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           visaExpiry: formData.visaExpiry || undefined,
           licenseNumber: formData.licenseNumber || undefined,
           creditLimit: parseFloat(formData.creditLimit),
-          creditLimitDays: parseInt(formData.creditLimitDays),
+          creditLimitDays: formData.creditLimitDays ? parseInt(formData.creditLimitDays) : undefined,
           dateOfRegistration: formData.dateOfRegistration,
           createdBy: formData.createdBy,
           status: 'active'
         };
 
         // Save to Supabase
-        await dbHelpers.createIndividual({
+        const createdIndividual = await dbHelpers.createIndividual({
           individual_name: newIndividual.individualName,
           nationality: newIndividual.nationality,
           phone1: newIndividual.phone1,
@@ -499,7 +595,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           visa_expiry: newIndividual.visaExpiry,
           license_number: newIndividual.licenseNumber,
           credit_limit: newIndividual.creditLimit,
-          credit_limit_days: newIndividual.creditLimitDays,
+          credit_limit_days: newIndividual.creditLimitDays || null,
           date_of_registration: newIndividual.dateOfRegistration,
           created_by: newIndividual.createdBy,
           status: newIndividual.status,
@@ -508,6 +604,31 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
         if (onSaveIndividual) {
           onSaveIndividual(newIndividual);
+        }
+
+        // Create reminders for document expiry dates
+        if (createdIndividual?.id) {
+          await createIndividualDocumentReminders(createdIndividual.id, newIndividual);
+        }
+
+        // Send welcome email for individual registration
+        try {
+          console.log('🔄 Attempting to send welcome email for individual:', newIndividual.individualName);
+
+          const emailSent = await emailService.sendIndividualWelcomeEmail({
+            individualName: newIndividual.individualName,
+            primaryEmail: newIndividual.email1,
+            secondaryEmail: newIndividual.email2
+          });
+
+          if (emailSent) {
+            toast.success(`✅ Individual registered successfully! Welcome email sent to ${newIndividual.email1}${newIndividual.email2 ? ` and ${newIndividual.email2}` : ''}.`);
+          } else {
+            toast.success('⚠️ Individual registered successfully! (Email sending failed - please check email server)');
+          }
+        } catch (emailError) {
+          console.error('❌ Email sending failed:', emailError);
+          toast.success('⚠️ Individual registered successfully! (Email sending failed - please check email server)');
         }
       }
 
@@ -1081,7 +1202,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Credit Limit Days <span className="text-red-500">*</span>
+                Credit Limit Days
               </label>
               <input
                 type="number"

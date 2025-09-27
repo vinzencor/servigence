@@ -14,7 +14,7 @@ export interface Company {
   quota?: string;
   companyGrade: string;
   creditLimit: number;
-  creditLimitDays: number;
+  creditLimitDays?: number;
   proName?: string;
   proPhone?: string;
   proEmail?: string;
@@ -44,7 +44,7 @@ export interface Individual {
   visaExpiry?: string;
   licenseNumber?: string;
   creditLimit: number;
-  creditLimitDays: number;
+  creditLimitDays?: number;
   dateOfRegistration: string;
   createdBy: string;
   status: 'active' | 'inactive' | 'pending';
@@ -287,6 +287,9 @@ export interface ServiceBilling {
   typingCharges: number;
   governmentCharges: number;
   totalAmount: number;
+  vatPercentage?: number;
+  vatAmount?: number;
+  totalAmountWithVat?: number;
   quantity: number;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   notes?: string;
@@ -341,4 +344,33 @@ export interface Account {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Due {
+  id: string;
+  companyId: string;
+  employeeId?: string;
+  serviceBillingId?: string;
+  originalAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  serviceDate: string;
+  dueDate: string;
+  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  serviceName?: string;
+  serviceDescription?: string;
+  invoiceNumber?: string;
+  lastPaymentDate?: string;
+  paymentMethod?: string;
+  paymentReference?: string;
+  notes?: string;
+  createdBy: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Populated fields
+  company?: Company;
+  employee?: Employee;
+  serviceBilling?: ServiceBilling;
 }

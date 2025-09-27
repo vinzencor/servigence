@@ -1,0 +1,16 @@
+@echo off
+echo Starting Servigence CRM System...
+echo.
+echo Starting Email Server (Port 3001)...
+start "Email Server" cmd /k "node server.js"
+timeout /t 3 /nobreak > nul
+echo.
+echo Starting Main Application (Port 5175)...
+start "Main App" cmd /k "npm run dev"
+echo.
+echo Both servers are starting...
+echo Email Server: http://localhost:3001
+echo Main App: http://localhost:5175
+echo.
+echo Press any key to exit...
+pause > nul

@@ -18,6 +18,7 @@ const ServiceBilling: React.FC = () => {
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
+  const [companyEmployees, setCompanyEmployees] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
 
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
@@ -56,7 +57,8 @@ const ServiceBilling: React.FC = () => {
     quantity: '1',
     notes: '',
     assignedVendorId: '',
-    vendorCost: '0'
+    vendorCost: '0',
+    vatPercentage: '0'
   });
 
   const tabs = [
@@ -175,6 +177,18 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
+  const loadCompanyEmployees = async (companyId: string) => {
+    try {
+      console.log('Loading employees for company:', companyId);
+      const employeesData = await dbHelpers.getEmployees(companyId);
+      console.log('Loaded company employees:', employeesData);
+      setCompanyEmployees(employeesData || []);
+    } catch (error) {
+      console.error('Error loading company employees:', error);
+      setCompanyEmployees([]);
+    }
+  };
+
   const testSupabaseConnection = async () => {
     try {
       console.log('Testing Supabase connection...');
@@ -257,12 +271,21 @@ const ServiceBilling: React.FC = () => {
       companyId: billing.company_id || '',
       individualId: billing.individual_id || '',
       serviceTypeId: billing.service_type_id || '',
-      assignedEmployeeId: billing.assigned_employee_id || '',
+      assignedEmployeeId: billing.company_employee_id || billing.assigned_employee_id || '',
       serviceDate: billing.service_date || '',
       cashType: billing.cash_type || 'cash',
       quantity: billing.quantity?.toString() || '1',
-      notes: billing.notes || ''
+      notes: billing.notes || '',
+      assignedVendorId: billing.assigned_vendor_id || '',
+      vendorCost: billing.vendor_cost?.toString() || '0',
+      vatPercentage: billing.vat_percentage?.toString() || '0'
     });
+
+    // Load company employees if it's a company billing
+    if (billing.company_id) {
+      loadCompanyEmployees(billing.company_id);
+    }
+
     setShowEditBilling(true);
   };
 
@@ -283,16 +306,26 @@ const ServiceBilling: React.FC = () => {
       const governmentCharges = selectedService.governmentCharges * quantity;
       const totalAmount = typingCharges + governmentCharges;
 
+      // Calculate VAT
+      const vatPercentage = parseFloat(editBillingForm.vatPercentage) || 0;
+      const vatAmount = (totalAmount * vatPercentage) / 100;
+      const totalAmountWithVat = totalAmount + vatAmount;
+
       const updatedBillingData = {
         company_id: editBillingForm.clientType === 'company' && editBillingForm.companyId ? editBillingForm.companyId : null,
         individual_id: editBillingForm.clientType === 'individual' && editBillingForm.individualId ? editBillingForm.individualId : null,
         service_type_id: editBillingForm.serviceTypeId || null,
-        assigned_employee_id: editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
+        // Use company_employee_id for company employees, assigned_employee_id for service employees
+        assigned_employee_id: editBillingForm.clientType === 'individual' && editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
+        company_employee_id: editBillingForm.clientType === 'company' && editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
         service_date: editBillingForm.serviceDate,
         cash_type: editBillingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
         total_amount: totalAmount,
+        vat_percentage: vatPercentage,
+        vat_amount: vatAmount,
+        total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         notes: editBillingForm.notes || null
       };
@@ -515,6 +548,9 @@ const ServiceBilling: React.FC = () => {
     const typingCharges = parseFloat(billing.typing_charges || 0);
     const governmentCharges = parseFloat(billing.government_charges || 0);
     const totalAmount = parseFloat(billing.total_amount || 0);
+    const vatPercentage = parseFloat(billing.vat_percentage || 0);
+    const vatAmount = parseFloat(billing.vat_amount || 0);
+    const totalAmountWithVat = parseFloat(billing.total_amount_with_vat || totalAmount);
     const cashType = billing.cash_type || 'N/A';
 
     return `
@@ -592,7 +628,9 @@ const ServiceBilling: React.FC = () => {
         <div class="total-section">
           <div class="total-row">Service Charges: AED ${typingCharges.toFixed(2)}</div>
           <div class="total-row">Government Charges: AED ${governmentCharges.toFixed(2)}</div>
-          <div class="total-final">Total Amount: AED ${totalAmount.toFixed(2)}</div>
+          <div class="total-row">Subtotal: AED ${totalAmount.toFixed(2)}</div>
+          ${vatPercentage > 0 ? `<div class="total-row">VAT (${vatPercentage}%): AED ${vatAmount.toFixed(2)}</div>` : ''}
+          <div class="total-final">Total Amount: AED ${totalAmountWithVat.toFixed(2)}</div>
         </div>
 
         <div class="footer">
@@ -664,7 +702,9 @@ const ServiceBilling: React.FC = () => {
         company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
         individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
         service_type_id: billingForm.serviceTypeId || null,
-        assigned_employee_id: billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
+        // Use company_employee_id for company employees, assigned_employee_id for service employees
+        assigned_employee_id: billingForm.clientType === 'individual' && billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
+        company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
         service_date: billingForm.serviceDate,
         cash_type: billingForm.cashType,
         typing_charges: typingCharges,
@@ -680,6 +720,49 @@ const ServiceBilling: React.FC = () => {
       };
 
       const createdBilling = await dbHelpers.createServiceBilling(billingData);
+
+      // Check credit limit and create due entry if needed (only for companies)
+      if (billingForm.clientType === 'company' && billingForm.companyId) {
+        try {
+          const creditUsage = await dbHelpers.getCompanyCreditUsage(billingForm.companyId);
+          console.log('Credit usage for company:', creditUsage);
+
+          // If the total amount exceeds available credit, create a due entry
+          if (totalAmount > creditUsage.availableCredit) {
+            const paidAmount = Math.max(0, creditUsage.availableCredit);
+            const dueAmount = totalAmount - paidAmount;
+
+            if (dueAmount > 0) {
+              const dueData = {
+                company_id: billingForm.companyId,
+                employee_id: billingForm.assignedEmployeeId || null,
+                service_billing_id: createdBilling.id,
+                original_amount: totalAmount,
+                paid_amount: paidAmount,
+                due_amount: dueAmount,
+                service_date: billingForm.serviceDate,
+                due_date: new Date(Date.now() + (creditUsage.creditLimit > 0 ? 30 : 7) * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days for credit customers, 7 days for others
+                status: paidAmount > 0 ? 'partial' : 'pending',
+                priority: dueAmount > 10000 ? 'high' : 'medium',
+                service_name: selectedService.name,
+                service_description: `${selectedService.name} - Quantity: ${quantity}`,
+                invoice_number: invoiceNumber,
+                notes: `Service billing exceeded credit limit. Company paid: AED ${paidAmount.toFixed(2)}, Due amount: AED ${dueAmount.toFixed(2)}`,
+                created_by: 'System'
+              };
+
+              await dbHelpers.createDue(dueData);
+              console.log('Due entry created for exceeded credit limit');
+
+              // Show different success message when due is created
+              alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\nCompany Credit Used: AED ${paidAmount.toFixed(2)}\nDue Amount: AED ${dueAmount.toFixed(2)}\n\n⚠️ Credit limit exceeded - Due entry created.`);
+            }
+          }
+        } catch (creditError) {
+          console.error('Error checking credit limit:', creditError);
+          // Continue with normal flow even if credit check fails
+        }
+      }
 
       // Create account transactions linked to the billing
       if (typingCharges > 0) {
@@ -735,8 +818,22 @@ const ServiceBilling: React.FC = () => {
         });
       }
 
-      // Success feedback
-      alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\n\nBilling and invoice have been generated.`);
+      // Success feedback (only show if no due was created)
+      if (billingForm.clientType !== 'company' || !billingForm.companyId) {
+        alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\n\nBilling and invoice have been generated.`);
+      } else {
+        // For companies, check if due was created and show appropriate message
+        try {
+          const creditUsage = await dbHelpers.getCompanyCreditUsage(billingForm.companyId);
+          if (totalAmount <= creditUsage.availableCredit) {
+            alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\n\nBilling and invoice have been generated.`);
+          }
+          // If due was created, the message was already shown above
+        } catch (error) {
+          // Fallback message if credit check fails
+          alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\n\nBilling and invoice have been generated.`);
+        }
+      }
 
       resetForm();
       setShowCreateBilling(false);
@@ -770,6 +867,19 @@ const ServiceBilling: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setBillingForm(prev => ({ ...prev, [name]: value }));
+
+    // Load company employees when company is selected
+    if (name === 'companyId' && value) {
+      loadCompanyEmployees(value);
+      // Reset assigned employee when company changes
+      setBillingForm(prev => ({ ...prev, assignedEmployeeId: '' }));
+    }
+
+    // Clear company employees when switching to individual
+    if (name === 'clientType' && value === 'individual') {
+      setCompanyEmployees([]);
+      setBillingForm(prev => ({ ...prev, assignedEmployeeId: '' }));
+    }
 
     // Clear error when user starts typing
     if (errors[name]) {
@@ -1352,19 +1462,34 @@ const ServiceBilling: React.FC = () => {
 
                 {/* Employee Assignment */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Employee</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {billingForm.clientType === 'company' ? 'Assign to Company Employee' : 'Assigned Employee'}
+                  </label>
                   <select
                     name="assignedEmployeeId"
                     value={billingForm.assignedEmployeeId}
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Select employee (optional)</option>
-                    {serviceEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.name} - {employee.department}
-                      </option>
-                    ))}
+                    <option value="">
+                      {billingForm.clientType === 'company'
+                        ? (billingForm.companyId ? 'Select company employee (optional)' : 'Select a company first')
+                        : 'Select employee (optional)'
+                      }
+                    </option>
+                    {billingForm.clientType === 'company' && billingForm.companyId ? (
+                      companyEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} - {employee.position} ({employee.employee_id})
+                        </option>
+                      ))
+                    ) : billingForm.clientType === 'individual' ? (
+                      serviceEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} - {employee.department}
+                        </option>
+                      ))
+                    ) : null}
                   </select>
                 </div>
 
@@ -1614,9 +1739,19 @@ const ServiceBilling: React.FC = () => {
                       <span>Government Charges:</span>
                       <span>AED {parseFloat(selectedBilling.government_charges || 0).toFixed(2)}</span>
                     </div>
+                    <div className="flex justify-between items-center w-64">
+                      <span>Subtotal:</span>
+                      <span>AED {parseFloat(selectedBilling.total_amount || 0).toFixed(2)}</span>
+                    </div>
+                    {parseFloat(selectedBilling.vat_percentage || 0) > 0 && (
+                      <div className="flex justify-between items-center w-64">
+                        <span>VAT ({parseFloat(selectedBilling.vat_percentage || 0)}%):</span>
+                        <span>AED {parseFloat(selectedBilling.vat_amount || 0).toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center w-64 text-lg font-bold border-t-2 border-blue-600 pt-2">
                       <span>Total Amount:</span>
-                      <span>AED {parseFloat(selectedBilling.total_amount || 0).toFixed(2)}</span>
+                      <span>AED {parseFloat(selectedBilling.total_amount_with_vat || selectedBilling.total_amount || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1715,7 +1850,15 @@ const ServiceBilling: React.FC = () => {
                     <select
                       name="companyId"
                       value={editBillingForm.companyId}
-                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, companyId: e.target.value }))}
+                      onChange={(e) => {
+                        const companyId = e.target.value;
+                        setEditBillingForm(prev => ({ ...prev, companyId, assignedEmployeeId: '' }));
+                        if (companyId) {
+                          loadCompanyEmployees(companyId);
+                        } else {
+                          setCompanyEmployees([]);
+                        }
+                      }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       required
                     >
@@ -1772,19 +1915,34 @@ const ServiceBilling: React.FC = () => {
 
                 {/* Employee Assignment */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Employee</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {editBillingForm.clientType === 'company' ? 'Assign to Company Employee' : 'Assigned Employee'}
+                  </label>
                   <select
                     name="assignedEmployeeId"
                     value={editBillingForm.assignedEmployeeId}
                     onChange={(e) => setEditBillingForm(prev => ({ ...prev, assignedEmployeeId: e.target.value }))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   >
-                    <option value="">Select an employee (optional)</option>
-                    {serviceEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.name}
-                      </option>
-                    ))}
+                    <option value="">
+                      {editBillingForm.clientType === 'company'
+                        ? (editBillingForm.companyId ? 'Select company employee (optional)' : 'Select a company first')
+                        : 'Select employee (optional)'
+                      }
+                    </option>
+                    {editBillingForm.clientType === 'company' && editBillingForm.companyId ? (
+                      companyEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} - {employee.position} ({employee.employee_id})
+                        </option>
+                      ))
+                    ) : editBillingForm.clientType === 'individual' ? (
+                      serviceEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} - {employee.department}
+                        </option>
+                      ))
+                    ) : null}
                   </select>
                 </div>
 
@@ -1834,6 +1992,25 @@ const ServiceBilling: React.FC = () => {
                     min="1"
                     required
                   />
+                </div>
+
+                {/* VAT Percentage */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    VAT Percentage (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    name="vatPercentage"
+                    value={editBillingForm.vatPercentage}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatPercentage: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="0"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%)</p>
                 </div>
 
                 {/* Notes */}

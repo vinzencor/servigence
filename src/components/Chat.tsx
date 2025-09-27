@@ -16,6 +16,7 @@ import {
   Image,
   File
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { dbHelpers } from '../lib/supabase';
 import { ChatConversation, ChatMessage, ServiceEmployee } from '../types';
@@ -295,6 +296,32 @@ const Chat: React.FC = () => {
     return <File className="w-4 h-4" />;
   };
 
+  const downloadFile = async (message: ChatMessage) => {
+    try {
+      // In a real implementation, you would download from your storage service
+      // For now, we'll create a placeholder download
+      if (message.file_name) {
+        // Create a simple text file with message info for demonstration
+        const content = `File: ${message.file_name}\nType: ${message.file_type}\nSize: ${message.file_size} bytes\nSent by: ${message.sender?.name}\nDate: ${new Date(message.created_at).toLocaleString()}\n\nNote: This is a placeholder file. In a real implementation, the actual file content would be downloaded from storage.`;
+
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = message.file_name || 'download.txt';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+        toast.success(`Downloaded: ${message.file_name}`);
+      }
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast.error('Failed to download file');
+    }
+  };
+
   // Show error if user doesn't have a valid service employee ID
   if (!user?.service_employee_id) {
     return (
@@ -493,7 +520,11 @@ const Chat: React.FC = () => {
                                   {message.file_size && (message.file_size / 1024).toFixed(1)} KB
                                 </p>
                               </div>
-                              <button className="p-1 hover:bg-black hover:bg-opacity-10 rounded">
+                              <button
+                                onClick={() => downloadFile(message)}
+                                className="p-1 hover:bg-black hover:bg-opacity-10 rounded transition-colors"
+                                title="Download file"
+                              >
                                 <Download className="w-4 h-4" />
                               </button>
                             </div>

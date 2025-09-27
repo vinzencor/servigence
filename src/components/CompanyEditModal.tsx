@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, AlertCircle, Save } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Save, DollarSign } from 'lucide-react';
 import { Company } from '../types';
 import { dbHelpers } from '../lib/supabase';
 
@@ -10,6 +10,9 @@ interface CompanyEditModalProps {
 }
 
 const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, onSave }) => {
+  const [creditUsage, setCreditUsage] = useState<any>(null);
+  const [loadingCreditUsage, setLoadingCreditUsage] = useState(false);
+
   const [formData, setFormData] = useState({
     companyName: company.companyName || '',
     vatTrnNo: company.vatTrnNo || '',
@@ -34,6 +37,23 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  // Load credit usage information
+  useEffect(() => {
+    const loadCreditUsage = async () => {
+      setLoadingCreditUsage(true);
+      try {
+        const usage = await dbHelpers.getCompanyCreditUsage(company.id);
+        setCreditUsage(usage);
+      } catch (error) {
+        console.error('Error loading credit usage:', error);
+      } finally {
+        setLoadingCreditUsage(false);
+      }
+    };
+
+    loadCreditUsage();
+  }, [company.id]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -421,6 +441,46 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
             {/* Financial Information */}
             <div className="col-span-full mt-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Information</h3>
+
+              {/* Credit Usage Summary */}
+              {creditUsage && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <DollarSign className="w-5 h-5 text-blue-600" />
+                    <h4 className="font-medium text-blue-900">Credit Usage Summary</h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Credit Limit</p>
+                      <p className="font-semibold text-gray-900">AED {creditUsage.creditLimit.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Outstanding Dues</p>
+                      <p className="font-semibold text-red-600">AED {creditUsage.totalOutstanding.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Available Credit</p>
+                      <p className="font-semibold text-green-600">AED {creditUsage.availableCredit.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                      <span>Credit Usage</span>
+                      <span>{creditUsage.creditUsagePercentage.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          creditUsage.creditUsagePercentage > 90 ? 'bg-red-500' :
+                          creditUsage.creditUsagePercentage > 75 ? 'bg-yellow-500' :
+                          'bg-green-500'
+                        }`}
+                        style={{ width: `${Math.min(creditUsage.creditUsagePercentage, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
