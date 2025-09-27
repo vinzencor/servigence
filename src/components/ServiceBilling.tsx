@@ -44,6 +44,12 @@ const ServiceBilling: React.FC = () => {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [selectedCompanyCredit, setSelectedCompanyCredit] = useState<{
+    creditLimit: number;
+    availableCredit: number;
+    totalOutstanding: number;
+    creditUsagePercentage: number;
+  } | null>(null);
 
   // Edit billing form state
   const [editBillingForm, setEditBillingForm] = useState({
@@ -600,6 +606,10 @@ const ServiceBilling: React.FC = () => {
             ${billing.company ? `
               <div class="info-row"><strong>Company:</strong> ${billing.company.company_name}</div>
               <div class="info-row"><strong>Trade License:</strong> ${billing.company.trade_license_number || 'N/A'}</div>
+              <div class="info-row"><strong>Credit Limit:</strong> AED ${(billing.company.credit_limit || 0).toFixed(2)}</div>
+            ` : billing.individual ? `
+              <div class="info-row"><strong>Individual:</strong> ${billing.individual.individual_name}</div>
+              <div class="info-row"><strong>Credit Limit:</strong> AED ${(billing.individual.credit_limit || 0).toFixed(2)}</div>
             ` : ''}
           </div>
         </div>
@@ -725,12 +735,18 @@ const ServiceBilling: React.FC = () => {
       if (billingForm.clientType === 'company' && billingForm.companyId) {
         try {
           const creditUsage = await dbHelpers.getCompanyCreditUsage(billingForm.companyId);
-          console.log('Credit usage for company:', creditUsage);
+          console.log('🔍 Credit usage for company:', creditUsage);
+          console.log('💰 Total amount:', totalAmount);
+          console.log('💳 Available credit:', creditUsage.availableCredit);
 
           // If the total amount exceeds available credit, create a due entry
           if (totalAmount > creditUsage.availableCredit) {
             const paidAmount = Math.max(0, creditUsage.availableCredit);
             const dueAmount = totalAmount - paidAmount;
+
+            console.log('⚠️ Credit limit exceeded!');
+            console.log('💵 Company will pay:', paidAmount);
+            console.log('📋 Due amount:', dueAmount);
 
             if (dueAmount > 0) {
               const dueData = {
@@ -751,8 +767,8 @@ const ServiceBilling: React.FC = () => {
                 created_by: 'System'
               };
 
-              await dbHelpers.createDue(dueData);
-              console.log('Due entry created for exceeded credit limit');
+              const createdDue = await dbHelpers.createDue(dueData);
+              console.log('✅ Due entry created for exceeded credit limit:', createdDue);
 
               // Show different success message when due is created
               alert(`✅ Service billing created successfully!\n\nInvoice Number: ${invoiceNumber}\nTotal Amount: AED ${totalAmount.toFixed(2)}\nCompany Credit Used: AED ${paidAmount.toFixed(2)}\nDue Amount: AED ${dueAmount.toFixed(2)}\n\n⚠️ Credit limit exceeded - Due entry created.`);
@@ -864,15 +880,27 @@ const ServiceBilling: React.FC = () => {
     setErrors({});
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setBillingForm(prev => ({ ...prev, [name]: value }));
 
-    // Load company employees when company is selected
+    // Load company employees and credit info when company is selected
     if (name === 'companyId' && value) {
       loadCompanyEmployees(value);
       // Reset assigned employee when company changes
       setBillingForm(prev => ({ ...prev, assignedEmployeeId: '' }));
+
+      // Load credit information
+      try {
+        const creditUsage = await dbHelpers.getCompanyCreditUsage(value);
+        setSelectedCompanyCredit(creditUsage);
+        console.log('Company credit info loaded:', creditUsage);
+      } catch (error) {
+        console.error('Error loading company credit info:', error);
+        setSelectedCompanyCredit(null);
+      }
+    } else if (name === 'companyId' && !value) {
+      setSelectedCompanyCredit(null);
     }
 
     // Clear company employees when switching to individual
@@ -1402,6 +1430,57 @@ const ServiceBilling: React.FC = () => {
                         {errors.companyId}
                       </p>
                     )}
+
+                    {/* Credit Limit Display */}
+                    {selectedCompanyCredit && (
+                      <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 className="text-sm font-medium text-blue-900 mb-2">Credit Information</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-blue-700">Credit Limit:</span>
+                            <span className="font-semibold text-blue-900 ml-2">AED {selectedCompanyCredit.creditLimit.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Available Credit:</span>
+                            <span className={`font-semibold ml-2 ${
+                              selectedCompanyCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              AED {selectedCompanyCredit.availableCredit.toFixed(2)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Outstanding:</span>
+                            <span className="font-semibold text-orange-600 ml-2">AED {selectedCompanyCredit.totalOutstanding.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Usage:</span>
+                            <span className={`font-semibold ml-2 ${
+                              selectedCompanyCredit.creditUsagePercentage > 80 ? 'text-red-600' :
+                              selectedCompanyCredit.creditUsagePercentage > 60 ? 'text-orange-600' : 'text-green-600'
+                            }`}>
+                              {selectedCompanyCredit.creditUsagePercentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Credit Usage Bar */}
+                        <div className="mt-3">
+                          <div className="flex justify-between text-xs text-blue-700 mb-1">
+                            <span>Credit Usage</span>
+                            <span>{selectedCompanyCredit.creditUsagePercentage.toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                selectedCompanyCredit.creditUsagePercentage > 80 ? 'bg-red-500' :
+                                selectedCompanyCredit.creditUsagePercentage > 60 ? 'bg-orange-500' : 'bg-green-500'
+                              }`}
+                              style={{ width: `${Math.min(selectedCompanyCredit.creditUsagePercentage, 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div>
@@ -1556,6 +1635,55 @@ const ServiceBilling: React.FC = () => {
                     </p>
                   )}
                 </div>
+
+                {/* Real-time Billing Calculation */}
+                {billingForm.serviceTypeId && billingForm.quantity && (
+                  <div className="lg:col-span-2">
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">Billing Calculation</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Service Charges:</span>
+                          <span className="font-medium">AED {calculateTotal().typing.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Government Charges:</span>
+                          <span className="font-medium">AED {calculateTotal().government.toFixed(2)}</span>
+                        </div>
+                        <div className="border-t border-gray-300 pt-2 flex justify-between font-semibold">
+                          <span>Total Amount:</span>
+                          <span className="text-blue-600">AED {calculateTotal().total.toFixed(2)}</span>
+                        </div>
+
+                        {/* Credit Limit Warning for Companies */}
+                        {billingForm.clientType === 'company' && selectedCompanyCredit && (
+                          <div className="mt-3 pt-3 border-t border-gray-300">
+                            {calculateTotal().total > selectedCompanyCredit.availableCredit ? (
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-green-600">
+                                  <span>Company will pay:</span>
+                                  <span className="font-medium">AED {Math.max(0, selectedCompanyCredit.availableCredit).toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-red-600">
+                                  <span>Due amount:</span>
+                                  <span className="font-semibold">AED {(calculateTotal().total - Math.max(0, selectedCompanyCredit.availableCredit)).toFixed(2)}</span>
+                                </div>
+                                <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                  ⚠️ This billing exceeds available credit limit. A due entry will be created.
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between text-green-600">
+                                <span>✅ Within credit limit</span>
+                                <span className="font-medium">Remaining: AED {(selectedCompanyCredit.availableCredit - calculateTotal().total).toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Vendor Assignment */}
                 <div>
