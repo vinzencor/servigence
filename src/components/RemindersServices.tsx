@@ -422,20 +422,20 @@ const RemindersServices: React.FC = () => {
     setShowReminderDetails(true);
   };
 
-  const handleEditReminder = (reminder: Reminder) => {
+  const handleEditReminder = (reminder: any) => {
     setSelectedReminder(reminder);
     // Populate edit form with existing reminder data
     setEditReminderForm({
-      title: reminder.title,
-      description: reminder.description,
-      type: reminder.type,
-      companyId: reminder.companyId || '',
-      employeeId: reminder.employeeId || '',
-      vendorId: reminder.vendorId || '',
-      date: reminder.date,
-      dueDate: reminder.dueDate,
-      priority: reminder.priority,
-      assignedTo: reminder.assignedTo || '',
+      title: reminder.title || '',
+      description: reminder.description || '',
+      type: reminder.reminder_type || 'other',
+      companyId: reminder.company_id || '',
+      employeeId: reminder.employee_id || '',
+      vendorId: reminder.vendor_id || '',
+      date: reminder.reminder_date || '',
+      dueDate: reminder.reminder_date || '',
+      priority: reminder.priority || 'medium',
+      assignedTo: reminder.assigned_to || '',
       notes: reminder.notes || ''
     });
     setShowEditReminder(true);
@@ -476,10 +476,11 @@ const RemindersServices: React.FC = () => {
       // Close modal and reset form
       setShowEditReminder(false);
       setSelectedReminder(null);
-      alert('✅ Reminder updated successfully!');
 
-      // In a real app, you would reload the reminders list here
-      // For now, we'll just show the success message
+      // Reload reminders to reflect the changes
+      await loadReminders();
+
+      toast.success('Reminder updated successfully!');
 
     } catch (error) {
       console.error('Error updating reminder:', error);
@@ -498,7 +499,7 @@ const RemindersServices: React.FC = () => {
         errorMessage += 'Please try again.';
       }
 
-      alert(`❌ ${errorMessage}`);
+      toast.error(errorMessage);
     }
   };
 

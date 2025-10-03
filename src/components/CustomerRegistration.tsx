@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User, Upload, FileText, Trash2, Eye } from 'lucide-react';
+import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User, Upload, FileText, Trash2, Eye, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Company, Individual, ServiceEmployee } from '../types';
+import { Company, Individual, ServiceEmployee, PaymentCard } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { emailService } from '../lib/emailService';
@@ -16,6 +16,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const { user, isSuperAdmin } = useAuth();
   const [registrationType, setRegistrationType] = useState<'company' | 'individual'>('company');
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
+  const [selectedCard, setSelectedCard] = useState<PaymentCard | null>(null);
   const [formData, setFormData] = useState({
     // Common fields
     phone1: '',
@@ -24,10 +26,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     email2: '',
     address: '',
     creditLimit: '',
-    creditLimitDays: '',
     dateOfRegistration: new Date().toISOString().split('T')[0],
     createdBy: user?.name || 'System',
-    assignedTo: user?.service_employee_id || '',
+    assignedTo: (user?.service_employee_id && user.service_employee_id.length === 36) ? user.service_employee_id : '',
 
     // Company specific fields
     companyName: '',
@@ -73,7 +74,28 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
   useEffect(() => {
     loadServiceEmployees();
+    loadPaymentCards();
   }, []);
+
+  const loadPaymentCards = async () => {
+    try {
+      const cards = await dbHelpers.getPaymentCards();
+      setPaymentCards(cards);
+
+      // Set default card if available
+      const defaultCard = cards.find(card => card.isDefault && card.isActive);
+      if (defaultCard) {
+        setSelectedCard(defaultCard);
+        setFormData(prev => ({
+          ...prev,
+          creditLimit: defaultCard.creditLimit.toString()
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading payment cards:', error);
+      toast.error('Failed to load payment cards');
+    }
+  };
 
   const loadServiceEmployees = async () => {
     try {
@@ -104,27 +126,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     if (!formData.phone1.trim()) newErrors.phone1 = 'Primary phone is required';
     if (!formData.email1.trim()) newErrors.email1 = 'Primary email is required';
 
-    // Credit limit validation - must be within database constraints (precision 10, scale 2)
-    // Maximum value is 99,999,999.99 (10^8 - 0.01)
-    if (!formData.creditLimit || formData.creditLimit.trim() === '') {
-      newErrors.creditLimit = 'Credit limit is required';
-    } else {
-      const creditLimit = parseFloat(formData.creditLimit);
-      if (isNaN(creditLimit) || creditLimit < 0) {
-        newErrors.creditLimit = 'Credit limit must be a valid positive number';
-      } else if (creditLimit >= 100000000) { // 10^8
-        newErrors.creditLimit = 'Credit limit cannot exceed 99,999,999.99';
-      }
-    }
-
-    // Credit limit days validation (optional)
-    if (formData.creditLimitDays && formData.creditLimitDays.trim() !== '') {
-      const days = parseInt(formData.creditLimitDays);
-      if (isNaN(days) || days < 0) {
-        newErrors.creditLimitDays = 'Credit limit days must be a valid positive number';
-      } else if (days > 365) {
-        newErrors.creditLimitDays = 'Credit limit days cannot exceed 365';
-      }
+    // Payment card validation
+    if (!selectedCard) {
+      newErrors.creditLimit = 'Please select a payment card';
     }
     if (!formData.dateOfRegistration) newErrors.dateOfRegistration = 'Registration date is required';
 
@@ -392,6 +396,12 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
     if (!validateForm()) return;
 
+    // Validate user authentication
+    if (!user) {
+      toast.error('Please log in to create registrations');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -412,7 +422,6 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           quota: formData.quota || undefined,
           companyGrade: formData.companyGrade,
           creditLimit: parseFloat(formData.creditLimit),
-          creditLimitDays: formData.creditLimitDays ? parseInt(formData.creditLimitDays) : undefined,
           proName: formData.proName || undefined,
           proPhone: formData.proPhone || undefined,
           proEmail: formData.proEmail || undefined,
@@ -440,7 +449,6 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
             quota: newCompany.quota,
             company_grade: newCompany.companyGrade,
             credit_limit: newCompany.creditLimit,
-            credit_limit_days: newCompany.creditLimitDays || null,
             pro_name: newCompany.proName,
             pro_phone: newCompany.proPhone,
             pro_email: newCompany.proEmail,
@@ -448,7 +456,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
             created_by: newCompany.createdBy,
             status: newCompany.status,
             employee_count: newCompany.employeeCount,
-            assigned_to: formData.assignedTo || null
+            assigned_to: formData.assignedTo && formData.assignedTo.trim() !== '' ? formData.assignedTo : null
           }])
           .select()
           .single();
@@ -571,7 +579,6 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           visaExpiry: formData.visaExpiry || undefined,
           licenseNumber: formData.licenseNumber || undefined,
           creditLimit: parseFloat(formData.creditLimit),
-          creditLimitDays: formData.creditLimitDays ? parseInt(formData.creditLimitDays) : undefined,
           dateOfRegistration: formData.dateOfRegistration,
           createdBy: formData.createdBy,
           status: 'active'
@@ -595,11 +602,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           visa_expiry: newIndividual.visaExpiry,
           license_number: newIndividual.licenseNumber,
           credit_limit: newIndividual.creditLimit,
-          credit_limit_days: newIndividual.creditLimitDays || null,
           date_of_registration: newIndividual.dateOfRegistration,
           created_by: newIndividual.createdBy,
           status: newIndividual.status,
-          assigned_to: formData.assignedTo || null
+          assigned_to: formData.assignedTo && formData.assignedTo.trim() !== '' ? formData.assignedTo : null
         });
 
         if (onSaveIndividual) {
@@ -661,10 +667,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       email2: '',
       address: '',
       creditLimit: '',
-      creditLimitDays: '',
       dateOfRegistration: new Date().toISOString().split('T')[0],
       createdBy: user?.name || 'System',
-      assignedTo: user?.service_employee_id || '',
+      assignedTo: (user?.service_employee_id && user.service_employee_id.length === 36) ? user.service_employee_id : '',
       companyName: '',
       vatTrnNo: '',
       companyType: '',
@@ -692,10 +697,30 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleCardSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cardId = e.target.value;
+    if (cardId) {
+      const card = paymentCards.find(c => c.id === cardId);
+      if (card) {
+        setSelectedCard(card);
+        setFormData(prev => ({
+          ...prev,
+          creditLimit: card.creditLimit.toString()
+        }));
+      }
+    } else {
+      setSelectedCard(null);
+      setFormData(prev => ({
+        ...prev,
+        creditLimit: ''
+      }));
     }
   };
 
@@ -1177,49 +1202,52 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
               </h2>
             </div>
 
-            <div>
+            <div className="col-span-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Credit Limit (AED) <span className="text-red-500">*</span>
+                Payment Card <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                name="creditLimit"
-                value={formData.creditLimit}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.creditLimit ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                }`}
-                placeholder="50000"
-                min="0"
-              />
+              <div className="relative">
+                <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <select
+                  value={selectedCard?.id || ''}
+                  onChange={handleCardSelection}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.creditLimit ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Select a payment card</option>
+                  {paymentCards
+                    .filter(card => card.isActive)
+                    .map(card => (
+                      <option key={card.id} value={card.id}>
+                        {card.cardName} - AED {card.creditLimit.toLocaleString()}
+                        {card.isDefault ? ' (Default)' : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
               {errors.creditLimit && (
                 <p className="mt-1 text-sm text-red-600 flex items-center">
                   <AlertCircle className="w-4 h-4 mr-1" />
-                  {errors.creditLimit}
+                  Please select a payment card
                 </p>
               )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Credit Limit Days
-              </label>
-              <input
-                type="number"
-                name="creditLimitDays"
-                value={formData.creditLimitDays}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.creditLimitDays ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                }`}
-                placeholder="30"
-                min="0"
-              />
-              {errors.creditLimitDays && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-4 h-4 mr-1" />
-                  {errors.creditLimitDays}
-                </p>
+              {selectedCard && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-2 text-sm text-blue-800">
+                    <CreditCard className="w-4 h-4" />
+                    <span className="font-medium">{selectedCard.cardName}</span>
+                  </div>
+                  <div className="mt-1 text-sm text-blue-600">
+                    Credit Limit: AED {selectedCard.creditLimit.toLocaleString()}
+                    {selectedCard.bankName && ` • Bank: ${selectedCard.bankName}`}
+                  </div>
+                  {selectedCard.cardDescription && (
+                    <div className="mt-1 text-xs text-blue-600">
+                      {selectedCard.cardDescription}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

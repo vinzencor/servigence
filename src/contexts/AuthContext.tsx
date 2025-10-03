@@ -36,6 +36,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  console.log('AuthProvider rendering - user:', user, 'isLoading:', isLoading);
+
   useEffect(() => {
     // Check for existing session on app load
     const savedUser = localStorage.getItem('user');

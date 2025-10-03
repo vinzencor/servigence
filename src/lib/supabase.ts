@@ -9,6 +9,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Helper function to validate UUID format
+const isValidUUID = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
 // Database helper functions
 export const dbHelpers = {
   // Companies
@@ -23,8 +29,8 @@ export const dbHelpers = {
       `)
       .order('created_at', { ascending: false });
 
-    // Filter by assigned user if not super admin
-    if (userId && userRole === 'staff') {
+    // Filter by assigned user if not super admin and userId is a valid UUID
+    if (userId && userRole === 'staff' && isValidUUID(userId)) {
       query = query.eq('assigned_to', userId);
     }
 
@@ -254,8 +260,8 @@ export const dbHelpers = {
       `)
       .order('created_at', { ascending: false });
 
-    // Filter by assigned user if not super admin
-    if (userId && userRole !== 'super_admin') {
+    // Filter by assigned user if not super admin and userId is a valid UUID
+    if (userId && userRole !== 'super_admin' && isValidUUID(userId)) {
       query = query.eq('assigned_to', userId);
     }
 
@@ -524,8 +530,8 @@ export const dbHelpers = {
       `)
       .order('created_at', { ascending: false });
 
-    // Simplified filtering - only filter if user is staff role
-    if (userId && userRole === 'staff') {
+    // Simplified filtering - only filter if user is staff role and userId is valid UUID
+    if (userId && userRole === 'staff' && isValidUUID(userId)) {
       // For staff users, show billings where they are assigned or where their assigned companies/individuals have billings
       query = query.eq('assigned_employee_id', userId);
     }
@@ -659,14 +665,19 @@ export const dbHelpers = {
       .order('created_at', { ascending: false });
 
     // Filter based on user role if needed
-    if (userId && userRole === 'staff') {
+    if (userId && userRole === 'staff' && isValidUUID(userId)) {
       // For staff users, show dues for companies they are assigned to
-      query = query.in('company_id',
-        supabase
-          .from('companies')
-          .select('id')
-          .eq('assigned_to', userId)
-      );
+      const { data: companyIds } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('assigned_to', userId);
+
+      if (companyIds && companyIds.length > 0) {
+        query = query.in('company_id', companyIds.map(c => c.id));
+      } else {
+        // If no companies assigned, return empty result
+        return [];
+      }
     }
 
     const { data, error } = await query;
@@ -978,5 +989,137 @@ export const dbHelpers = {
       .getPublicUrl(path)
 
     return data.publicUrl
+  },
+
+  // Payment Cards
+  async getPaymentCards() {
+    const { data, error } = await supabase
+      .from('payment_cards')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    // Transform data to match PaymentCard interface
+    return data?.map((card: any) => ({
+      id: card.id,
+      cardName: card.card_name,
+      cardDescription: card.card_description,
+      creditLimit: parseFloat(card.credit_limit),
+      cardType: card.card_type,
+      bankName: card.bank_name,
+      isActive: card.is_active,
+      isDefault: card.is_default,
+      createdAt: card.created_at,
+      updatedAt: card.updated_at,
+      createdBy: card.created_by,
+      updatedBy: card.updated_by
+    })) || []
+  },
+
+  async createPaymentCard(card: any) {
+    const { data, error } = await supabase
+      .from('payment_cards')
+      .insert([card])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async updatePaymentCard(id: string, updates: any) {
+    const { data, error } = await supabase
+      .from('payment_cards')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async deletePaymentCard(id: string) {
+    const { error } = await supabase
+      .from('payment_cards')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+  },
+
+  async getDefaultPaymentCard() {
+    const { data, error } = await supabase
+      .from('payment_cards')
+      .select('*')
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .single()
+
+    if (error && error.code !== 'PGRST116') throw error // PGRST116 is "no rows returned"
+
+    if (!data) return null
+
+    // Transform data to match PaymentCard interface
+    return {
+      id: data.id,
+      cardName: data.card_name,
+      cardDescription: data.card_description,
+      creditLimit: parseFloat(data.credit_limit),
+      cardType: data.card_type,
+      bankName: data.bank_name,
+      isActive: data.is_active,
+      isDefault: data.is_default,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      createdBy: data.created_by,
+      updatedBy: data.updated_by
+    }
+  },
+
+  // Card Transactions
+  async getCardTransactions(cardId: string) {
+    const { data, error } = await supabase
+      .from('card_transactions')
+      .select(`
+        *,
+        companies:company_id(company_name),
+        individuals:individual_id(individual_name),
+        invoices:invoice_id(invoice_number)
+      `)
+      .eq('card_id', cardId)
+      .order('transaction_date', { ascending: false })
+
+    if (error) throw error
+
+    // Transform data to match CardTransaction interface
+    return data?.map((transaction: any) => ({
+      id: transaction.id,
+      cardId: transaction.card_id,
+      transactionDate: transaction.transaction_date,
+      description: transaction.description,
+      amount: parseFloat(transaction.amount),
+      transactionType: transaction.transaction_type,
+      referenceNumber: transaction.reference_number,
+      companyId: transaction.company_id,
+      companyName: transaction.companies?.company_name,
+      individualId: transaction.individual_id,
+      individualName: transaction.individuals?.individual_name,
+      invoiceId: transaction.invoice_id,
+      status: transaction.status,
+      createdAt: transaction.created_at
+    })) || []
+  },
+
+  async createCardTransaction(transaction: any) {
+    const { data, error } = await supabase
+      .from('card_transactions')
+      .insert([transaction])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
   }
 }

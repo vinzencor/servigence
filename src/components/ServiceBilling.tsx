@@ -20,6 +20,7 @@ const ServiceBilling: React.FC = () => {
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
   const [companyEmployees, setCompanyEmployees] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [paymentCards, setPaymentCards] = useState<any[]>([]);
 
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,11 +37,13 @@ const ServiceBilling: React.FC = () => {
     serviceTypeId: '',
     assignedEmployeeId: '',
     serviceDate: new Date().toISOString().split('T')[0],
-    cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
+    cashType: 'cash' as 'cash' | 'bank' | 'card' | 'cheque' | 'online',
     quantity: '1',
     notes: '',
     assignedVendorId: '',
-    vendorCost: '0'
+    vendorCost: '0',
+    discount: '0',
+    cardId: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -59,12 +62,14 @@ const ServiceBilling: React.FC = () => {
     serviceTypeId: '',
     assignedEmployeeId: '',
     serviceDate: '',
-    cashType: 'cash' as 'cash' | 'house' | 'car' | 'service_agency' | 'service_building',
+    cashType: 'cash' as 'cash' | 'bank' | 'card' | 'cheque' | 'online',
     quantity: '1',
     notes: '',
     assignedVendorId: '',
     vendorCost: '0',
-    vatPercentage: '0'
+    vatPercentage: '0',
+    discount: '0',
+    cardId: ''
   });
 
   const tabs = [
@@ -75,10 +80,10 @@ const ServiceBilling: React.FC = () => {
 
   const cashTypes = [
     { value: 'cash', label: 'Cash' },
-    { value: 'house', label: 'House' },
-    { value: 'car', label: 'Car' },
-    { value: 'service_agency', label: 'Service Agency' },
-    { value: 'service_building', label: 'Service Building' }
+    { value: 'bank', label: 'bank' },
+    { value: 'card', label: 'card' },
+    { value: 'cheque', label: 'cheque' },
+    { value: 'online', label: 'online' }
   ];
 
   useEffect(() => {
@@ -104,13 +109,20 @@ const ServiceBilling: React.FC = () => {
   }, []);
 
   const loadData = async () => {
+    if (!user) {
+      console.log('No user authenticated, skipping data load');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const [companiesData, individualsData, servicesData, vendorsData] = await Promise.all([
+      const [companiesData, individualsData, servicesData, vendorsData, paymentCardsData] = await Promise.all([
         dbHelpers.getCompanies(user?.service_employee_id, user?.role),
         dbHelpers.getIndividuals(user?.service_employee_id, user?.role),
         dbHelpers.getServices(),
-        dbHelpers.getVendors()
+        dbHelpers.getVendors(),
+        dbHelpers.getPaymentCards()
       ]);
 
       console.log('Raw companies data:', companiesData);
@@ -158,14 +170,13 @@ const ServiceBilling: React.FC = () => {
       setIndividuals(transformedIndividuals);
       setServices(servicesData || []);
 
-
-
       // Load service employees from database
       const serviceEmployeesData = await dbHelpers.getServiceEmployees();
       setServiceEmployees(serviceEmployeesData || []);
 
-      // Set vendors
+      // Set vendors and payment cards
       setVendors(vendorsData || []);
+      setPaymentCards(paymentCardsData || []);
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -175,6 +186,11 @@ const ServiceBilling: React.FC = () => {
   };
 
   const loadServiceBillings = async () => {
+    if (!user) {
+      console.log('No user authenticated, skipping service billings load');
+      return;
+    }
+
     try {
       const billingsData = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
       setServiceBillings(billingsData || []);
@@ -284,7 +300,9 @@ const ServiceBilling: React.FC = () => {
       notes: billing.notes || '',
       assignedVendorId: billing.assigned_vendor_id || '',
       vendorCost: billing.vendor_cost?.toString() || '0',
-      vatPercentage: billing.vat_percentage?.toString() || '0'
+      vatPercentage: billing.vat_percentage?.toString() || '0',
+      discount: billing.discount?.toString() || '0',
+      cardId: billing.card_id || ''
     });
 
     // Load company employees if it's a company billing
@@ -310,7 +328,11 @@ const ServiceBilling: React.FC = () => {
       const quantity = parseInt(editBillingForm.quantity);
       const typingCharges = selectedService.typingCharges * quantity;
       const governmentCharges = selectedService.governmentCharges * quantity;
-      const totalAmount = typingCharges + governmentCharges;
+      const discount = parseFloat(editBillingForm.discount) || 0;
+      const vendorCost = parseFloat(editBillingForm.vendorCost) || 0;
+      const subtotal = typingCharges + governmentCharges;
+      const totalAmount = Math.max(0, subtotal - discount);
+      const profit = typingCharges - vendorCost;
 
       // Calculate VAT
       const vatPercentage = parseFloat(editBillingForm.vatPercentage) || 0;
@@ -328,12 +350,17 @@ const ServiceBilling: React.FC = () => {
         cash_type: editBillingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
+        discount: discount,
         total_amount: totalAmount,
+        profit: profit,
         vat_percentage: vatPercentage,
         vat_amount: vatAmount,
         total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
-        notes: editBillingForm.notes || null
+        notes: editBillingForm.notes || null,
+        assigned_vendor_id: editBillingForm.assignedVendorId || null,
+        vendor_cost: vendorCost,
+        card_id: editBillingForm.cashType === 'card' && editBillingForm.cardId ? editBillingForm.cardId : null
       };
 
       // Update billing in database
@@ -448,7 +475,7 @@ const ServiceBilling: React.FC = () => {
     try {
       // Prepare CSV data
       const csvData = [
-        ['Invoice Number', 'Date', 'Client', 'Service', 'Quantity', 'Service Charges', 'Government Charges', 'Total Amount', 'Status'],
+        ['Invoice Number', 'Date', 'Client', 'Service', 'Quantity', 'Service Charges', 'Government Charges', 'Discount', 'Total Amount', 'Profit', 'Status'],
         ...serviceBillings.map((billing: any) => [
           billing.invoice_number || 'N/A',
           new Date(billing.service_date).toLocaleDateString(),
@@ -457,7 +484,9 @@ const ServiceBilling: React.FC = () => {
           billing.quantity || 1,
           parseFloat(billing.typing_charges || 0).toFixed(2),
           parseFloat(billing.government_charges || 0).toFixed(2),
+          parseFloat(billing.discount || 0).toFixed(2),
           parseFloat(billing.total_amount || 0).toFixed(2),
+          parseFloat(billing.profit || 0).toFixed(2),
           billing.status?.replace('_', ' ').toUpperCase() || 'PENDING'
         ])
       ];
@@ -553,6 +582,8 @@ const ServiceBilling: React.FC = () => {
     const quantity = billing.quantity || 1;
     const typingCharges = parseFloat(billing.typing_charges || 0);
     const governmentCharges = parseFloat(billing.government_charges || 0);
+    const discount = parseFloat(billing.discount || 0);
+    const subtotal = typingCharges + governmentCharges;
     const totalAmount = parseFloat(billing.total_amount || 0);
     const vatPercentage = parseFloat(billing.vat_percentage || 0);
     const vatAmount = parseFloat(billing.vat_amount || 0);
@@ -638,7 +669,9 @@ const ServiceBilling: React.FC = () => {
         <div class="total-section">
           <div class="total-row">Service Charges: AED ${typingCharges.toFixed(2)}</div>
           <div class="total-row">Government Charges: AED ${governmentCharges.toFixed(2)}</div>
-          <div class="total-row">Subtotal: AED ${totalAmount.toFixed(2)}</div>
+          <div class="total-row">Subtotal: AED ${subtotal.toFixed(2)}</div>
+          ${discount > 0 ? `<div class="total-row" style="color: #dc2626;">Discount: -AED ${discount.toFixed(2)}</div>` : ''}
+          <div class="total-row">Net Amount: AED ${totalAmount.toFixed(2)}</div>
           ${vatPercentage > 0 ? `<div class="total-row">VAT (${vatPercentage}%): AED ${vatAmount.toFixed(2)}</div>` : ''}
           <div class="total-final">Total Amount: AED ${totalAmountWithVat.toFixed(2)}</div>
         </div>
@@ -685,6 +718,11 @@ const ServiceBilling: React.FC = () => {
       newErrors.quantity = 'Valid quantity is required';
     }
 
+    // Validate card selection when cash type is 'card'
+    if (billingForm.cashType === 'card' && !billingForm.cardId) {
+      newErrors.cardId = 'Please select a payment card when cash type is card';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -703,7 +741,11 @@ const ServiceBilling: React.FC = () => {
       const quantity = parseInt(billingForm.quantity);
       const typingCharges = selectedService.typingCharges * quantity;
       const governmentCharges = selectedService.governmentCharges * quantity;
-      const totalAmount = typingCharges + governmentCharges;
+      const discount = parseFloat(billingForm.discount) || 0;
+      const vendorCost = parseFloat(billingForm.vendorCost) || 0;
+      const subtotal = typingCharges + governmentCharges;
+      const totalAmount = Math.max(0, subtotal - discount);
+      const profit = typingCharges - vendorCost;
 
       // Generate invoice number
       const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
@@ -719,14 +761,17 @@ const ServiceBilling: React.FC = () => {
         cash_type: billingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
+        discount: discount,
         total_amount: totalAmount,
+        profit: profit,
         quantity: quantity,
         status: 'pending',
         notes: billingForm.notes || null,
         invoice_generated: true,
         invoice_number: invoiceNumber,
         assigned_vendor_id: billingForm.assignedVendorId || null,
-        vendor_cost: parseFloat(billingForm.vendorCost) || 0
+        vendor_cost: vendorCost,
+        card_id: billingForm.cashType === 'card' && billingForm.cardId ? billingForm.cardId : null
       };
 
       const createdBilling = await dbHelpers.createServiceBilling(billingData);
@@ -875,7 +920,9 @@ const ServiceBilling: React.FC = () => {
       quantity: '1',
       notes: '',
       assignedVendorId: '',
-      vendorCost: '0'
+      vendorCost: '0',
+      discount: '0',
+      cardId: ''
     });
     setErrors({});
   };
@@ -921,16 +968,25 @@ const ServiceBilling: React.FC = () => {
 
   const calculateTotal = () => {
     const selectedService = getSelectedService();
-    if (!selectedService) return { typing: 0, government: 0, total: 0 };
+    if (!selectedService) return { typing: 0, government: 0, total: 0, discount: 0, profit: 0, vendorCost: 0 };
 
     const quantity = parseInt(billingForm.quantity) || 1;
     const typing = selectedService.typingCharges * quantity;
     const government = selectedService.governmentCharges * quantity;
+    const discount = parseFloat(billingForm.discount) || 0;
+    const vendorCost = parseFloat(billingForm.vendorCost) || 0;
+    const subtotal = typing + government;
+    const total = Math.max(0, subtotal - discount); // Ensure total doesn't go negative
+    const profit = typing - vendorCost; // Profit = Service Charges - Vendor Cost
 
     return {
       typing,
       government,
-      total: typing + government
+      discount,
+      subtotal,
+      total,
+      profit,
+      vendorCost
     };
   };
 
@@ -966,7 +1022,7 @@ const ServiceBilling: React.FC = () => {
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats cardds */}
         <div className="p-6 bg-gray-50">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg p-6 border border-gray-200">
@@ -1613,6 +1669,36 @@ const ServiceBilling: React.FC = () => {
                   </select>
                 </div>
 
+                {/* Card Selection - Show only when Cash Type is 'card' */}
+                {billingForm.cashType === 'card' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Payment Card <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="cardId"
+                      value={billingForm.cardId}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        errors.cardId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select a payment card</option>
+                      {paymentCards.map((card) => (
+                        <option key={card.id} value={card.id}>
+                          {card.card_name} - Credit Limit: AED {parseFloat(card.credit_limit || 0).toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.cardId && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        {errors.cardId}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Quantity */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1636,6 +1722,23 @@ const ServiceBilling: React.FC = () => {
                   )}
                 </div>
 
+                {/* Discount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Discount (AED)
+                  </label>
+                  <input
+                    type="number"
+                    name="discount"
+                    value={billingForm.discount}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
                 {/* Real-time Billing Calculation */}
                 {billingForm.serviceTypeId && billingForm.quantity && (
                   <div className="lg:col-span-2">
@@ -1650,10 +1753,26 @@ const ServiceBilling: React.FC = () => {
                           <span>Government Charges:</span>
                           <span className="font-medium">AED {calculateTotal().government.toFixed(2)}</span>
                         </div>
+                        <div className="flex justify-between">
+                          <span>Subtotal:</span>
+                          <span className="font-medium">AED {calculateTotal().subtotal.toFixed(2)}</span>
+                        </div>
+                        {parseFloat(billingForm.discount) > 0 && (
+                          <div className="flex justify-between text-red-600">
+                            <span>Discount:</span>
+                            <span className="font-medium">- AED {calculateTotal().discount.toFixed(2)}</span>
+                          </div>
+                        )}
                         <div className="border-t border-gray-300 pt-2 flex justify-between font-semibold">
                           <span>Total Amount:</span>
                           <span className="text-blue-600">AED {calculateTotal().total.toFixed(2)}</span>
                         </div>
+                        {parseFloat(billingForm.vendorCost) > 0 && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Profit (Service - Vendor Cost):</span>
+                            <span className="font-medium">AED {calculateTotal().profit.toFixed(2)}</span>
+                          </div>
+                        )}
 
                         {/* Credit Limit Warning for Companies */}
                         {billingForm.clientType === 'company' && selectedCompanyCredit && (
@@ -2106,6 +2225,28 @@ const ServiceBilling: React.FC = () => {
                   </select>
                 </div>
 
+                {/* Card Selection - Show only when Cash Type is 'card' */}
+                {editBillingForm.cashType === 'card' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Payment Card <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="cardId"
+                      value={editBillingForm.cardId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, cardId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">Select a payment card</option>
+                      {paymentCards.map((card) => (
+                        <option key={card.id} value={card.id}>
+                          {card.card_name} - Credit Limit: AED {parseFloat(card.credit_limit || 0).toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Quantity */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2119,6 +2260,23 @@ const ServiceBilling: React.FC = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     min="1"
                     required
+                  />
+                </div>
+
+                {/* Discount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Discount (AED)
+                  </label>
+                  <input
+                    type="number"
+                    name="discount"
+                    value={editBillingForm.discount}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, discount: e.target.value }))}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
 

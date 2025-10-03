@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Users, FileText, DollarSign, Home, Plus, Bell, Search, Settings, LogOut, MessageCircle } from 'lucide-react';
+import { Building2, Users, FileText, DollarSign, Home, Plus, Bell, Search, Settings, LogOut, MessageCircle, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { dbHelpers } from '../lib/supabase';
 
@@ -19,7 +19,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
   // Load total unread count
   useEffect(() => {
     const loadUnreadCount = async () => {
-      if (user?.service_employee_id) {
+      // Only call if we have a valid UUID (36 characters with dashes)
+      if (user?.service_employee_id && user.service_employee_id.length === 36 && user.service_employee_id.includes('-')) {
         try {
           const count = await dbHelpers.getTotalUnreadCount(user.service_employee_id);
           setTotalUnreadCount(count);
@@ -94,6 +95,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     { id: 'services', label: 'Service Billing', icon: FileText },
     { id: 'employees', label: 'Employee Management', icon: Users, superAdminOnly: true },
     { id: 'vendors', label: 'Vendors', icon: Building2 },
+    { id: 'cards', label: 'Cards', icon: CreditCard },
     { id: 'chat', label: 'Chat', icon: MessageCircle },
     { id: 'reminders', label: 'Reminders & Services', icon: Bell },
     { id: 'accounts', label: 'Account', icon: DollarSign },

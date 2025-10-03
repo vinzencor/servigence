@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, AlertCircle, Save, DollarSign } from 'lucide-react';
-import { Company } from '../types';
+import { ArrowLeft, AlertCircle, Save, DollarSign, CreditCard } from 'lucide-react';
+import { Company, PaymentCard } from '../types';
 import { dbHelpers } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
 interface CompanyEditModalProps {
   company: Company;
@@ -12,6 +13,8 @@ interface CompanyEditModalProps {
 const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, onSave }) => {
   const [creditUsage, setCreditUsage] = useState<any>(null);
   const [loadingCreditUsage, setLoadingCreditUsage] = useState(false);
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
+  const [selectedCard, setSelectedCard] = useState<PaymentCard | null>(null);
 
   const [formData, setFormData] = useState({
     companyName: company.companyName || '',
@@ -28,7 +31,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     quota: company.quota || '',
     companyGrade: company.companyGrade || '',
     creditLimit: company.creditLimit?.toString() || '',
-    creditLimitDays: company.creditLimitDays?.toString() || '',
     proName: company.proName || '',
     proPhone: company.proPhone || '',
     proEmail: company.proEmail || '',
@@ -38,7 +40,25 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  // Load credit usage information
+  const loadPaymentCards = async () => {
+    try {
+      const cards = await dbHelpers.getPaymentCards();
+      setPaymentCards(cards);
+
+      // Find the card that matches the company's current credit limit
+      const matchingCard = cards.find(card =>
+        card.isActive && card.creditLimit === company.creditLimit
+      );
+      if (matchingCard) {
+        setSelectedCard(matchingCard);
+      }
+    } catch (error) {
+      console.error('Error loading payment cards:', error);
+      toast.error('Failed to load payment cards');
+    }
+  };
+
+  // Load credit usage information and payment cards
   useEffect(() => {
     const loadCreditUsage = async () => {
       setLoadingCreditUsage(true);
@@ -53,7 +73,28 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     };
 
     loadCreditUsage();
+    loadPaymentCards();
   }, [company.id]);
+
+  const handleCardSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cardId = e.target.value;
+    if (cardId) {
+      const card = paymentCards.find(c => c.id === cardId);
+      if (card) {
+        setSelectedCard(card);
+        setFormData(prev => ({
+          ...prev,
+          creditLimit: card.creditLimit.toString()
+        }));
+      }
+    } else {
+      setSelectedCard(null);
+      setFormData(prev => ({
+        ...prev,
+        creditLimit: ''
+      }));
+    }
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -64,7 +105,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     if (!formData.companyType.trim()) newErrors.companyType = 'Company type is required';
     // if (!formData.companyGrade.trim()) newErrors.companyGrade = 'Company grade is required';
     if (!formData.creditLimit.trim()) newErrors.creditLimit = 'Credit limit is required';
-    if (!formData.creditLimitDays.trim()) newErrors.creditLimitDays = 'Credit limit days is required';
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -81,9 +121,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     // Numeric validation
     if (formData.creditLimit && isNaN(parseFloat(formData.creditLimit))) {
       newErrors.creditLimit = 'Credit limit must be a number';
-    }
-    if (formData.creditLimitDays && isNaN(parseInt(formData.creditLimitDays))) {
-      newErrors.creditLimitDays = 'Credit limit days must be a number';
     }
 
     setErrors(newErrors);
@@ -123,7 +160,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         quota: formData.quota || null,
         company_grade: formData.companyGrade,
         credit_limit: parseFloat(formData.creditLimit),
-        credit_limit_days: parseInt(formData.creditLimitDays),
         pro_name: formData.proName || null,
         pro_phone: formData.proPhone || null,
         pro_email: formData.proEmail || null,
@@ -151,7 +187,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         quota: formData.quota || undefined,
         companyGrade: formData.companyGrade,
         creditLimit: parseFloat(formData.creditLimit),
-        creditLimitDays: parseInt(formData.creditLimitDays),
         proName: formData.proName || undefined,
         proPhone: formData.proPhone || undefined,
         proEmail: formData.proEmail || undefined,
@@ -483,20 +518,28 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
               )}
             </div>
 
-            <div>
+            {/* Payment Card Selection */}
+            <div className="col-span-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Credit Limit (AED) <span className="text-red-500">*</span>
+                Payment Card <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                name="creditLimit"
-                value={formData.creditLimit}
-                onChange={handleInputChange}
+              <select
+                value={selectedCard?.id || ''}
+                onChange={handleCardSelect}
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                   errors.creditLimit ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
-                placeholder="50000"
-              />
+              >
+                <option value="">Select a payment card</option>
+                {paymentCards
+                  .filter(card => card.isActive)
+                  .map(card => (
+                    <option key={card.id} value={card.id}>
+                      {card.cardName} - AED {card.creditLimit.toLocaleString()}
+                      {card.isDefault ? ' (Default)' : ''}
+                    </option>
+                  ))}
+              </select>
               {errors.creditLimit && (
                 <p className="mt-1 text-sm text-red-600 flex items-center">
                   <AlertCircle className="w-4 h-4 mr-1" />
@@ -505,27 +548,24 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Credit Limit Days <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="creditLimitDays"
-                value={formData.creditLimitDays}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                  errors.creditLimitDays ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                }`}
-                placeholder="30"
-              />
-              {errors.creditLimitDays && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-4 h-4 mr-1" />
-                  {errors.creditLimitDays}
-                </p>
-              )}
-            </div>
+            {/* Selected Card Display */}
+            {selectedCard && (
+              <div className="col-span-full bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center space-x-2">
+                  <CreditCard className="w-4 h-4" />
+                  <span className="font-medium">{selectedCard.cardName}</span>
+                </div>
+                <div className="mt-1 text-sm text-blue-600">
+                  Credit Limit: AED {selectedCard.creditLimit.toLocaleString()}
+                  {selectedCard.bankName && ` • Bank: ${selectedCard.bankName}`}
+                </div>
+                {selectedCard.cardDescription && (
+                  <div className="mt-1 text-xs text-blue-600">
+                    {selectedCard.cardDescription}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* PRO Information */}
             <div className="col-span-full mt-6">

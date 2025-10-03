@@ -326,6 +326,38 @@ export interface FileAttachment {
   uploadDate: string;
 }
 
+export interface PaymentCard {
+  id: string;
+  cardName: string;
+  cardDescription?: string;
+  creditLimit: number;
+  cardType: 'credit' | 'debit' | 'prepaid' | 'corporate';
+  bankName?: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy?: string;
+}
+
+export interface CardTransaction {
+  id: string;
+  cardId: string;
+  transactionDate: string;
+  description: string;
+  amount: number;
+  transactionType: 'payment' | 'refund' | 'charge';
+  referenceNumber?: string;
+  companyId?: string;
+  companyName?: string;
+  individualId?: string;
+  individualName?: string;
+  invoiceId?: string;
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: string;
+}
+
 export interface Account {
   id: string;
   serviceBillingId?: string;

@@ -11,8 +11,8 @@ import CompanyEditModal from './components/CompanyEditModal';
 import ServiceManagement from './components/ServiceManagement';
 import ServiceEmployeeManagement from './components/ServiceEmployeeManagement';
 import ServiceBilling from './components/ServiceBilling';
-
 import VendorManagement from './components/VendorManagement';
+import CardsManagement from './components/CardsManagement';
 import RemindersServices from './components/RemindersServices';
 import AccountManagement from './components/AccountManagement';
 import InvoiceManagement from './components/InvoiceManagement';
@@ -24,8 +24,11 @@ import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
+  
+  console.log('AppContent rendering - isAuthenticated:', isAuthenticated, 'isLoading:', isLoading, 'user:', user);
+  
   const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -33,17 +36,24 @@ function AppContent() {
   const [isEmployeeMode, setIsEmployeeMode] = useState(false);
   const [loggedInEmployee, setLoggedInEmployee] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-
-  // Load companies from database on component mount
+  
+  // Load companies from database when user is authenticated
   useEffect(() => {
-    loadCompanies();
-  }, []);
+    if (isAuthenticated && user) {
+      loadCompanies();
+    }
+  }, [isAuthenticated, user]);
 
   const loadCompanies = async () => {
+    if (!user) {
+      console.log('No user authenticated, skipping companies load in App.tsx');
+      return;
+    }
+    
     setLoading(true);
     try {
       console.log('Loading companies from database...');
-      const companiesData = await dbHelpers.getCompanies();
+      const companiesData = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
       console.log('Loaded companies:', companiesData);
 
       // Transform the data to match our Company interface
@@ -178,6 +188,8 @@ function AppContent() {
         return <ServiceEmployeeManagement />;
       case 'vendors':
         return <VendorManagement />;
+      case 'cards':
+        return <CardsManagement />;
       case 'chat':
         return <Chat />;
       case 'reminders':
@@ -195,6 +207,7 @@ function AppContent() {
 
   // Show loading spinner while checking authentication
   if (isLoading) {
+    console.log('Showing loading spinner');
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -207,6 +220,7 @@ function AppContent() {
 
   // Show login if not authenticated
   if (!isAuthenticated) {
+    console.log('Showing login screen');
     return <Login />;
   }
 
@@ -220,6 +234,7 @@ function AppContent() {
     return <EmployeeLogin onLogin={handleEmployeeLogin} onBackToMain={handleBackToMain} />;
   }
 
+  console.log('Rendering main layout with currentView:', currentView);
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>
       {renderCurrentView()}
@@ -240,6 +255,7 @@ function AppContent() {
 }
 
 function App() {
+  console.log('App component rendering');
   return (
     <AuthProvider>
       <AppContent />

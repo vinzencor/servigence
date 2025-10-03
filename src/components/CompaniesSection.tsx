@@ -44,13 +44,27 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
 
   // Load companies and individuals from Supabase on component mount
   useEffect(() => {
-    loadCompanies();
-    loadIndividuals();
-  }, []);
+    // Only load data if user is properly authenticated
+    if (user && (user.role === 'super_admin' || (user.service_employee_id && user.service_employee_id.length === 36))) {
+      loadCompanies();
+      loadIndividuals();
+    } else {
+      console.log('User not properly authenticated, skipping data load:', user);
+      setAllCompanies([]);
+      setIndividuals([]);
+      setLoading(false);
+    }
+  }, [user]);
 
   const loadCompanies = async () => {
+    if (!user) {
+      console.log('No user authenticated, skipping companies load');
+      return;
+    }
+
     setLoading(true);
     try {
+      console.log('Loading companies with user:', user?.service_employee_id, 'role:', user?.role);
       const supabaseCompanies = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
       // Transform Supabase data to match our Company interface
       const transformedCompanies = supabaseCompanies.map((company: any) => ({
@@ -96,7 +110,13 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   };
 
   const loadIndividuals = async () => {
+    if (!user) {
+      console.log('No user authenticated, skipping individuals load');
+      return;
+    }
+
     try {
+      console.log('Loading individuals with user:', user?.service_employee_id, 'role:', user?.role);
       const supabaseIndividuals = await dbHelpers.getIndividuals(user?.service_employee_id, user?.role);
       console.log('Loaded individuals:', supabaseIndividuals);
       setIndividuals(supabaseIndividuals || []);
