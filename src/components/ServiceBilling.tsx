@@ -2482,7 +2482,7 @@ Servigence Business Services
                     type="number"
                     name="discount"
                     value={editBillingForm.discount}
-                    onChange={handleEditInputChange}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, discount: e.target.value }))}
                     min="0"
                     step="0.01"
                     placeholder="0.00"
