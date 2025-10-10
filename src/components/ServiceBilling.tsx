@@ -386,9 +386,9 @@ const ServiceBilling: React.FC = () => {
         discount: discount,
         total_amount: totalAmount,
         // profit: profit, // Temporarily removed until profit column is added to database
-        // vat_percentage: vatPercentage, // Temporarily removed until column is added
-        // vat_amount: vatAmount, // Temporarily removed until column is added
-        // total_amount_with_vat: totalAmountWithVat, // Temporarily removed until column is added
+        vat_percentage: vatPercentage,
+        vat_amount: vatAmount,
+        total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         notes: editBillingForm.notes || null,
         // assigned_vendor_id: editBillingForm.assignedVendorId || null, // Temporarily removed until column is added
@@ -780,6 +780,11 @@ const ServiceBilling: React.FC = () => {
       const totalAmount = Math.max(0, subtotal - discount);
       const profit = typingCharges - vendorCost;
 
+      // Calculate VAT
+      const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
+      const vatAmount = (totalAmount * vatPercentage) / 100;
+      const totalAmountWithVat = totalAmount + vatAmount;
+
       // Generate invoice number
       const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
@@ -797,6 +802,9 @@ const ServiceBilling: React.FC = () => {
         discount: discount,
         total_amount: totalAmount,
         // profit: profit, // Temporarily removed until profit column is added to database
+        vat_percentage: vatPercentage,
+        vat_amount: vatAmount,
+        total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         status: 'pending',
         notes: billingForm.notes || null,
@@ -1008,15 +1016,18 @@ const ServiceBilling: React.FC = () => {
 
   const calculateTotal = () => {
     const selectedService = getSelectedService();
-    if (!selectedService) return { typing: 0, government: 0, total: 0, discount: 0, profit: 0, vendorCost: 0 };
+    if (!selectedService) return { typing: 0, government: 0, total: 0, discount: 0, profit: 0, vendorCost: 0, vatPercentage: 0, vatAmount: 0, totalWithVat: 0 };
 
     const quantity = parseInt(billingForm.quantity) || 1;
     const typing = selectedService.typingCharges * quantity;
     const government = selectedService.governmentCharges * quantity;
     const discount = parseFloat(billingForm.discount) || 0;
     const vendorCost = parseFloat(billingForm.vendorCost) || 0;
+    const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
     const subtotal = typing + government;
     const total = Math.max(0, subtotal - discount); // Ensure total doesn't go negative
+    const vatAmount = (total * vatPercentage) / 100;
+    const totalWithVat = total + vatAmount;
     const profit = typing - vendorCost; // Profit = Service Charges - Vendor Cost
 
     return {
@@ -1025,6 +1036,9 @@ const ServiceBilling: React.FC = () => {
       discount,
       subtotal,
       total,
+      vatPercentage,
+      vatAmount,
+      totalWithVat,
       profit,
       vendorCost
     };
@@ -1943,6 +1957,25 @@ Servigence Business Services
                   />
                 </div>
 
+                {/* VAT Percentage */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    VAT Percentage (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    name="vatPercentage"
+                    value={billingForm.vatPercentage}
+                    onChange={handleInputChange}
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="0"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%)</p>
+                </div>
+
                 {/* Real-time Billing Calculation */}
                 {billingForm.serviceTypeId && billingForm.quantity && (
                   <div className="lg:col-span-2">
@@ -1968,8 +2001,18 @@ Servigence Business Services
                           </div>
                         )}
                         <div className="border-t border-gray-300 pt-2 flex justify-between font-semibold">
-                          <span>Total Amount:</span>
+                          <span>Net Amount:</span>
                           <span className="text-blue-600">AED {calculateTotal().total.toFixed(2)}</span>
+                        </div>
+                        {parseFloat(billingForm.vatPercentage) > 0 && (
+                          <div className="flex justify-between text-green-600">
+                            <span>VAT ({calculateTotal().vatPercentage}%):</span>
+                            <span className="font-medium">AED {calculateTotal().vatAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-gray-300 pt-2 flex justify-between font-bold text-lg">
+                          <span>Total Amount:</span>
+                          <span className="text-blue-600">AED {calculateTotal().totalWithVat.toFixed(2)}</span>
                         </div>
                         {parseFloat(billingForm.vendorCost) > 0 && (
                           <div className="flex justify-between text-green-600">

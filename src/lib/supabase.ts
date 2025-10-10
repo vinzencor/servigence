@@ -2338,5 +2338,161 @@ export const dbHelpers = {
       console.error('Error loading credit reports:', error);
       throw error;
     }
+  },
+
+  // Individual Documents Management
+  async getIndividualDocuments(individualId: string) {
+    const { data, error } = await supabase
+      .from('individual_documents')
+      .select('*')
+      .eq('individual_id', individualId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  async createIndividualDocument(documentData: any) {
+    const { data, error } = await supabase
+      .from('individual_documents')
+      .insert([documentData])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateIndividualDocument(documentId: string, updateData: any) {
+    const { data, error } = await supabase
+      .from('individual_documents')
+      .update(updateData)
+      .eq('id', documentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteIndividualDocument(documentId: string) {
+    const { error } = await supabase
+      .from('individual_documents')
+      .delete()
+      .eq('id', documentId);
+
+    if (error) throw error;
+  },
+
+  // Create reminder for individual document expiry
+  async createIndividualDocumentReminder(individualId: string, documentTitle: string, expiryDate: string, documentType: string, individualName: string) {
+    if (!expiryDate) return;
+
+    const reminderDate = new Date(expiryDate);
+    reminderDate.setDate(reminderDate.getDate() - 10); // 10 days before expiry
+
+    const reminderData = {
+      title: `${documentTitle} Expiry Reminder`,
+      description: `${documentTitle} for ${individualName} will expire on ${new Date(expiryDate).toLocaleDateString()}. Please renew this document before the expiry date.`,
+      reminder_date: reminderDate.toISOString().split('T')[0],
+      reminder_type: 'document_expiry',
+      document_type: documentType,
+      individual_id: individualId,
+      priority: 'high',
+      status: 'active',
+      days_before_reminder: 10,
+      enabled: true,
+      created_by: 'System',
+      assigned_to: 'System'
+    };
+
+    const { data, error } = await supabase
+      .from('reminders')
+      .insert([reminderData])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Customer Advance Payments Management
+  async createCustomerAdvancePayment(paymentData: any) {
+    // Generate unique receipt number
+    const receiptNumber = `ADV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const invoiceNumber = `INV-ADV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+
+    const dataWithReceipt = {
+      ...paymentData,
+      receipt_number: receiptNumber,
+      invoice_number: invoiceNumber,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('customer_advance_payments')
+      .insert([dataWithReceipt])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getCustomerAdvancePayments(customerId: string, customerType: 'company' | 'individual') {
+    const column = customerType === 'company' ? 'company_id' : 'individual_id';
+
+    const { data, error } = await supabase
+      .from('customer_advance_payments')
+      .select(`
+        *,
+        company:companies(id, company_name),
+        individual:individuals(id, individual_name)
+      `)
+      .eq(column, customerId)
+      .order('payment_date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getAdvancePaymentByReceiptNumber(receiptNumber: string) {
+    const { data, error } = await supabase
+      .from('customer_advance_payments')
+      .select(`
+        *,
+        company:companies(id, company_name, address, phone1, email1),
+        individual:individuals(id, individual_name, address, phone1, email1)
+      `)
+      .eq('receipt_number', receiptNumber)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateCustomerAdvancePayment(paymentId: string, updateData: any) {
+    const { data, error } = await supabase
+      .from('customer_advance_payments')
+      .update({
+        ...updateData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteCustomerAdvancePayment(paymentId: string) {
+    const { error } = await supabase
+      .from('customer_advance_payments')
+      .delete()
+      .eq('id', paymentId);
+
+    if (error) throw error;
   }
 }

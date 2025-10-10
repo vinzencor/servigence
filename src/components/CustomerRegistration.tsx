@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User, Upload, FileText, Trash2, Eye, CreditCard } from 'lucide-react';
+import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User, Upload, FileText, Trash2, Eye, CreditCard, Receipt } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Company, Individual, ServiceEmployee, PaymentCard } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
@@ -71,6 +71,18 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     preview?: string;
   }>>([]);
   const [showAddDocument, setShowAddDocument] = useState(false);
+
+  // Advance payment state
+  const [showAdvancePayment, setShowAdvancePayment] = useState(false);
+  const [advancePaymentForm, setAdvancePaymentForm] = useState({
+    amount: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMethod: 'cash',
+    paymentReference: '',
+    notes: ''
+  });
+  const [advancePaymentReceipt, setAdvancePaymentReceipt] = useState<any>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   useEffect(() => {
     loadServiceEmployees();
@@ -327,9 +339,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     }
   };
 
-  const uploadDocumentToSupabase = async (file: File, companyId: string, docTitle: string) => {
+  const uploadDocumentToSupabase = async (file: File, entityId: string, docTitle: string) => {
     const fileExt = file.name.split('.').pop();
-    const fileName = `${companyId}/${docTitle.replace(/\s+/g, '_')}_${Date.now()}.${fileExt}`;
+    const entityType = registrationType === 'company' ? 'companies' : 'individuals';
+    const fileName = `${entityType}/${entityId}/${docTitle.replace(/\s+/g, '_')}_${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
       .from('documents')
@@ -404,9 +417,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
     setIsSubmitting(true);
 
+    // Declare variables at function scope for advance payment processing
+    let createdCompany: any = null;
+    let createdIndividual: any = null;
+    let newCompany: any = null;
+    let newIndividual: any = null;
+
     try {
       if (registrationType === 'company') {
-        const newCompany: Company = {
+        newCompany = {
           id: Date.now().toString(),
           companyName: formData.companyName,
           vatTrnNo: formData.vatTrnNo || undefined,
@@ -432,7 +451,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         };
 
         // Save to Supabase and get the created company ID
-        const { data: createdCompany, error: companyError } = await supabase
+        const { data: companyData, error: companyError } = await supabase
           .from('companies')
           .insert([{
             company_name: newCompany.companyName,
@@ -463,6 +482,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
         if (companyError) throw companyError;
 
+        createdCompany = companyData;
         const companyId = createdCompany.id;
 
         // Handle document uploads and create reminders
@@ -556,12 +576,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
         onSave(newCompany);
 
-        // Navigate back to companies list
-        setTimeout(() => {
-          onNavigate?.('companies');
-        }, 1500); // Give time for toast to show
+        // Only navigate automatically if no advance payment modal will be shown
+        if (!showAdvancePayment || !advancePaymentForm.amount || parseFloat(advancePaymentForm.amount) <= 0) {
+          // Navigate back to companies list
+          setTimeout(() => {
+            onNavigate?.('companies');
+          }, 1500); // Give time for toast to show
+        }
       } else {
-        const newIndividual: Individual = {
+        newIndividual = {
           id: Date.now().toString(),
           individualName: formData.individualName,
           nationality: formData.nationality,
@@ -585,7 +608,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         };
 
         // Save to Supabase
-        const createdIndividual = await dbHelpers.createIndividual({
+        createdIndividual = await dbHelpers.createIndividual({
           individual_name: newIndividual.individualName,
           nationality: newIndividual.nationality,
           phone1: newIndividual.phone1,
@@ -612,7 +635,77 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           onSaveIndividual(newIndividual);
         }
 
-        // Create reminders for document expiry dates
+        // Handle document uploads for individuals
+        console.log('📄 Processing individual documents:', documents.length);
+
+        for (const doc of documents) {
+          console.log('🔄 Processing individual document:', {
+            hasFile: !!doc.file,
+            hasTitle: !!doc.title,
+            hasDocNumber: !!doc.documentNumber,
+            hasExpiryDate: !!doc.expiryDate,
+            title: doc.title
+          });
+
+          // Process documents that have at least a title
+          if (doc.title) {
+            try {
+              let fileUrl = null;
+
+              // Upload file to Supabase Storage if file exists
+              if (doc.file) {
+                console.log('📤 Uploading file for individual document:', doc.title);
+                fileUrl = await uploadDocumentToSupabase(doc.file, createdIndividual.id, doc.title);
+                console.log('✅ Individual file uploaded successfully:', fileUrl);
+              }
+
+              // Prepare document data for individual_documents table
+              const documentData = {
+                individual_id: createdIndividual.id,
+                title: doc.title,
+                document_number: doc.documentNumber || null,
+                issue_date: doc.issueDate || null,
+                expiry_date: doc.expiryDate || null,
+                document_type: 'individual_document',
+                file_attachments: fileUrl ? [{ name: doc.file?.name, url: fileUrl }] : [],
+                created_by: user?.name || 'System',
+                status: 'active'
+              };
+
+              console.log('💾 Saving individual document to database:', documentData);
+
+              const { error: docError } = await supabase
+                .from('individual_documents')
+                .insert([documentData]);
+
+              if (docError) {
+                console.error('❌ Error saving individual document:', docError);
+                toast.error(`Failed to save document: ${doc.title}`);
+              } else {
+                console.log('✅ Individual document saved successfully:', doc.title);
+
+                // Create reminder if expiry date is provided
+                if (doc.expiryDate) {
+                  console.log('📅 Creating reminder for individual document with expiry date:', doc.expiryDate);
+                  await dbHelpers.createIndividualDocumentReminder(
+                    createdIndividual.id,
+                    doc.title,
+                    doc.expiryDate,
+                    'individual_document',
+                    newIndividual.individualName
+                  );
+                } else {
+                  console.log('ℹ️ No expiry date for individual document:', doc.title);
+                }
+              }
+            } catch (error) {
+              console.error('❌ Error processing individual document:', error);
+              toast.error(`Failed to process document: ${doc.title}`);
+            }
+          }
+        }
+
+        // Create reminders for built-in document expiry dates (passport, emirates ID, visa)
         if (createdIndividual?.id) {
           await createIndividualDocumentReminders(createdIndividual.id, newIndividual);
         }
@@ -635,6 +728,60 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         } catch (emailError) {
           console.error('❌ Email sending failed:', emailError);
           toast.success('⚠️ Individual registered successfully! (Email sending failed - please check email server)');
+        }
+      }
+
+      // Process advance payment if provided
+      if (showAdvancePayment && advancePaymentForm.amount && parseFloat(advancePaymentForm.amount) > 0) {
+        try {
+          console.log('💰 Processing advance payment:', advancePaymentForm);
+
+          let customerId, customerName;
+
+          if (registrationType === 'company') {
+            customerId = createdCompany?.id;
+            customerName = newCompany.companyName;
+          } else {
+            customerId = createdIndividual?.id;
+            customerName = newIndividual.individualName;
+          }
+
+          if (!customerId) {
+            throw new Error('Customer ID not available for advance payment');
+          }
+
+          const paymentData = {
+            [registrationType === 'company' ? 'company_id' : 'individual_id']: customerId,
+            amount: parseFloat(advancePaymentForm.amount),
+            payment_method: advancePaymentForm.paymentMethod,
+            payment_date: advancePaymentForm.paymentDate,
+            payment_reference: advancePaymentForm.paymentReference || null,
+            notes: advancePaymentForm.notes || null,
+            description: `Advance payment for ${registrationType} registration: ${customerName}`,
+            created_by: user?.name || 'System',
+            status: 'confirmed'
+          };
+
+          console.log('💾 Saving advance payment:', paymentData);
+
+          const createdPayment = await dbHelpers.createCustomerAdvancePayment(paymentData);
+
+          console.log('✅ Advance payment created:', createdPayment);
+
+          // Set receipt data for modal
+          setAdvancePaymentReceipt({
+            ...createdPayment,
+            customerName,
+            customerType: registrationType
+          });
+
+          // Show receipt modal
+          setShowReceiptModal(true);
+
+          toast.success(`💰 Advance payment of AED ${parseFloat(advancePaymentForm.amount).toLocaleString()} recorded successfully!`);
+        } catch (error) {
+          console.error('❌ Error processing advance payment:', error);
+          toast.error('Failed to process advance payment. Registration completed successfully.');
         }
       }
 
@@ -692,6 +839,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       visaExpiry: '',
       licenseNumber: ''
     });
+    setDocuments([]);
+    setShowAdvancePayment(false);
+    setAdvancePaymentForm({
+      amount: '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMethod: 'cash',
+      paymentReference: '',
+      notes: ''
+    });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -702,6 +858,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+  };
+
+  const handleAdvancePaymentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setAdvancePaymentForm(prev => ({ ...prev, [name]: value }));
   };
 
   const handleCardSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -721,6 +882,523 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         ...prev,
         creditLimit: ''
       }));
+    }
+  };
+
+  const generateAdvancePaymentInvoice = () => {
+    if (!advancePaymentReceipt) return;
+
+    const invoiceHTML = generateAdvancePaymentInvoiceHTML();
+
+    // Create a new window for printing/downloading
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(invoiceHTML);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
+  const generateAdvancePaymentInvoiceHTML = () => {
+    if (!advancePaymentReceipt) return '';
+
+    const currentDate = new Date().toLocaleDateString();
+    const paymentDate = new Date(advancePaymentReceipt.payment_date).toLocaleDateString();
+    const dueDate = new Date(advancePaymentReceipt.payment_date).toLocaleDateString(); // Same as payment date for advance payments
+
+    // Get customer contact information from form data
+    const customerAddress = formData.address || 'N/A';
+    const customerPhone = formData.phone1 || 'N/A';
+    const customerEmail = formData.email1 || 'N/A';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Advance Payment Invoice - ${advancePaymentReceipt.invoice_number}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .company-info {
+            flex: 1;
+          }
+          .company-name {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+          }
+          .company-tagline {
+            color: #6b7280;
+            font-size: 16px;
+            margin-bottom: 10px;
+          }
+          .company-details {
+            font-size: 14px;
+            color: #4b5563;
+            line-height: 1.4;
+          }
+          .invoice-info {
+            text-align: right;
+            flex: 1;
+          }
+          .invoice-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 10px;
+          }
+          .invoice-number {
+            font-size: 18px;
+            color: #6b7280;
+            margin-bottom: 5px;
+          }
+          .invoice-date {
+            font-size: 14px;
+            color: #6b7280;
+          }
+          .billing-section {
+            display: flex;
+            justify-content: space-between;
+            margin: 30px 0;
+          }
+          .billing-info {
+            flex: 1;
+            margin-right: 20px;
+          }
+          .billing-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .billing-details {
+            font-size: 14px;
+            color: #4b5563;
+            line-height: 1.6;
+          }
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          .items-table th {
+            background-color: #f8fafc;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+          }
+          .items-table td {
+            padding: 15px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .items-table .amount {
+            text-align: right;
+            font-weight: 600;
+          }
+          .totals-section {
+            margin-top: 30px;
+            display: flex;
+            justify-content: flex-end;
+          }
+          .totals-table {
+            width: 300px;
+          }
+          .totals-table td {
+            padding: 8px 15px;
+            border: none;
+          }
+          .totals-table .label {
+            text-align: right;
+            font-weight: 600;
+            color: #4b5563;
+          }
+          .totals-table .amount {
+            text-align: right;
+            font-weight: 600;
+            color: #1f2937;
+          }
+          .total-row {
+            border-top: 2px solid #2563eb;
+            background-color: #f8fafc;
+          }
+          .total-row .label {
+            color: #2563eb;
+            font-size: 18px;
+          }
+          .total-row .amount {
+            color: #2563eb;
+            font-size: 18px;
+          }
+          .payment-info {
+            background-color: #f0f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+            border-left: 4px solid #2563eb;
+          }
+          .payment-info h4 {
+            margin: 0 0 10px 0;
+            color: #1e40af;
+            font-size: 16px;
+          }
+          .payment-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 14px;
+          }
+          .payment-detail {
+            display: flex;
+            justify-content: space-between;
+          }
+          .payment-detail .label {
+            font-weight: 600;
+            color: #374151;
+          }
+          .payment-detail .value {
+            color: #1f2937;
+          }
+          .terms {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 12px;
+            color: #6b7280;
+          }
+          .terms h4 {
+            color: #374151;
+            margin-bottom: 10px;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 12px;
+          }
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background-color: #10b981;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+          }
+          @media print {
+            body { margin: 0; padding: 15px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company-info">
+            <div class="company-name">SERVIGENCE</div>
+            <div class="company-tagline">Professional Business Services</div>
+            <div class="company-details">
+              Dubai, United Arab Emirates<br>
+              Phone: +971 XX XXX XXXX<br>
+              Email: info@servigence.com<br>
+              Website: www.servigence.com
+            </div>
+          </div>
+          <div class="invoice-info">
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-number">Invoice #: ${advancePaymentReceipt.invoice_number}</div>
+            <div class="invoice-date">Date: ${currentDate}</div>
+            <div class="invoice-date">Due Date: ${dueDate}</div>
+            <div style="margin-top: 10px;">
+              <span class="status-badge">PAID</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="billing-section">
+          <div class="billing-info">
+            <div class="billing-title">Bill To:</div>
+            <div class="billing-details">
+              <strong>${advancePaymentReceipt.customerName}</strong><br>
+              ${customerAddress}<br>
+              Phone: ${customerPhone}<br>
+              Email: ${customerEmail}
+            </div>
+          </div>
+          <div class="billing-info">
+            <div class="billing-title">Payment Information:</div>
+            <div class="billing-details">
+              <strong>Payment Date:</strong> ${paymentDate}<br>
+              <strong>Payment Method:</strong> ${advancePaymentReceipt.payment_method.toUpperCase()}<br>
+              ${advancePaymentReceipt.payment_reference ? `<strong>Reference:</strong> ${advancePaymentReceipt.payment_reference}<br>` : ''}
+              <strong>Receipt #:</strong> ${advancePaymentReceipt.receipt_number}
+            </div>
+          </div>
+        </div>
+
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 60%;">Description</th>
+              <th style="width: 15%; text-align: center;">Qty</th>
+              <th style="width: 25%; text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <strong>Advance Payment</strong><br>
+                <span style="color: #6b7280; font-size: 14px;">
+                  Advance payment for ${registrationType} registration: ${advancePaymentReceipt.customerName}
+                </span>
+                ${advancePaymentReceipt.notes ? `<br><span style="color: #6b7280; font-size: 12px; font-style: italic;">Note: ${advancePaymentReceipt.notes}</span>` : ''}
+              </td>
+              <td style="text-align: center;">1</td>
+              <td class="amount">AED ${parseFloat(advancePaymentReceipt.amount).toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="totals-section">
+          <table class="totals-table">
+            <tr>
+              <td class="label">Subtotal:</td>
+              <td class="amount">AED ${parseFloat(advancePaymentReceipt.amount).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td class="label">VAT (0%):</td>
+              <td class="amount">AED 0.00</td>
+            </tr>
+            <tr class="total-row">
+              <td class="label">Total Amount:</td>
+              <td class="amount">AED ${parseFloat(advancePaymentReceipt.amount).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td class="label">Amount Paid:</td>
+              <td class="amount" style="color: #10b981;">AED ${parseFloat(advancePaymentReceipt.amount).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td class="label">Balance Due:</td>
+              <td class="amount" style="color: #10b981; font-weight: bold;">AED 0.00</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="payment-info">
+          <h4>Payment Confirmation</h4>
+          <div class="payment-details">
+            <div class="payment-detail">
+              <span class="label">Payment Status:</span>
+              <span class="value" style="color: #10b981; font-weight: bold;">CONFIRMED</span>
+            </div>
+            <div class="payment-detail">
+              <span class="label">Transaction Date:</span>
+              <span class="value">${paymentDate}</span>
+            </div>
+            <div class="payment-detail">
+              <span class="label">Payment Method:</span>
+              <span class="value">${advancePaymentReceipt.payment_method.toUpperCase()}</span>
+            </div>
+            <div class="payment-detail">
+              <span class="label">Processed By:</span>
+              <span class="value">${advancePaymentReceipt.created_by || 'System'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="terms">
+          <h4>Terms & Conditions:</h4>
+          <ul style="margin: 0; padding-left: 20px;">
+            <li>This advance payment will be applied to future services as requested.</li>
+            <li>Advance payments are non-refundable unless otherwise agreed in writing.</li>
+            <li>This invoice serves as confirmation of payment received.</li>
+            <li>For any queries regarding this payment, please contact us with the invoice number.</li>
+          </ul>
+        </div>
+
+        <div class="footer">
+          <p><strong>Thank you for choosing SERVIGENCE!</strong></p>
+          <p>This is a computer-generated invoice. Generated on ${currentDate} at ${new Date().toLocaleTimeString()}</p>
+          <p>For support, contact us at info@servigence.com or +971 XX XXX XXXX</p>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const generateAdvancePaymentReceipt = () => {
+    if (!advancePaymentReceipt) return;
+
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Advance Payment Receipt - ${advancePaymentReceipt.receipt_number}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .company-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+          }
+          .receipt-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #059669;
+            margin: 20px 0;
+          }
+          .receipt-number {
+            font-size: 18px;
+            color: #6b7280;
+            margin-bottom: 10px;
+          }
+          .details-section {
+            background-color: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+          }
+          .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .detail-row:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 18px;
+            color: #059669;
+          }
+          .label {
+            font-weight: 600;
+            color: #374151;
+          }
+          .value {
+            color: #111827;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 14px;
+          }
+          .notes {
+            background-color: #fef3c7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #f59e0b;
+          }
+          @media print {
+            body { margin: 0; padding: 15px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company-name">SERVIGENCE</div>
+          <div style="color: #6b7280;">Professional Services</div>
+        </div>
+
+        <div class="receipt-title">ADVANCE PAYMENT RECEIPT</div>
+        <div class="receipt-number">Receipt #: ${advancePaymentReceipt.receipt_number}</div>
+
+        <div class="details-section">
+          <div class="detail-row">
+            <span class="label">Customer Name:</span>
+            <span class="value">${advancePaymentReceipt.customerName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Customer Type:</span>
+            <span class="value">${advancePaymentReceipt.customerType === 'company' ? 'Company' : 'Individual'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Payment Date:</span>
+            <span class="value">${new Date(advancePaymentReceipt.payment_date).toLocaleDateString()}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Payment Method:</span>
+            <span class="value">${advancePaymentReceipt.payment_method.toUpperCase()}</span>
+          </div>
+          ${advancePaymentReceipt.payment_reference ? `
+          <div class="detail-row">
+            <span class="label">Payment Reference:</span>
+            <span class="value">${advancePaymentReceipt.payment_reference}</span>
+          </div>
+          ` : ''}
+          <div class="detail-row">
+            <span class="label">Amount Paid:</span>
+            <span class="value">AED ${parseFloat(advancePaymentReceipt.amount).toLocaleString()}</span>
+          </div>
+        </div>
+
+        ${advancePaymentReceipt.notes ? `
+        <div class="notes">
+          <strong>Notes:</strong><br>
+          ${advancePaymentReceipt.notes}
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <p>Thank you for your payment!</p>
+          <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+          <p>This is a computer-generated receipt.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Create a new window for printing/downloading
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(receiptHTML);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
     }
   };
 
@@ -1374,14 +2052,13 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
               </div>
             )}
 
-            {/* Document Upload Section - Only for Companies */}
-            {registrationType === 'company' && (
-              <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
+            {/* Document Upload Section - For Both Companies and Individuals */}
+            <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Documents & Certificates</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Upload company documents and certificates (optional). Documents with expiry dates will automatically create reminders.
+                    Upload {registrationType === 'company' ? 'company' : 'personal'} documents and certificates (optional). Documents with expiry dates will automatically create reminders.
                   </p>
                 </div>
                 <button
@@ -1562,8 +2239,114 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+
+            {/* Advance Payment Section */}
+            <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Advance Payment (Optional)</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Record an advance payment for this {registrationType === 'company' ? 'company' : 'individual'}. A receipt will be generated automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancePayment(!showAdvancePayment)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 shrink-0"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>{showAdvancePayment ? 'Hide' : 'Add'} Advance Payment</span>
+                </button>
+              </div>
+
+              {showAdvancePayment && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-green-50 border border-green-200 rounded-lg">
+                  {/* Payment Amount */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Amount (AED) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="amount"
+                      value={advancePaymentForm.amount}
+                      onChange={handleAdvancePaymentChange}
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      name="paymentDate"
+                      value={advancePaymentForm.paymentDate}
+                      onChange={handleAdvancePaymentChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Method <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="paymentMethod"
+                      value={advancePaymentForm.paymentMethod}
+                      onChange={handleAdvancePaymentChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      required
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank">Bank Transfer</option>
+                      <option value="card">Credit Card</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="online">Online Payment</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Reference */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Reference (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      name="paymentReference"
+                      value={advancePaymentForm.paymentReference}
+                      onChange={handleAdvancePaymentChange}
+                      placeholder="Transaction ID, Cheque Number, etc."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+
+                  {/* Notes/Description */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Notes/Description (Optional)
+                    </label>
+                    <textarea
+                      name="notes"
+                      value={advancePaymentForm.notes}
+                      onChange={handleAdvancePaymentChange}
+                      rows={3}
+                      placeholder="Additional notes about this advance payment..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
           {/* Form Actions */}
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
@@ -1595,6 +2378,90 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           </div>
         </form>
       </div>
+
+      {/* Advance Payment Receipt Modal */}
+      {showReceiptModal && advancePaymentReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Payment Documents Generated</h3>
+              <p className="text-gray-600 mt-2">
+                Advance payment has been recorded successfully. Download your professional invoice or payment receipt below.
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoice Number:</span>
+                  <span className="font-semibold">{advancePaymentReceipt.invoice_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Receipt Number:</span>
+                  <span className="font-semibold">{advancePaymentReceipt.receipt_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Customer:</span>
+                  <span className="font-semibold">{advancePaymentReceipt.customerName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Amount:</span>
+                  <span className="font-semibold text-green-600">AED {parseFloat(advancePaymentReceipt.amount).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Payment Method:</span>
+                  <span className="font-semibold">{advancePaymentReceipt.payment_method}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Date:</span>
+                  <span className="font-semibold">{new Date(advancePaymentReceipt.payment_date).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {/* Professional Invoice Download */}
+              <button
+                onClick={generateAdvancePaymentInvoice}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2 font-medium"
+              >
+                <FileText className="w-5 h-5" />
+                <span>Download Professional Invoice</span>
+              </button>
+
+              {/* Receipt Download */}
+              <button
+                onClick={generateAdvancePaymentReceipt}
+                className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center space-x-2 font-medium"
+              >
+                <Receipt className="w-5 h-5" />
+                <span>Download Payment Receipt</span>
+              </button>
+
+              {/* Close Button */}
+              <button
+                onClick={() => {
+                  setShowReceiptModal(false);
+                  // Navigate back to the appropriate list after closing modal
+                  setTimeout(() => {
+                    if (registrationType === 'company') {
+                      onNavigate?.('companies');
+                    } else {
+                      onNavigate?.('individuals');
+                    }
+                  }, 300); // Small delay to allow modal to close smoothly
+                }}
+                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Close & Return to List
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

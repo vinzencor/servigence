@@ -23,7 +23,8 @@ import {
   CheckCircle,
   Clock,
   MoreVertical,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -152,6 +153,10 @@ const AccountManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
   const [showEditTransaction, setShowEditTransaction] = useState(false);
@@ -521,7 +526,25 @@ const AccountManagement: React.FC = () => {
     const matchesType = filterType === 'all' || account.type === filterType;
     const matchesStatus = filterStatus === 'all' || account.status === filterStatus;
 
-    return matchesSearch && matchesType && matchesStatus;
+    // Date range filtering
+    let matchesDateRange = true;
+    if (dateRange.startDate || dateRange.endDate) {
+      const transactionDate = new Date(account.date);
+
+      if (dateRange.startDate) {
+        const startDate = new Date(dateRange.startDate);
+        matchesDateRange = matchesDateRange && transactionDate >= startDate;
+      }
+
+      if (dateRange.endDate) {
+        const endDate = new Date(dateRange.endDate);
+        // Set end date to end of day for inclusive filtering
+        endDate.setHours(23, 59, 59, 999);
+        matchesDateRange = matchesDateRange && transactionDate <= endDate;
+      }
+    }
+
+    return matchesSearch && matchesType && matchesStatus && matchesDateRange;
   });
 
   // Calculate totals
@@ -1363,7 +1386,7 @@ const AccountManagement: React.FC = () => {
                   className="pl-10 pr-4 py-2 w-full sm:w-80 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
@@ -1386,7 +1409,53 @@ const AccountManagement: React.FC = () => {
                   <option value="pending">Pending</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
+
+                {/* Date Range Filters */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">From:</label>
+                  <input
+                    type="date"
+                    value={dateRange.startDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">To:</label>
+                  <input
+                    type="date"
+                    value={dateRange.endDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Clear Filters Button */}
+                {(dateRange.startDate || dateRange.endDate || searchTerm || filterType !== 'all' || filterStatus !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setDateRange({ startDate: '', endDate: '' });
+                      setSearchTerm('');
+                      setFilterType('all');
+                      setFilterStatus('all');
+                    }}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Clear Filters</span>
+                  </button>
+                )}
               </div>
+            </div>
+
+            {/* Transaction Count Display */}
+            <div className="mt-4 text-sm text-gray-600">
+              Showing {filteredAccounts.length} of {accounts.length} transactions
+              {(dateRange.startDate || dateRange.endDate) && (
+                <span className="ml-2 text-amber-600">
+                  (filtered by date: {dateRange.startDate || 'start'} to {dateRange.endDate || 'end'})
+                </span>
+              )}
             </div>
           </div>
         </div>
