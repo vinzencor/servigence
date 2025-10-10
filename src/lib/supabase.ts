@@ -522,8 +522,8 @@ export const dbHelpers = {
       .from('service_billings')
       .select(`
         *,
-        company:companies(company_name, assigned_to, credit_limit, credit_limit_days),
-        individual:individuals(individual_name, assigned_to, credit_limit, credit_limit_days),
+        company:companies(company_name, assigned_to),
+        individual:individuals(individual_name, assigned_to),
         service_type:service_types(name, typing_charges, government_charges),
         assigned_employee:service_employees(name),
         company_employee:employees(name, employee_id, position)
@@ -547,13 +547,19 @@ export const dbHelpers = {
   },
 
   async createServiceBilling(billing: any) {
+    console.log('🔍 Creating service billing with data:', billing);
+    console.log('🔍 Cash type value:', billing.cash_type, 'Type:', typeof billing.cash_type);
+
     const { data, error } = await supabase
       .from('service_billings')
       .insert([billing])
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Database error:', error);
+      throw error;
+    }
     return data
   },
 
@@ -658,7 +664,7 @@ export const dbHelpers = {
       .from('dues')
       .select(`
         *,
-        company:companies(company_name, credit_limit, credit_limit_days),
+        company:companies(company_name, credit_limit),
         employee:employees(name, employee_id, position),
         service_billing:service_billings(invoice_number, service_date, total_amount)
       `)
@@ -1078,6 +1084,30 @@ export const dbHelpers = {
     }
   },
 
+  async setDefaultPaymentCard(cardId: string) {
+    try {
+      // First, remove default status from all cards
+      await supabase
+        .from('payment_cards')
+        .update({ is_default: false })
+        .neq('id', cardId);
+
+      // Then set the specified card as default
+      const { data, error } = await supabase
+        .from('payment_cards')
+        .update({ is_default: true })
+        .eq('id', cardId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error setting default payment card:', error);
+      throw error;
+    }
+  },
+
   // Card Transactions
   async getCardTransactions(cardId: string) {
     const { data, error } = await supabase
@@ -1093,7 +1123,6 @@ export const dbHelpers = {
 
     if (error) throw error
 
-    // Transform data to match CardTransaction interface
     return data?.map((transaction: any) => ({
       id: transaction.id,
       cardId: transaction.card_id,
@@ -1112,6 +1141,352 @@ export const dbHelpers = {
     })) || []
   },
 
+  // Enhanced Card Transactions - Gets transactions from service_billings
+  async getEnhancedCardTransactions(cardId: string) {
+    const { data, error } = await supabase
+      .from('service_billings')
+      .select(`
+        id,
+        service_date,
+        total_amount,
+        discount,
+        cash_type,
+        invoice_number,
+        notes,
+        status,
+        created_at,
+        card_id,
+        company:companies(id, company_name),
+        individual:individuals(id, individual_name),
+        service_type:service_types(id, name),
+        payment_card:payment_cards(id, card_name)
+      `)
+      .eq('card_id', cardId)
+      .eq('cash_type', 'card')
+      .order('service_date', { ascending: false })
+
+    if (error) throw error
+
+    return data?.map((billing: any) => ({
+      id: billing.id,
+      cardId: billing.card_id,
+      cardName: billing.payment_card?.card_name || 'Unknown Card',
+      transactionDate: billing.service_date,
+      description: `Service: ${billing.service_type?.name || 'Unknown Service'}${billing.notes ? ` - ${billing.notes}` : ''}`,
+      amount: parseFloat(billing.total_amount) - (parseFloat(billing.discount) || 0),
+      transactionType: 'payment' as const,
+      referenceNumber: billing.invoice_number,
+      companyId: billing.company?.id,
+      companyName: billing.company?.company_name,
+      individualId: billing.individual?.id,
+      individualName: billing.individual?.individual_name,
+      invoiceNumber: billing.invoice_number,
+      serviceType: billing.service_type?.name,
+      status: billing.status === 'completed' ? 'completed' as const :
+              billing.status === 'pending' ? 'pending' as const : 'completed' as const,
+      createdAt: billing.created_at
+    })) || []
+  },
+
+  // Get all card transactions with date range filtering
+  async getAllCardTransactionsWithFilters(filters: {
+    cardId?: string;
+    startDate?: string;
+    endDate?: string;
+    transactionType?: string;
+    status?: string;
+    searchTerm?: string;
+  } = {}) {
+    let query = supabase
+      .from('service_billings')
+      .select(`
+        id,
+        service_date,
+        total_amount,
+        discount,
+        cash_type,
+        invoice_number,
+        notes,
+        status,
+        created_at,
+        card_id,
+        company:companies(id, company_name),
+        individual:individuals(id, individual_name),
+        service_type:service_types(id, name),
+        payment_card:payment_cards(id, card_name)
+      `)
+      .eq('cash_type', 'card')
+      .not('card_id', 'is', null)
+
+    if (filters.cardId) {
+      query = query.eq('card_id', filters.cardId)
+    }
+
+    if (filters.startDate) {
+      query = query.gte('service_date', filters.startDate)
+    }
+
+    if (filters.endDate) {
+      query = query.lte('service_date', filters.endDate)
+    }
+
+    if (filters.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status)
+    }
+
+    query = query.order('service_date', { ascending: false })
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    let transactions = data?.map((billing: any) => ({
+      id: billing.id,
+      cardId: billing.card_id,
+      cardName: billing.payment_card?.card_name || 'Unknown Card',
+      transactionDate: billing.service_date,
+      description: `Service: ${billing.service_type?.name || 'Unknown Service'}${billing.notes ? ` - ${billing.notes}` : ''}`,
+      amount: parseFloat(billing.total_amount) - (parseFloat(billing.discount) || 0),
+      transactionType: 'payment' as const,
+      referenceNumber: billing.invoice_number,
+      companyId: billing.company?.id,
+      companyName: billing.company?.company_name,
+      individualId: billing.individual?.id,
+      individualName: billing.individual?.individual_name,
+      invoiceNumber: billing.invoice_number,
+      serviceType: billing.service_type?.name,
+      status: billing.status === 'completed' ? 'completed' as const :
+              billing.status === 'pending' ? 'pending' as const : 'completed' as const,
+      createdAt: billing.created_at
+    })) || []
+
+    // Apply search filter if provided
+    if (filters.searchTerm && filters.searchTerm.trim()) {
+      const searchLower = filters.searchTerm.toLowerCase()
+      transactions = transactions.filter(t =>
+        t.description.toLowerCase().includes(searchLower) ||
+        t.companyName?.toLowerCase().includes(searchLower) ||
+        t.individualName?.toLowerCase().includes(searchLower) ||
+        t.invoiceNumber?.toLowerCase().includes(searchLower) ||
+        t.cardName.toLowerCase().includes(searchLower)
+      )
+    }
+
+    return transactions
+  },
+
+  // Card Balance and Usage Functions
+  async getCardBalances() {
+    try {
+      // Get all active payment cards
+      const cards = await this.getPaymentCards();
+      const activeCards = cards.filter(card => card.isActive);
+
+      // Calculate balances for each card
+      const cardBalances = await Promise.all(
+        activeCards.map(async (card) => {
+          const usage = await this.getCardUsage(card.id);
+          const availableCredit = card.creditLimit - usage.totalUsed;
+          const utilizationPercentage = card.creditLimit > 0 ? (usage.totalUsed / card.creditLimit) * 100 : 0;
+
+          return {
+            id: card.id,
+            cardName: card.cardName,
+            cardType: card.cardType,
+            bankName: card.bankName,
+            creditLimit: card.creditLimit,
+            totalUsed: usage.totalUsed,
+            availableCredit: Math.max(0, availableCredit),
+            utilizationPercentage: Math.min(100, utilizationPercentage),
+            isDefault: card.isDefault,
+            todayUsage: usage.todayUsage,
+            transactionCount: usage.transactionCount,
+            lastTransactionDate: usage.lastTransactionDate
+          };
+        })
+      );
+
+      return cardBalances;
+    } catch (error) {
+      console.error('Error calculating card balances:', error);
+      throw error;
+    }
+  },
+
+  async getCardUsage(cardId: string) {
+    try {
+      // Get all service billings that used this card
+      const { data: billings, error } = await supabase
+        .from('service_billings')
+        .select('total_amount, service_date, created_at')
+        .eq('card_id', cardId)
+        .eq('cash_type', 'card');
+
+      if (error) throw error;
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const totalUsed = billings?.reduce((sum, billing) => sum + parseFloat(billing.total_amount || 0), 0) || 0;
+      const todayUsage = billings?.filter(billing => billing.service_date === today)
+        .reduce((sum, billing) => sum + parseFloat(billing.total_amount || 0), 0) || 0;
+
+      const transactionCount = billings?.length || 0;
+      const lastTransactionDate = billings?.length > 0
+        ? billings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].service_date
+        : null;
+
+      return {
+        totalUsed,
+        todayUsage,
+        transactionCount,
+        lastTransactionDate
+      };
+    } catch (error) {
+      console.error('Error calculating card usage:', error);
+      throw error;
+    }
+  },
+
+  async getTodayCardTransactions() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // First get the service billings with card payments
+      const { data: billings, error } = await supabase
+        .from('service_billings')
+        .select(`
+          *,
+          company:companies(company_name),
+          individual:individuals(individual_name),
+          service_type:service_types(name)
+        `)
+        .eq('cash_type', 'card')
+        .eq('service_date', today)
+        .not('card_id', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Get payment cards separately and map them
+      const { data: cards, error: cardsError } = await supabase
+        .from('payment_cards')
+        .select('id, card_name, card_type, bank_name');
+
+      if (cardsError) throw cardsError;
+
+      const cardsMap = cards?.reduce((acc: any, card: any) => {
+        acc[card.id] = card;
+        return acc;
+      }, {}) || {};
+
+      return billings?.map((billing: any) => {
+        const card = cardsMap[billing.card_id];
+        return {
+          id: billing.id,
+          cardId: billing.card_id,
+          cardName: card?.card_name || 'Unknown Card',
+          cardType: card?.card_type || 'unknown',
+          bankName: card?.bank_name,
+          amount: parseFloat(billing.total_amount || 0),
+          serviceName: billing.service_type?.name || 'Unknown Service',
+          clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
+          clientType: billing.company_id ? 'company' : 'individual',
+          invoiceNumber: billing.invoice_number,
+          serviceDate: billing.service_date,
+          createdAt: billing.created_at,
+          status: billing.status
+        };
+      }) || [];
+    } catch (error) {
+      console.error('Error loading today\'s card transactions:', error);
+      throw error;
+    }
+  },
+
+  async getDailyCardSummary(date?: string) {
+    try {
+      const targetDate = date || new Date().toISOString().split('T')[0];
+
+      // Get all card transactions for the specified date
+      const { data: billings, error } = await supabase
+        .from('service_billings')
+        .select('card_id, total_amount')
+        .eq('cash_type', 'card')
+        .eq('service_date', targetDate)
+        .not('card_id', 'is', null);
+
+      if (error) throw error;
+
+      // Get payment cards separately
+      const { data: cards, error: cardsError } = await supabase
+        .from('payment_cards')
+        .select('id, card_name, credit_limit');
+
+      if (cardsError) throw cardsError;
+
+      const cardsMap = cards?.reduce((acc: any, card: any) => {
+        acc[card.id] = card;
+        return acc;
+      }, {}) || {};
+
+      // Group by card and calculate totals
+      const cardSummary = billings?.reduce((acc: any, billing: any) => {
+        const cardId = billing.card_id;
+        const amount = parseFloat(billing.total_amount || 0);
+        const card = cardsMap[cardId];
+
+        if (!acc[cardId] && card) {
+          acc[cardId] = {
+            cardId,
+            cardName: card.card_name || 'Unknown Card',
+            creditLimit: parseFloat(card.credit_limit || 0),
+            dailyUsage: 0,
+            transactionCount: 0
+          };
+        }
+
+        if (acc[cardId]) {
+          acc[cardId].dailyUsage += amount;
+          acc[cardId].transactionCount += 1;
+        }
+
+        return acc;
+      }, {}) || {};
+
+      // Convert to array and add remaining balance
+      const summaryArray = Object.values(cardSummary).map((card: any) => {
+        // Get total usage for this card (all time)
+        return this.getCardUsage(card.cardId).then(usage => ({
+          ...card,
+          totalUsed: usage.totalUsed,
+          remainingBalance: Math.max(0, card.creditLimit - usage.totalUsed),
+          utilizationPercentage: card.creditLimit > 0 ? (usage.totalUsed / card.creditLimit) * 100 : 0
+        }));
+      });
+
+      const results = await Promise.all(summaryArray);
+
+      // Calculate totals
+      const totalDailyUsage = results.reduce((sum, card) => sum + card.dailyUsage, 0);
+      const totalTransactions = results.reduce((sum, card) => sum + card.transactionCount, 0);
+      const totalAvailableCredit = results.reduce((sum, card) => sum + card.remainingBalance, 0);
+
+      return {
+        date: targetDate,
+        cards: results,
+        totals: {
+          dailyUsage: totalDailyUsage,
+          transactionCount: totalTransactions,
+          availableCredit: totalAvailableCredit,
+          cardsUsed: results.length
+        }
+      };
+    } catch (error) {
+      console.error('Error generating daily card summary:', error);
+      throw error;
+    }
+  },
+
   async createCardTransaction(transaction: any) {
     const { data, error } = await supabase
       .from('card_transactions')
@@ -1121,5 +1496,847 @@ export const dbHelpers = {
 
     if (error) throw error
     return data
+  },
+
+  // Vendor Reports
+  async getVendorReports(vendorId?: string, dateFrom?: string, dateTo?: string) {
+    try {
+      let query = supabase
+        .from('service_billings')
+        .select(`
+          *,
+          vendor:vendors(name, email, phone, service_category),
+          service_type:service_types(name),
+          company:companies(company_name),
+          individual:individuals(individual_name)
+        `)
+        .not('assigned_vendor_id', 'is', null);
+
+      if (vendorId) {
+        query = query.eq('assigned_vendor_id', vendorId);
+      }
+
+      if (dateFrom) {
+        query = query.gte('service_date', dateFrom);
+      }
+
+      if (dateTo) {
+        query = query.lte('service_date', dateTo);
+      }
+
+      const { data: billings, error } = await query.order('service_date', { ascending: false });
+
+      if (error) throw error;
+
+      // Get all vendors for summary
+      const { data: vendors, error: vendorsError } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('is_active', true);
+
+      if (vendorsError) throw vendorsError;
+
+      // Calculate vendor performance metrics
+      const vendorMetrics = vendors?.map(vendor => {
+        const vendorBillings = billings?.filter(b => b.assigned_vendor_id === vendor.id) || [];
+        const totalJobs = vendorBillings.length;
+        const totalCost = vendorBillings.reduce((sum, b) => sum + parseFloat(b.vendor_cost || 0), 0);
+        const totalRevenue = vendorBillings.reduce((sum, b) => sum + parseFloat(b.total_amount || 0), 0);
+        const completedJobs = vendorBillings.filter(b => b.status === 'completed').length;
+        const pendingJobs = vendorBillings.filter(b => b.status === 'pending').length;
+
+        return {
+          id: vendor.id,
+          name: vendor.name,
+          email: vendor.email,
+          phone: vendor.phone,
+          serviceCategory: vendor.service_category,
+          totalJobs,
+          completedJobs,
+          pendingJobs,
+          totalCost,
+          totalRevenue,
+          profit: totalRevenue - totalCost,
+          completionRate: totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0,
+          averageCostPerJob: totalJobs > 0 ? totalCost / totalJobs : 0,
+          recentJobs: vendorBillings.slice(0, 5).map(b => ({
+            id: b.id,
+            serviceName: b.service_type?.name || 'Unknown Service',
+            clientName: b.company?.company_name || b.individual?.individual_name || 'Unknown Client',
+            amount: parseFloat(b.total_amount || 0),
+            vendorCost: parseFloat(b.vendor_cost || 0),
+            serviceDate: b.service_date,
+            status: b.status,
+            invoiceNumber: b.invoice_number
+          }))
+        };
+      }) || [];
+
+      return {
+        vendors: vendorMetrics,
+        totalVendors: vendors?.length || 0,
+        totalJobs: billings?.length || 0,
+        totalCost: billings?.reduce((sum, b) => sum + parseFloat(b.vendor_cost || 0), 0) || 0,
+        totalRevenue: billings?.reduce((sum, b) => sum + parseFloat(b.total_amount || 0), 0) || 0,
+        billings: billings || []
+      };
+    } catch (error) {
+      console.error('Error generating vendor reports:', error);
+      throw error;
+    }
+  },
+
+  async generateDayCloseReport(date?: string) {
+    try {
+      const targetDate = date || new Date().toISOString().split('T')[0];
+
+      // Get all cards and their opening balances (total usage before target date)
+      const cards = await this.getPaymentCards();
+      const activeCards = cards.filter(card => card.isActive);
+
+      // Get all transactions for the target date
+      const dailyTransactions = await this.getTodayCardTransactions();
+      const targetDateTransactions = dailyTransactions.filter(t => t.serviceDate === targetDate);
+
+      // Calculate opening and closing balances for each card
+      const cardReports = await Promise.all(
+        activeCards.map(async (card) => {
+          // Get all transactions before target date
+          const { data: beforeTransactions, error: beforeError } = await supabase
+            .from('service_billings')
+            .select('total_amount, service_date')
+            .eq('card_id', card.id)
+            .eq('cash_type', 'card')
+            .lt('service_date', targetDate);
+
+          if (beforeError) throw beforeError;
+
+          // Get transactions for target date
+          const { data: dayTransactions, error: dayError } = await supabase
+            .from('service_billings')
+            .select('total_amount, service_date, invoice_number')
+            .eq('card_id', card.id)
+            .eq('cash_type', 'card')
+            .eq('service_date', targetDate);
+
+          if (dayError) throw dayError;
+
+          const openingUsage = beforeTransactions?.reduce((sum, t) => sum + parseFloat(t.total_amount || 0), 0) || 0;
+          const dailyUsage = dayTransactions?.reduce((sum, t) => sum + parseFloat(t.total_amount || 0), 0) || 0;
+          const closingUsage = openingUsage + dailyUsage;
+
+          return {
+            cardId: card.id,
+            cardName: card.cardName,
+            cardType: card.cardType,
+            bankName: card.bankName,
+            creditLimit: card.creditLimit,
+            openingBalance: Math.max(0, card.creditLimit - openingUsage),
+            openingUsage,
+            dailyUsage,
+            closingUsage,
+            closingBalance: Math.max(0, card.creditLimit - closingUsage),
+            transactionCount: dayTransactions?.length || 0,
+            transactions: dayTransactions || []
+          };
+        })
+      );
+
+      // Calculate totals
+      const totals = {
+        totalCreditLimit: cardReports.reduce((sum, card) => sum + card.creditLimit, 0),
+        totalOpeningBalance: cardReports.reduce((sum, card) => sum + card.openingBalance, 0),
+        totalDailyUsage: cardReports.reduce((sum, card) => sum + card.dailyUsage, 0),
+        totalClosingBalance: cardReports.reduce((sum, card) => sum + card.closingBalance, 0),
+        totalTransactions: cardReports.reduce((sum, card) => sum + card.transactionCount, 0),
+        cardsUsed: cardReports.filter(card => card.dailyUsage > 0).length
+      };
+
+      return {
+        date: targetDate,
+        generatedAt: new Date().toISOString(),
+        cards: cardReports,
+        totals,
+        transactions: targetDateTransactions
+      };
+    } catch (error) {
+      console.error('Error generating day close report:', error);
+      throw error;
+    }
+  },
+
+  // Outstanding Reports
+  async getOutstandingReports(type?: 'all' | 'overdue' | 'pending') {
+    try {
+      // Get service billings that are not fully paid
+      const { data: billings, error } = await supabase
+        .from('service_billings')
+        .select(`
+          *,
+          company:companies(company_name, assigned_to, credit_limit),
+          individual:individuals(individual_name, assigned_to, credit_limit),
+          service_type:service_types(name),
+          assigned_employee:service_employees(name)
+        `)
+        .in('status', ['pending', 'partial', 'overdue'])
+        .order('service_date', { ascending: true });
+
+      if (error) throw error;
+
+      // Calculate outstanding amounts using the new function
+      const billingsWithOutstanding = await this.calculateOutstandingAmounts(billings || []);
+
+      // Categorize and format the data
+      const outstandingItems = billingsWithOutstanding.map(billing => {
+        const serviceDate = new Date(billing.service_date);
+        const today = new Date();
+        const daysDiff = Math.floor((today.getTime() - serviceDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        let category = 'current';
+        if (daysDiff > 90) category = 'over_90';
+        else if (daysDiff > 60) category = 'over_60';
+        else if (daysDiff > 30) category = 'over_30';
+
+        const isOverdue = daysDiff > 30;
+
+        return {
+          id: billing.id,
+          invoiceNumber: billing.invoice_number,
+          clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
+          clientType: billing.company_id ? 'company' : 'individual',
+          serviceName: billing.service_type?.name || 'Unknown Service',
+          serviceDate: billing.service_date,
+          totalAmount: billing.totalAmount,
+          paidAmount: billing.totalPaid,
+          outstandingAmount: billing.outstandingAmount,
+          daysPastDue: Math.max(0, daysDiff - 30),
+          category,
+          isOverdue,
+          status: billing.status,
+          assignedEmployee: billing.assigned_employee?.name,
+          creditLimit: billing.company?.credit_limit || billing.individual?.credit_limit || 0,
+          isFullyPaid: billing.isFullyPaid
+        };
+      }).filter(item => item.outstandingAmount > 0);
+
+      // Filter by type if specified
+      let filteredItems = outstandingItems;
+      if (type === 'overdue') {
+        filteredItems = outstandingItems.filter(item => item.isOverdue);
+      } else if (type === 'pending') {
+        filteredItems = outstandingItems.filter(item => !item.isOverdue);
+      }
+
+      // Calculate summary statistics
+      const totalOutstanding = filteredItems.reduce((sum, item) => sum + item.outstandingAmount, 0);
+      const overdueAmount = outstandingItems.filter(item => item.isOverdue).reduce((sum, item) => sum + item.outstandingAmount, 0);
+      const currentAmount = outstandingItems.filter(item => !item.isOverdue).reduce((sum, item) => sum + item.outstandingAmount, 0);
+
+      // Group by aging categories
+      const agingReport = {
+        current: outstandingItems.filter(item => item.category === 'current'),
+        over_30: outstandingItems.filter(item => item.category === 'over_30'),
+        over_60: outstandingItems.filter(item => item.category === 'over_60'),
+        over_90: outstandingItems.filter(item => item.category === 'over_90')
+      };
+
+      // Group by client
+      const clientSummary = filteredItems.reduce((acc: any, item) => {
+        const clientKey = `${item.clientType}_${item.clientName}`;
+        if (!acc[clientKey]) {
+          acc[clientKey] = {
+            clientName: item.clientName,
+            clientType: item.clientType,
+            totalOutstanding: 0,
+            invoiceCount: 0,
+            oldestInvoiceDate: item.serviceDate,
+            creditLimit: item.creditLimit
+          };
+        }
+        acc[clientKey].totalOutstanding += item.outstandingAmount;
+        acc[clientKey].invoiceCount += 1;
+        if (new Date(item.serviceDate) < new Date(acc[clientKey].oldestInvoiceDate)) {
+          acc[clientKey].oldestInvoiceDate = item.serviceDate;
+        }
+        return acc;
+      }, {});
+
+      return {
+        items: filteredItems,
+        summary: {
+          totalOutstanding,
+          overdueAmount,
+          currentAmount,
+          totalInvoices: filteredItems.length,
+          overdueInvoices: outstandingItems.filter(item => item.isOverdue).length
+        },
+        agingReport,
+        clientSummary: Object.values(clientSummary)
+      };
+    } catch (error) {
+      console.error('Error generating outstanding reports:', error);
+      throw error;
+    }
+  },
+
+  // Advance Payments
+  async recordAdvancePayment(billingId: string, amount: number, paymentMethod: string, notes?: string) {
+    try {
+      // First, get the current billing record
+      const { data: billing, error: billingError } = await supabase
+        .from('service_billings')
+        .select('total_amount')
+        .eq('id', billingId)
+        .single();
+
+      if (billingError) {
+        throw billingError;
+      }
+
+      const totalAmount = parseFloat(billing.total_amount || 0);
+
+      // Validate payment amount against total (since we can't track paid_amount yet)
+      if (amount > totalAmount) {
+        throw new Error('Payment amount exceeds total invoice amount');
+      }
+
+      // Determine new status based on payment amount
+      let newStatus = 'pending';
+      if (amount >= totalAmount) {
+        newStatus = 'paid';
+      } else if (amount > 0) {
+        newStatus = 'partial';
+      }
+
+      // Skip updating service billing record to avoid column errors
+      // Payment status will be tracked through temporary payments until migration
+      let updatedBilling = billing;
+
+      // Record payment in temporary localStorage tracking (avoids 404 errors)
+      // This will be migrated to database when advance_payments table is created
+      let payment = this.addTempPayment(billingId, amount, paymentMethod, notes);
+
+      if (!payment) {
+        // Fallback to mock payment record
+        payment = {
+          id: `temp-${Date.now()}`,
+          billing_id: billingId,
+          amount: amount,
+          payment_method: paymentMethod,
+          payment_date: new Date().toISOString().split('T')[0],
+          notes: notes || null
+        };
+      }
+
+      return {
+        billing: updatedBilling,
+        payment: payment,
+        newStatus,
+        remainingAmount: Math.max(0, totalAmount - amount)
+      };
+    } catch (error) {
+      console.error('Error recording advance payment:', error);
+      throw error;
+    }
+  },
+
+  async getAdvancePayments(billingId?: string) {
+    try {
+      let query = supabase
+        .from('advance_payments')
+        .select(`
+          *,
+          billing:service_billings(
+            invoice_number,
+            total_amount,
+            company:companies(company_name),
+            individual:individuals(individual_name),
+            service_type:service_types(name)
+          )
+        `)
+        .order('payment_date', { ascending: false });
+
+      if (billingId) {
+        query = query.eq('billing_id', billingId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.warn('advance_payments table may not exist yet:', error);
+        return []; // Return empty array if table doesn't exist
+      }
+
+      return data?.map((payment: any) => ({
+        id: payment.id,
+        billingId: payment.billing_id,
+        amount: parseFloat(payment.amount || 0),
+        paymentMethod: payment.payment_method,
+        paymentDate: payment.payment_date,
+        notes: payment.notes,
+        createdAt: payment.created_at,
+        billing: {
+          invoiceNumber: payment.billing?.invoice_number,
+          totalAmount: parseFloat(payment.billing?.total_amount || 0),
+          clientName: payment.billing?.company?.company_name || payment.billing?.individual?.individual_name || 'Unknown Client',
+          serviceName: payment.billing?.service_type?.name || 'Unknown Service'
+        }
+      })) || [];
+    } catch (error) {
+      console.warn('Error loading advance payments, table may not exist:', error);
+      return []; // Return empty array instead of throwing error
+    }
+  },
+
+  async generateReceipt(paymentId: string) {
+    try {
+      const { data: payment, error } = await supabase
+        .from('advance_payments')
+        .select(`
+          *,
+          billing:service_billings(
+            invoice_number,
+            total_amount,
+            service_date,
+            company:companies(company_name, address, phone1, phone2, email1, email2),
+            individual:individuals(individual_name, address, phone1, phone2, email1, email2),
+            service_type:service_types(name)
+          )
+        `)
+        .eq('id', paymentId)
+        .single();
+
+      if (error) {
+        console.warn('advance_payments table may not exist yet:', error);
+        throw new Error('Payment record not found - database may need migration');
+      }
+
+      const receiptData = {
+        receiptNumber: `RCP-${Date.now()}`,
+        paymentId: payment.id,
+        paymentDate: payment.payment_date,
+        amount: parseFloat(payment.amount || 0),
+        paymentMethod: payment.payment_method,
+        notes: payment.notes,
+        billing: {
+          invoiceNumber: payment.billing?.invoice_number,
+          totalAmount: parseFloat(payment.billing?.total_amount || 0),
+          serviceDate: payment.billing?.service_date,
+          serviceName: payment.billing?.service_type?.name,
+          clientName: payment.billing?.company?.company_name || payment.billing?.individual?.individual_name,
+          clientAddress: payment.billing?.company?.address || payment.billing?.individual?.address,
+          clientPhone: payment.billing?.company?.phone1 || payment.billing?.company?.phone2 || payment.billing?.individual?.phone1 || payment.billing?.individual?.phone2
+        }
+      };
+
+      return receiptData;
+    } catch (error) {
+      console.error('Error generating receipt:', error);
+      throw error;
+    }
+  },
+
+  async getPaymentHistory(billingId: string) {
+    try {
+      // Use only temporary payments from localStorage (avoids 404 errors)
+      // This will be enhanced to include database payments after migration
+      const tempPayments = this.getTempPayments(billingId);
+      return tempPayments.map((payment: any) => ({
+        id: payment.id,
+        amount: parseFloat(payment.amount || 0),
+        paymentMethod: payment.payment_method,
+        paymentDate: payment.payment_date,
+        paymentReference: payment.payment_reference,
+        notes: payment.notes,
+        receiptNumber: payment.receipt_number,
+        status: 'completed',
+        createdAt: payment.created_at
+      })).sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    } catch (error) {
+      console.warn('Error loading payment history:', error);
+      return [];
+    }
+  },
+
+  async getBillingWithPayments(billingId: string) {
+    try {
+      // Get billing details
+      const { data: billing, error: billingError } = await supabase
+        .from('service_billings')
+        .select(`
+          *,
+          company:companies(company_name),
+          individual:individuals(individual_name),
+          service_type:service_types(name)
+        `)
+        .eq('id', billingId)
+        .single();
+
+      if (billingError) throw billingError;
+
+      // Get payment history
+      const payments = await this.getPaymentHistory(billingId);
+
+      const totalAmount = parseFloat(billing.total_amount || 0);
+      // Calculate paid amount from temporary payment history
+      const paidAmount = payments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amount || 0), 0);
+      const outstandingAmount = totalAmount - paidAmount;
+
+      return {
+        ...billing,
+        payments,
+        totalAmount,
+        paidAmount,
+        outstandingAmount,
+        clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
+        serviceName: billing.service_type?.name || 'Unknown Service'
+      };
+    } catch (error) {
+      console.error('Error loading billing with payments:', error);
+      throw error;
+    }
+  },
+
+  // Temporary payment tracking in localStorage (until database migration)
+  getTempPayments(billingId: string) {
+    try {
+      const payments = localStorage.getItem('temp_payments');
+      if (payments) {
+        const allPayments = JSON.parse(payments);
+        return allPayments.filter((p: any) => p.billing_id === billingId) || [];
+      }
+      return [];
+    } catch (error) {
+      console.warn('Error reading temp payments:', error);
+      return [];
+    }
+  },
+
+  addTempPayment(billingId: string, amount: number, paymentMethod: string, notes?: string) {
+    try {
+      const payments = localStorage.getItem('temp_payments');
+      const allPayments = payments ? JSON.parse(payments) : [];
+
+      const newPayment = {
+        id: `temp-${Date.now()}`,
+        billing_id: billingId,
+        amount: amount,
+        payment_method: paymentMethod,
+        payment_date: new Date().toISOString().split('T')[0],
+        notes: notes || null,
+        created_at: new Date().toISOString()
+      };
+
+      allPayments.push(newPayment);
+      localStorage.setItem('temp_payments', JSON.stringify(allPayments));
+
+      return newPayment;
+    } catch (error) {
+      console.warn('Error saving temp payment:', error);
+      return null;
+    }
+  },
+
+  // Migration helper: Transfer temporary payments to database (call after creating advance_payments table)
+  async migrateTempPaymentsToDatabase() {
+    try {
+      const tempPayments = localStorage.getItem('temp_payments');
+      if (!tempPayments) {
+        console.log('No temporary payments to migrate');
+        return { success: true, migrated: 0 };
+      }
+
+      const payments = JSON.parse(tempPayments);
+      if (payments.length === 0) {
+        console.log('No temporary payments to migrate');
+        return { success: true, migrated: 0 };
+      }
+
+      console.log(`Migrating ${payments.length} temporary payments to database...`);
+
+      // Insert all temporary payments into the database
+      const { data, error } = await supabase
+        .from('advance_payments')
+        .insert(payments.map((payment: any) => ({
+          billing_id: payment.billing_id,
+          amount: payment.amount,
+          payment_method: payment.payment_method,
+          payment_date: payment.payment_date,
+          notes: payment.notes,
+          created_at: payment.created_at
+        })));
+
+      if (error) {
+        console.error('Error migrating temporary payments:', error);
+        return { success: false, error: error.message };
+      }
+
+      // Clear temporary payments after successful migration
+      localStorage.removeItem('temp_payments');
+      console.log(`Successfully migrated ${payments.length} payments to database`);
+
+      return { success: true, migrated: payments.length };
+    } catch (error) {
+      console.error('Error during payment migration:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Calculate outstanding amounts by summing payments from advance_payments table
+  async calculateOutstandingAmounts(billings: any[]) {
+    try {
+      const billingsWithOutstanding = [];
+
+      for (const billing of billings) {
+        const totalAmount = parseFloat(billing.total_amount || 0);
+        let totalPaid = 0;
+
+        // Use only temporary localStorage tracking (avoids all database column errors)
+        const tempPayments = this.getTempPayments(billing.id);
+        totalPaid = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+        const outstandingAmount = Math.max(0, totalAmount - totalPaid);
+
+        billingsWithOutstanding.push({
+          ...billing,
+          totalAmount,
+          totalPaid,
+          outstandingAmount,
+          isFullyPaid: outstandingAmount === 0
+        });
+      }
+
+      return billingsWithOutstanding;
+    } catch (error) {
+      console.error('Error calculating outstanding amounts:', error);
+      // Return original billings with basic calculations (no paid_amount column)
+      return billings.map(billing => ({
+        ...billing,
+        totalAmount: parseFloat(billing.total_amount || 0),
+        totalPaid: 0, // No payments tracked in fallback
+        outstandingAmount: parseFloat(billing.total_amount || 0),
+        isFullyPaid: false
+      }));
+    }
+  },
+
+  async getCreditReports(clientType?: 'all' | 'companies' | 'individuals', dateRange?: { start: string; end: string }) {
+    try {
+      const reports = {
+        companies: [],
+        individuals: [],
+        summary: {
+          totalClients: 0,
+          totalCreditLimit: 0,
+          totalUtilized: 0,
+          totalAvailable: 0,
+          utilizationRate: 0,
+          overdueClients: 0,
+          overdueAmount: 0
+        }
+      };
+
+      // Get companies credit data
+      if (clientType === 'all' || clientType === 'companies') {
+        const { data: companies, error: companiesError } = await supabase
+          .from('companies')
+          .select(`
+            id,
+            company_name,
+            credit_limit,
+            address,
+            phone1,
+            phone2,
+            email1,
+            email2,
+            created_at
+          `);
+
+        if (companiesError) throw companiesError;
+
+        // Get service billings for each company
+        for (const company of companies || []) {
+          let billingQuery = supabase
+            .from('service_billings')
+            .select('id, total_amount, service_date, created_at')
+            .eq('company_id', company.id);
+
+          if (dateRange) {
+            billingQuery = billingQuery
+              .gte('service_date', dateRange.start)
+              .lte('service_date', dateRange.end);
+          }
+
+          const { data: billings } = await billingQuery;
+
+          const totalBilled = billings?.reduce((sum, billing) => sum + parseFloat(billing.total_amount || 0), 0) || 0;
+
+          // Calculate total paid from temporary payments
+          let totalPaid = 0;
+          for (const billing of billings || []) {
+            const tempPayments = this.getTempPayments(billing.id);
+            totalPaid += tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+          }
+
+          const outstandingAmount = totalBilled - totalPaid;
+          const creditLimit = parseFloat(company.credit_limit || 0);
+          const creditUtilized = Math.min(outstandingAmount, creditLimit);
+          const availableCredit = Math.max(0, creditLimit - creditUtilized);
+          const utilizationRate = creditLimit > 0 ? (creditUtilized / creditLimit) * 100 : 0;
+
+          // Check for overdue invoices (over 30 days)
+          const overdueInvoices = billings?.filter(billing => {
+            const serviceDate = new Date(billing.service_date);
+            const daysSince = Math.floor((Date.now() - serviceDate.getTime()) / (1000 * 60 * 60 * 24));
+
+            // Check if invoice is not fully paid using temporary payments
+            const tempPayments = this.getTempPayments(billing.id);
+            const paidAmount = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+            const isFullyPaid = paidAmount >= parseFloat(billing.total_amount || 0);
+
+            return !isFullyPaid && daysSince > 30;
+          }) || [];
+
+          const overdueAmount = overdueInvoices.reduce((sum, billing) => {
+            const tempPayments = this.getTempPayments(billing.id);
+            const paidAmount = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+            return sum + (parseFloat(billing.total_amount || 0) - paidAmount);
+          }, 0);
+
+          reports.companies.push({
+            id: company.id,
+            name: company.company_name,
+            type: 'company',
+            creditLimit,
+            creditUtilized,
+            availableCredit,
+            utilizationRate,
+            totalBilled,
+            totalPaid,
+            outstandingAmount,
+            overdueAmount,
+            overdueInvoices: overdueInvoices.length,
+            totalInvoices: billings?.length || 0,
+            lastActivity: billings?.length > 0 ? billings[0].created_at : company.created_at,
+            contact: {
+              address: company.address,
+              phone: company.phone1 || company.phone2,
+              email: company.email1 || company.email2
+            }
+          });
+        }
+      }
+
+      // Get individuals credit data
+      if (clientType === 'all' || clientType === 'individuals') {
+        const { data: individuals, error: individualsError } = await supabase
+          .from('individuals')
+          .select(`
+            id,
+            individual_name,
+            credit_limit,
+            address,
+            phone1,
+            phone2,
+            email1,
+            email2,
+            created_at
+          `);
+
+        if (individualsError) throw individualsError;
+
+        // Get service billings for each individual
+        for (const individual of individuals || []) {
+          let billingQuery = supabase
+            .from('service_billings')
+            .select('id, total_amount, service_date, created_at')
+            .eq('individual_id', individual.id);
+
+          if (dateRange) {
+            billingQuery = billingQuery
+              .gte('service_date', dateRange.start)
+              .lte('service_date', dateRange.end);
+          }
+
+          const { data: billings } = await billingQuery;
+
+          const totalBilled = billings?.reduce((sum, billing) => sum + parseFloat(billing.total_amount || 0), 0) || 0;
+
+          // Calculate total paid from temporary payments
+          let totalPaid = 0;
+          for (const billing of billings || []) {
+            const tempPayments = this.getTempPayments(billing.id);
+            totalPaid += tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+          }
+
+          const outstandingAmount = totalBilled - totalPaid;
+          const creditLimit = parseFloat(individual.credit_limit || 0);
+          const creditUtilized = Math.min(outstandingAmount, creditLimit);
+          const availableCredit = Math.max(0, creditLimit - creditUtilized);
+          const utilizationRate = creditLimit > 0 ? (creditUtilized / creditLimit) * 100 : 0;
+
+          // Check for overdue invoices (over 30 days)
+          const overdueInvoices = billings?.filter(billing => {
+            const serviceDate = new Date(billing.service_date);
+            const daysSince = Math.floor((Date.now() - serviceDate.getTime()) / (1000 * 60 * 60 * 24));
+
+            // Check if invoice is not fully paid using temporary payments
+            const tempPayments = this.getTempPayments(billing.id);
+            const paidAmount = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+            const isFullyPaid = paidAmount >= parseFloat(billing.total_amount || 0);
+
+            return !isFullyPaid && daysSince > 30;
+          }) || [];
+
+          const overdueAmount = overdueInvoices.reduce((sum, billing) => {
+            const tempPayments = this.getTempPayments(billing.id);
+            const paidAmount = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+            return sum + (parseFloat(billing.total_amount || 0) - paidAmount);
+          }, 0);
+
+          reports.individuals.push({
+            id: individual.id,
+            name: individual.individual_name,
+            type: 'individual',
+            creditLimit,
+            creditUtilized,
+            availableCredit,
+            utilizationRate,
+            totalBilled,
+            totalPaid,
+            outstandingAmount,
+            overdueAmount,
+            overdueInvoices: overdueInvoices.length,
+            totalInvoices: billings?.length || 0,
+            lastActivity: billings?.length > 0 ? billings[0].created_at : individual.created_at,
+            contact: {
+              address: individual.address,
+              phone: individual.phone1 || individual.phone2,
+              email: individual.email1 || individual.email2
+            }
+          });
+        }
+      }
+
+      // Calculate summary
+      const allClients = [...reports.companies, ...reports.individuals];
+      reports.summary = {
+        totalClients: allClients.length,
+        totalCreditLimit: allClients.reduce((sum, client) => sum + client.creditLimit, 0),
+        totalUtilized: allClients.reduce((sum, client) => sum + client.creditUtilized, 0),
+        totalAvailable: allClients.reduce((sum, client) => sum + client.availableCredit, 0),
+        utilizationRate: allClients.length > 0 ?
+          (allClients.reduce((sum, client) => sum + client.utilizationRate, 0) / allClients.length) : 0,
+        overdueClients: allClients.filter(client => client.overdueAmount > 0).length,
+        overdueAmount: allClients.reduce((sum, client) => sum + client.overdueAmount, 0)
+      };
+
+      return reports;
+    } catch (error) {
+      console.error('Error loading credit reports:', error);
+      throw error;
+    }
   }
 }

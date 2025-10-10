@@ -26,6 +26,9 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { dbHelpers } from '../lib/supabase';
+import VendorReports from './VendorReports';
+import OutstandingReports from './OutstandingReports';
+import CreditReports from './CreditReports';
 
 interface Vendor {
   id: string;
@@ -630,7 +633,9 @@ const VendorManagement: React.FC = () => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'vendors', label: 'Vendors', icon: Users },
-    // { id: 'contracts', label: 'Contracts', icon: FileText },
+    { id: 'reports', label: 'Vendor Reports', icon: FileText },
+    { id: 'outstanding', label: 'Outstanding', icon: AlertTriangle },
+    { id: 'credit', label: 'Credit Reports', icon: CreditCard },
     { id: 'performance', label: 'Performance', icon: Award }
   ];
 
@@ -685,7 +690,9 @@ const VendorManagement: React.FC = () => {
       {/* Main Content */}
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'vendors' && renderVendorsList()}
-      {/* {activeTab === 'contracts' && renderContracts()} */}
+      {activeTab === 'reports' && <VendorReports />}
+      {activeTab === 'outstanding' && <OutstandingReports />}
+      {activeTab === 'credit' && <CreditReports />}
       {activeTab === 'performance' && renderPerformance()}
 
       {/* Vendor Details Modal */}

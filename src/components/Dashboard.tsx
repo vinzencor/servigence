@@ -3,6 +3,8 @@ import { TrendingUp, Users, Building2, FileText, DollarSign, AlertCircle, Clock,
 import { mockCompanies, mockServices, mockInvoices, mockReminders } from '../data/mockData';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import CardBalanceWidget from './CardBalanceWidget';
+import DailyCardSummary from './DailyCardSummary';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
@@ -240,6 +242,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             </div>
           );
         })}
+      </div>
+
+      {/* Card Balance and Daily Summary Widgets */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CardBalanceWidget onCardClick={(cardId) => console.log('Card clicked:', cardId)} />
+        <DailyCardSummary />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

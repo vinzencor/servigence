@@ -283,7 +283,7 @@ export interface ServiceBilling {
   serviceTypeId: string;
   assignedEmployeeId?: string;
   serviceDate: string;
-  cashType: 'cash' | 'house' | 'car' | 'service_agency' | 'service_building';
+  cashType: 'cash' | 'bank' | 'card' | 'cheque' | 'online';
   typingCharges: number;
   governmentCharges: number;
   totalAmount: number;

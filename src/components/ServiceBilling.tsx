@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save } from 'lucide-react';
+import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save, CreditCard, X, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mockServices, mockInvoices } from '../data/mockData';
 import { Company, Individual, ServiceType, ServiceEmployee, ServiceBilling as ServiceBillingType } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import DailyCardSummary from './DailyCardSummary';
 
 const ServiceBilling: React.FC = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -21,6 +22,7 @@ const ServiceBilling: React.FC = () => {
   const [companyEmployees, setCompanyEmployees] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [paymentCards, setPaymentCards] = useState<any[]>([]);
+  const [cardBalances, setCardBalances] = useState<any[]>([]);
 
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +31,26 @@ const ServiceBilling: React.FC = () => {
   const [reportType, setReportType] = useState('');
   const [reportData, setReportData] = useState<any>(null);
   const [selectedCompanyForReport, setSelectedCompanyForReport] = useState('');
+
+  // Advance Payment states
+  const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
+  const [selectedBillingForPayment, setSelectedBillingForPayment] = useState<any>(null);
+  const [advancePaymentForm, setAdvancePaymentForm] = useState({
+    amount: '',
+    paymentMethod: 'cash',
+    paymentReference: '',
+    notes: ''
+  });
+
+  // Receipt states
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+
+  // Payment history states
+  const [showPaymentHistoryModal, setShowPaymentHistoryModal] = useState(false);
+  const [selectedBillingForHistory, setSelectedBillingForHistory] = useState<any>(null);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [billingDetails, setBillingDetails] = useState<any>(null);
 
   const [billingForm, setBillingForm] = useState({
     clientType: 'company' as 'company' | 'individual',
@@ -80,10 +102,10 @@ const ServiceBilling: React.FC = () => {
 
   const cashTypes = [
     { value: 'cash', label: 'Cash' },
-    { value: 'bank', label: 'bank' },
-    { value: 'card', label: 'card' },
-    { value: 'cheque', label: 'cheque' },
-    { value: 'online', label: 'online' }
+    { value: 'bank', label: 'Bank Transfer' },
+    { value: 'card', label: 'Credit Card' },
+    { value: 'cheque', label: 'Cheque' },
+    { value: 'online', label: 'Online Payment' }
   ];
 
   useEffect(() => {
@@ -177,6 +199,17 @@ const ServiceBilling: React.FC = () => {
       // Set vendors and payment cards
       setVendors(vendorsData || []);
       setPaymentCards(paymentCardsData || []);
+      console.log('Loaded payment cards:', paymentCardsData);
+
+      // Load card balances for enhanced display
+      try {
+        const balancesData = await dbHelpers.getCardBalances();
+        setCardBalances(balancesData || []);
+        console.log('Loaded card balances:', balancesData);
+      } catch (error) {
+        console.error('Error loading card balances:', error);
+        setCardBalances([]);
+      }
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -352,14 +385,14 @@ const ServiceBilling: React.FC = () => {
         government_charges: governmentCharges,
         discount: discount,
         total_amount: totalAmount,
-        profit: profit,
-        vat_percentage: vatPercentage,
-        vat_amount: vatAmount,
-        total_amount_with_vat: totalAmountWithVat,
+        // profit: profit, // Temporarily removed until profit column is added to database
+        // vat_percentage: vatPercentage, // Temporarily removed until column is added
+        // vat_amount: vatAmount, // Temporarily removed until column is added
+        // total_amount_with_vat: totalAmountWithVat, // Temporarily removed until column is added
         quantity: quantity,
         notes: editBillingForm.notes || null,
-        assigned_vendor_id: editBillingForm.assignedVendorId || null,
-        vendor_cost: vendorCost,
+        // assigned_vendor_id: editBillingForm.assignedVendorId || null, // Temporarily removed until column is added
+        // vendor_cost: vendorCost, // Temporarily removed until column is added
         card_id: editBillingForm.cashType === 'card' && editBillingForm.cardId ? editBillingForm.cardId : null
       };
 
@@ -720,7 +753,7 @@ const ServiceBilling: React.FC = () => {
 
     // Validate card selection when cash type is 'card'
     if (billingForm.cashType === 'card' && !billingForm.cardId) {
-      newErrors.cardId = 'Please select a payment card when cash type is card';
+      newErrors.cardId = 'Please select a payment card when cash type is credit card';
     }
 
     setErrors(newErrors);
@@ -763,16 +796,21 @@ const ServiceBilling: React.FC = () => {
         government_charges: governmentCharges,
         discount: discount,
         total_amount: totalAmount,
-        profit: profit,
+        // profit: profit, // Temporarily removed until profit column is added to database
         quantity: quantity,
         status: 'pending',
         notes: billingForm.notes || null,
         invoice_generated: true,
         invoice_number: invoiceNumber,
-        assigned_vendor_id: billingForm.assignedVendorId || null,
-        vendor_cost: vendorCost,
+        // assigned_vendor_id: billingForm.assignedVendorId || null, // Temporarily removed until column is added
+        // vendor_cost: vendorCost, // Temporarily removed until column is added
         card_id: billingForm.cashType === 'card' && billingForm.cardId ? billingForm.cardId : null
       };
+
+      console.log('🔍 Billing form data:', billingForm);
+      console.log('🔍 Billing data to send:', billingData);
+      console.log('🔍 Cash type from form:', billingForm.cashType, 'Type:', typeof billingForm.cashType);
+      console.log('🔍 Cash type in data:', billingData.cash_type, 'Type:', typeof billingData.cash_type);
 
       const createdBilling = await dbHelpers.createServiceBilling(billingData);
 
@@ -836,7 +874,8 @@ const ServiceBilling: React.FC = () => {
           description: `Service charges for ${selectedService.name} (${invoiceNumber})`,
           amount: typingCharges,
           transaction_date: billingForm.serviceDate,
-          payment_method: billingForm.cashType === 'cash' ? 'cash' : 'bank_transfer',
+          payment_method: billingForm.cashType === 'cash' ? 'cash' :
+                         billingForm.cashType === 'card' ? 'credit_card' : 'bank_transfer',
           reference_number: invoiceNumber,
           status: 'completed',
           created_by: 'System'
@@ -853,7 +892,8 @@ const ServiceBilling: React.FC = () => {
           description: `Government charges for ${selectedService.name} (${invoiceNumber})`,
           amount: governmentCharges,
           transaction_date: billingForm.serviceDate,
-          payment_method: billingForm.cashType === 'cash' ? 'cash' : 'bank_transfer',
+          payment_method: billingForm.cashType === 'cash' ? 'cash' :
+                         billingForm.cashType === 'card' ? 'credit_card' : 'bank_transfer',
           reference_number: invoiceNumber,
           status: 'completed',
           created_by: 'System'
@@ -1002,6 +1042,145 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
+  // Advance Payment Functions
+  const handleAdvancePayment = async (billing: any) => {
+    try {
+      // Load billing details with payment history
+      const billingWithPayments = await dbHelpers.getBillingWithPayments(billing.id);
+      setSelectedBillingForPayment(billingWithPayments);
+      setPaymentHistory(billingWithPayments.payments || []);
+
+      // Pre-fill with outstanding amount
+      const outstandingAmount = billingWithPayments.outstandingAmount || 0;
+      setAdvancePaymentForm({
+        amount: outstandingAmount.toString(),
+        paymentMethod: 'cash',
+        paymentReference: '',
+        notes: ''
+      });
+      setShowAdvancePaymentModal(true);
+    } catch (error) {
+      console.error('Error loading billing details:', error);
+      toast.error('Failed to load billing details');
+    }
+  };
+
+  const submitAdvancePayment = async () => {
+    try {
+      if (!selectedBillingForPayment || !advancePaymentForm.amount) {
+        toast.error('Please enter payment amount');
+        return;
+      }
+
+      const amount = parseFloat(advancePaymentForm.amount);
+      const totalAmount = parseFloat(selectedBillingForPayment.total_amount || 0);
+      const currentPaid = parseFloat(selectedBillingForPayment.paid_amount || 0);
+
+      if (amount <= 0) {
+        toast.error('Payment amount must be greater than 0');
+        return;
+      }
+
+      if (currentPaid + amount > totalAmount) {
+        toast.error('Payment amount exceeds outstanding balance');
+        return;
+      }
+
+      // Update the billing status locally
+      const newPaidAmount = currentPaid + amount;
+      let newStatus = 'pending';
+      if (newPaidAmount >= totalAmount) {
+        newStatus = 'paid';
+      } else if (newPaidAmount > 0) {
+        newStatus = 'partial';
+      }
+
+      // Update the local state
+      setServiceBillings(prev => prev.map(billing =>
+        billing.id === selectedBillingForPayment.id
+          ? { ...billing, paid_amount: newPaidAmount, status: newStatus }
+          : billing
+      ));
+
+      toast.success('Advance payment recorded successfully');
+      setShowAdvancePaymentModal(false);
+
+      // Generate receipt
+      const receipt = {
+        receiptNumber: `RCP-${Date.now()}`,
+        paymentDate: new Date().toLocaleDateString(),
+        amount: amount,
+        paymentMethod: advancePaymentForm.paymentMethod,
+        notes: advancePaymentForm.notes,
+        billing: {
+          invoiceNumber: selectedBillingForPayment.invoice_number,
+          totalAmount: totalAmount,
+          paidAmount: newPaidAmount,
+          clientName: selectedBillingForPayment.company?.company_name || selectedBillingForPayment.individual?.individual_name || 'Unknown Client',
+          serviceName: selectedBillingForPayment.service_type?.name || 'Unknown Service'
+        }
+      };
+
+      setReceiptData(receipt);
+      setShowReceiptModal(true);
+
+    } catch (error) {
+      console.error('Error recording advance payment:', error);
+      toast.error('Failed to record advance payment');
+    }
+  };
+
+  const generateReceipt = () => {
+    if (!receiptData) return;
+
+    const receiptContent = `
+PAYMENT RECEIPT
+Receipt Number: ${receiptData.receiptNumber}
+Date: ${receiptData.paymentDate}
+
+=== PAYMENT DETAILS ===
+Amount Paid: AED ${receiptData.amount.toLocaleString()}
+Payment Method: ${receiptData.paymentMethod}
+${receiptData.notes ? `Notes: ${receiptData.notes}` : ''}
+
+=== INVOICE DETAILS ===
+Invoice Number: ${receiptData.billing.invoiceNumber}
+Client: ${receiptData.billing.clientName}
+Service: ${receiptData.billing.serviceName}
+Total Amount: AED ${receiptData.billing.totalAmount.toLocaleString()}
+Amount Paid: AED ${receiptData.billing.paidAmount.toLocaleString()}
+Outstanding: AED ${(receiptData.billing.totalAmount - receiptData.billing.paidAmount).toLocaleString()}
+
+Thank you for your payment!
+Servigence Business Services
+    `;
+
+    const blob = new Blob([receiptContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `receipt-${receiptData.receiptNumber}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success('Receipt downloaded');
+  };
+
+  const viewPaymentHistory = async (billing: any) => {
+    try {
+      const billingWithPayments = await dbHelpers.getBillingWithPayments(billing.id);
+      setSelectedBillingForHistory(billingWithPayments);
+      setPaymentHistory(billingWithPayments.payments || []);
+      setBillingDetails(billingWithPayments);
+      setShowPaymentHistoryModal(true);
+    } catch (error) {
+      console.error('Error loading payment history:', error);
+      toast.error('Failed to load payment history');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1132,6 +1311,11 @@ const ServiceBilling: React.FC = () => {
 
         {activeTab === 'list' && (
           <div>
+            {/* Daily Card Summary */}
+            <div className="p-6 border-b border-gray-200">
+              <DailyCardSummary compact={true} showTitle={true} />
+            </div>
+
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">Recent Service Billings</h2>
@@ -1244,6 +1428,20 @@ const ServiceBilling: React.FC = () => {
                             title="Edit Billing"
                           >
                             <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleAdvancePayment(billing)}
+                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+                            title="Record Payment"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => viewPaymentHistory(billing)}
+                            className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="View Receipts"
+                          >
+                            <FileText className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => downloadInvoice(billing)}
@@ -1684,11 +1882,17 @@ const ServiceBilling: React.FC = () => {
                       }`}
                     >
                       <option value="">Select a payment card</option>
-                      {paymentCards.map((card) => (
-                        <option key={card.id} value={card.id}>
-                          {card.card_name} - Credit Limit: AED {parseFloat(card.credit_limit || 0).toLocaleString()}
-                        </option>
-                      ))}
+                      {paymentCards.map((card) => {
+                        const balance = cardBalances.find(b => b.id === card.id);
+                        const availableCredit = balance ? balance.availableCredit : parseFloat(card.credit_limit || 0);
+                        const utilizationPercentage = balance ? balance.utilizationPercentage : 0;
+
+                        return (
+                          <option key={card.id} value={card.id}>
+                            {card.card_name} - Available: AED {availableCredit.toLocaleString()} ({utilizationPercentage.toFixed(1)}% used)
+                          </option>
+                        );
+                      })}
                     </select>
                     {errors.cardId && (
                       <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -1735,7 +1939,7 @@ const ServiceBilling: React.FC = () => {
                     min="0"
                     step="0.01"
                     placeholder="0.00"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -2238,11 +2442,17 @@ const ServiceBilling: React.FC = () => {
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <option value="">Select a payment card</option>
-                      {paymentCards.map((card) => (
-                        <option key={card.id} value={card.id}>
-                          {card.card_name} - Credit Limit: AED {parseFloat(card.credit_limit || 0).toLocaleString()}
-                        </option>
-                      ))}
+                      {paymentCards.map((card) => {
+                        const balance = cardBalances.find(b => b.id === card.id);
+                        const availableCredit = balance ? balance.availableCredit : parseFloat(card.credit_limit || 0);
+                        const utilizationPercentage = balance ? balance.utilizationPercentage : 0;
+
+                        return (
+                          <option key={card.id} value={card.id}>
+                            {card.card_name} - Available: AED {availableCredit.toLocaleString()} ({utilizationPercentage.toFixed(1)}% used)
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 )}
@@ -2272,11 +2482,11 @@ const ServiceBilling: React.FC = () => {
                     type="number"
                     name="discount"
                     value={editBillingForm.discount}
-                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, discount: e.target.value }))}
+                    onChange={handleEditInputChange}
                     min="0"
                     step="0.01"
                     placeholder="0.00"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -2523,6 +2733,355 @@ const ServiceBilling: React.FC = () => {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Advance Payment Modal */}
+      {showAdvancePaymentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Record Advance Payment</h3>
+              <button
+                onClick={() => setShowAdvancePaymentModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {selectedBillingForPayment && (
+              <div className="mb-4 space-y-3">
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Invoice: {selectedBillingForPayment.invoice_number}</p>
+                  <p className="text-sm text-gray-600">
+                    Client: {selectedBillingForPayment.clientName}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Service: {selectedBillingForPayment.serviceName}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Total Amount</p>
+                      <p className="font-semibold text-gray-900">AED {selectedBillingForPayment.totalAmount?.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Paid Amount</p>
+                      <p className="font-semibold text-green-600">AED {selectedBillingForPayment.paidAmount?.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Outstanding</p>
+                      <p className="font-bold text-red-600 text-lg">AED {selectedBillingForPayment.outstandingAmount?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {paymentHistory.length > 0 && (
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <p className="text-sm font-medium text-gray-900 mb-2">Recent Payments ({paymentHistory.length})</p>
+                    <div className="space-y-1 max-h-20 overflow-y-auto">
+                      {paymentHistory.slice(0, 3).map((payment, index) => (
+                        <div key={index} className="flex justify-between text-xs text-gray-600">
+                          <span>{payment.paymentDate} - {payment.paymentMethod}</span>
+                          <span className="font-medium">AED {payment.amount.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {paymentHistory.length > 3 && (
+                      <p className="text-xs text-gray-500 mt-1">+{paymentHistory.length - 3} more payments</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Amount
+                  {selectedBillingForPayment && (
+                    <span className="text-sm text-gray-500 ml-2">
+                      (Max: AED {selectedBillingForPayment.outstandingAmount?.toLocaleString()})
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  max={selectedBillingForPayment?.outstandingAmount || 0}
+                  value={advancePaymentForm.amount}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value) || 0;
+                    const maxAmount = selectedBillingForPayment?.outstandingAmount || 0;
+                    if (value <= maxAmount) {
+                      setAdvancePaymentForm(prev => ({ ...prev, amount: e.target.value }));
+                    }
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter payment amount"
+                />
+                {parseFloat(advancePaymentForm.amount) > (selectedBillingForPayment?.outstandingAmount || 0) && (
+                  <p className="text-red-500 text-sm mt-1">Payment amount cannot exceed outstanding balance</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+                <select
+                  value={advancePaymentForm.paymentMethod}
+                  onChange={(e) => setAdvancePaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="online">Online Payment</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Reference</label>
+                <input
+                  type="text"
+                  value={advancePaymentForm.paymentReference}
+                  onChange={(e) => setAdvancePaymentForm(prev => ({ ...prev, paymentReference: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Reference number (optional)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                <textarea
+                  value={advancePaymentForm.notes}
+                  onChange={(e) => setAdvancePaymentForm(prev => ({ ...prev, notes: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  rows={3}
+                  placeholder="Additional notes (optional)"
+                />
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowAdvancePaymentModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitAdvancePayment}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Record Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Payment Receipt</h3>
+              <button
+                onClick={() => setShowReceiptModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
+                <h4 className="text-lg font-semibold text-green-900">Payment Recorded Successfully!</h4>
+                <p className="text-green-700">Receipt #{receiptData.receiptNumber}</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Amount Paid:</span>
+                  <span className="font-semibold">AED {receiptData.amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Payment Method:</span>
+                  <span className="font-semibold capitalize">{receiptData.paymentMethod}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Date:</span>
+                  <span className="font-semibold">{receiptData.paymentDate}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoice:</span>
+                  <span className="font-semibold">{receiptData.billing.invoiceNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Outstanding:</span>
+                  <span className="font-semibold">AED {(receiptData.billing.totalAmount - receiptData.billing.paidAmount).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowReceiptModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={generateReceipt}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Download Receipt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment History Modal */}
+      {showPaymentHistoryModal && billingDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Payment History & Receipts</h3>
+              <button
+                onClick={() => setShowPaymentHistoryModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Invoice Summary */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Invoice: {billingDetails.invoice_number}</p>
+                  <p className="text-sm text-gray-600">Client: {billingDetails.clientName}</p>
+                  <p className="text-sm text-gray-600">Service: {billingDetails.serviceName}</p>
+                  <p className="text-sm text-gray-600">Date: {billingDetails.service_date}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Total: AED {billingDetails.totalAmount?.toLocaleString()}</p>
+                  <p className="text-sm text-green-600">Paid: AED {billingDetails.paidAmount?.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-red-600">Outstanding: AED {billingDetails.outstandingAmount?.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">
+                    Status: <span className={`font-medium ${
+                      billingDetails.payment_status === 'paid' ? 'text-green-600' :
+                      billingDetails.payment_status === 'partial' ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {billingDetails.payment_status || 'pending'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment History */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Payment History ({paymentHistory.length} payments)</h4>
+
+              {paymentHistory.length === 0 ? (
+                <div className="text-center py-8">
+                  <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-500">No payments recorded yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {paymentHistory.map((payment, index) => (
+                    <div key={payment.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded">
+                              Payment #{index + 1}
+                            </span>
+                            <span className="text-sm text-gray-600">{payment.paymentDate}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-600">Amount: <span className="font-semibold text-green-600">AED {payment.amount.toLocaleString()}</span></p>
+                              <p className="text-gray-600">Method: <span className="font-medium capitalize">{payment.paymentMethod}</span></p>
+                            </div>
+                            <div>
+                              {payment.paymentReference && (
+                                <p className="text-gray-600">Reference: <span className="font-medium">{payment.paymentReference}</span></p>
+                              )}
+                              {payment.receiptNumber && (
+                                <p className="text-gray-600">Receipt: <span className="font-medium">{payment.receiptNumber}</span></p>
+                              )}
+                            </div>
+                          </div>
+                          {payment.notes && (
+                            <p className="text-sm text-gray-600 mt-2">Notes: {payment.notes}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            // Generate and download receipt for this payment
+                            const receiptContent = `
+PAYMENT RECEIPT
+===============
+
+Receipt #: ${payment.receiptNumber || `RCP-${payment.id.slice(-8)}`}
+Date: ${payment.paymentDate}
+
+Invoice: ${billingDetails.invoice_number}
+Client: ${billingDetails.clientName}
+Service: ${billingDetails.serviceName}
+
+Payment Details:
+Amount Paid: AED ${payment.amount.toLocaleString()}
+Payment Method: ${payment.paymentMethod}
+${payment.paymentReference ? `Reference: ${payment.paymentReference}` : ''}
+
+Invoice Summary:
+Total Amount: AED ${billingDetails.totalAmount?.toLocaleString()}
+Total Paid: AED ${billingDetails.paidAmount?.toLocaleString()}
+Outstanding: AED ${billingDetails.outstandingAmount?.toLocaleString()}
+
+${payment.notes ? `Notes: ${payment.notes}` : ''}
+
+Thank you for your payment!
+                            `.trim();
+
+                            const blob = new Blob([receiptContent], { type: 'text/plain' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `receipt-${payment.receiptNumber || payment.id.slice(-8)}.txt`;
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                          }}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Download Receipt
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowPaymentHistoryModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
