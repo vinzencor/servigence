@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, AlertCircle, Save, DollarSign, CreditCard, Upload, Eye, Trash2 } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Save, DollarSign, CreditCard, Upload, Eye, Trash2, FileText, X } from 'lucide-react';
 import { Company, PaymentCard, ServiceEmployee } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,6 +56,11 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   }>>([]);
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
+
+  // Image preview modal state
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [modalImageSrc, setModalImageSrc] = useState('');
+  const [modalImageTitle, setModalImageTitle] = useState('');
 
   // Constants from CustomerRegistration
   const companyTypes = [
@@ -142,8 +147,23 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         preview: 'existing-file'
       }));
 
+      console.log('📄 Loaded company documents:', transformedDocs.map(d => ({
+        id: d.id,
+        title: d.title,
+        hasFileUrl: !!d.fileUrl,
+        fileUrl: d.fileUrl
+      })));
+
       setDocuments(transformedDocs);
       setDocumentsLoaded(true);
+
+      // Generate previews for existing files
+      transformedDocs.forEach(doc => {
+        if (doc.fileUrl) {
+          console.log('🔍 Generating preview for document:', { id: doc.id, fileUrl: doc.fileUrl });
+          generateExistingFilePreview(doc.fileUrl, doc.id);
+        }
+      });
     } catch (error) {
       console.error('Error loading company documents:', error);
       setDocumentsLoaded(true); // Set flag even on error to prevent infinite retries
@@ -262,6 +282,40 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
       console.log('📄 Non-image file, setting placeholder preview');
       updateDocument(id, 'preview', 'non-image');
       updateDocument(id, 'uploading', false);
+    }
+  };
+
+  // Function to generate preview for existing files
+  const generateExistingFilePreview = (fileUrl: string, docId: string) => {
+    try {
+      console.log('🔍 Generating preview for existing file:', { fileUrl, docId });
+
+      // Extract file extension from URL
+      const urlParts = fileUrl.split('?')[0]; // Remove query parameters
+      const extension = urlParts.split('.').pop()?.toLowerCase();
+
+      console.log('📄 File extension detected:', extension);
+
+      // Check if it's an image based on extension
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+
+      if (extension && imageExtensions.includes(extension)) {
+        console.log('🖼️ Setting image preview for:', fileUrl);
+        // For images, set the URL directly as preview
+        updateDocument(docId, 'preview', fileUrl);
+      } else if (extension === 'pdf') {
+        console.log('📋 Setting PDF preview for:', fileUrl);
+        // For PDFs, set a special preview type
+        updateDocument(docId, 'preview', 'existing-pdf');
+      } else {
+        console.log('📁 Setting generic file preview for:', fileUrl);
+        // For other files, keep the existing-file preview
+        updateDocument(docId, 'preview', 'existing-file');
+      }
+    } catch (error) {
+      console.error('Error generating preview for existing file:', error);
+      // Fallback to existing-file preview
+      updateDocument(docId, 'preview', 'existing-file');
     }
   };
 
@@ -600,6 +654,11 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
             if (doc.expiryDate) {
               console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
               await createReminder(company.id, doc.title, doc.expiryDate, 'company_document');
+
+              // Dispatch event to notify other components about reminder creation
+              window.dispatchEvent(new CustomEvent('reminderCreated', {
+                detail: { companyId: company.id, documentTitle: doc.title, expiryDate: doc.expiryDate }
+              }));
             } else {
               console.log('ℹ️ No expiry date for document:', doc.title);
             }
@@ -654,6 +713,12 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
       };
 
       onSave(updatedCompany);
+
+      // Dispatch event to notify other components about document updates
+      window.dispatchEvent(new CustomEvent('documentUpdated', {
+        detail: { companyId: company.id, documentsProcessed, documentsWithErrors }
+      }));
+
       alert('Company updated successfully!');
     } catch (error) {
       console.error('Error updating company:', error);
@@ -1219,25 +1284,42 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                                 )}
                               </div>
 
-                              {/* File Preview */}
-                              {doc.preview && doc.preview !== 'non-image' && doc.preview !== 'error' && doc.preview !== 'existing-file' && (
+                              {/* Debug info */}
+                              {/* <div className="text-xs text-blue-600 mb-2">
+                                Debug: Preview={doc.preview ? 'Yes' : 'No'} | Type={doc.preview} | FileUrl={doc.fileUrl ? 'Yes' : 'No'}
+                              </div> */}
+
+                              {/* Image Preview */}
+                              {doc.preview && doc.preview !== 'non-image' && doc.preview !== 'error' && doc.preview !== 'existing-file' && doc.preview !== 'existing-pdf' && (
                                 <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                                   <div className="flex items-center justify-between mb-2">
                                     <span className="text-sm font-medium text-gray-700">Preview:</span>
                                     <span className="text-xs text-gray-500">
-                                      {doc.file ? `${(doc.file.size / 1024).toFixed(1)} KB` : ''}
+                                      {doc.file ? `${(doc.file.size / 1024).toFixed(1)} KB` : 'Existing file'}
                                     </span>
                                   </div>
                                   <div className="flex justify-center">
-                                    <img
-                                      src={doc.preview}
-                                      alt={`Preview of ${doc.title}`}
-                                      className="max-w-full max-h-48 object-contain rounded border border-gray-300 shadow-sm"
-                                      onError={(e) => {
-                                        console.error('Preview image failed to load');
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
+                                    <div className="relative group">
+                                      <img
+                                        src={doc.preview}
+                                        alt={`Preview of ${doc.title}`}
+                                        className="max-w-full max-h-48 object-contain rounded border border-gray-300 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                                        onError={(e) => {
+                                          console.error('Preview image failed to load');
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                        onClick={() => {
+                                          setModalImageSrc(doc.preview || '');
+                                          setModalImageTitle(doc.title || 'Document Preview');
+                                          setShowImageModal(true);
+                                        }}
+                                      />
+                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                        <span className="text-white text-sm font-medium bg-black bg-opacity-50 px-2 py-1 rounded">
+                                          Click to view full size
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               )}
@@ -1256,6 +1338,36 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                                       <div className="text-xs text-gray-500">
                                         {doc.file.type} • {(doc.file.size / 1024).toFixed(1)} KB
                                       </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Existing PDF file indicator */}
+                              {doc.preview === 'existing-pdf' && doc.fileUrl && (
+                                <div className="border border-gray-200 rounded-lg p-3 bg-red-50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                                        <FileText className="w-4 h-4 text-red-600" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-700">PDF Document</div>
+                                        <div className="text-xs text-gray-500">Previously uploaded PDF file</div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="bg-red-500 text-white text-xs px-2 py-1 rounded">
+                                        PDF
+                                      </div>
+                                      <a
+                                        href={doc.fileUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                      >
+                                        View
+                                      </a>
                                     </div>
                                   </div>
                                 </div>
@@ -1315,6 +1427,28 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
           </div>
         </form>
       </div>
+
+      {/* Image Preview Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-4xl max-h-full">
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full p-2 z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={modalImageSrc}
+              alt={modalImageTitle}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+            <div className="absolute bottom-4 left-4 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+              {modalImageTitle}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -84,6 +84,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const [advancePaymentReceipt, setAdvancePaymentReceipt] = useState<any>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
+  // Image preview modal state
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [modalImageSrc, setModalImageSrc] = useState('');
+  const [modalImageTitle, setModalImageTitle] = useState('');
+
   useEffect(() => {
     loadServiceEmployees();
     loadPaymentCards();
@@ -196,9 +201,14 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   };
 
   const updateDocument = (id: string, field: string, value: any) => {
-    setDocuments(documents.map(doc =>
-      doc.id === id ? { ...doc, [field]: value } : doc
-    ));
+    console.log('🔄 Updating document:', { id, field, value: typeof value === 'string' && value.length > 50 ? value.substring(0, 50) + '...' : value });
+    setDocuments(prevDocuments => {
+      const updated = prevDocuments.map(doc =>
+        doc.id === id ? { ...doc, [field]: value } : doc
+      );
+      console.log('📋 Documents updated:', updated.map(d => ({ id: d.id, hasFile: !!d.file, hasPreview: !!d.preview })));
+      return updated;
+    });
   };
 
   const removeDocument = (id: string) => {
@@ -325,6 +335,17 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           previewStart: preview?.substring(0, 50) + '...'
         });
         updateDocument(id, 'preview', preview);
+
+        // Force a state check after setting preview
+        setTimeout(() => {
+          const updatedDoc = documents.find(d => d.id === id);
+          console.log('🔍 Document state after preview update:', {
+            docId: id,
+            hasPreview: !!updatedDoc?.preview,
+            previewType: typeof updatedDoc?.preview,
+            previewValue: updatedDoc?.preview?.substring(0, 50) + '...'
+          });
+        }, 50);
       };
 
       reader.onerror = (error) => {
@@ -541,6 +562,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 if (doc.expiryDate) {
                   console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
                   await createReminder(companyId, doc.title, doc.expiryDate, 'company_document');
+
+                  // Dispatch event to notify other components about reminder creation
+                  window.dispatchEvent(new CustomEvent('reminderCreated', {
+                    detail: { companyId, documentTitle: doc.title, expiryDate: doc.expiryDate }
+                  }));
                 } else {
                   console.log('ℹ️ No expiry date for document:', doc.title);
                 }
@@ -575,6 +601,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         }
 
         onSave(newCompany);
+
+        // Dispatch event to notify other components about new company and documents
+        window.dispatchEvent(new CustomEvent('documentUpdated', {
+          detail: { companyId: newCompany.id, documentsProcessed: documents.length, isNewCompany: true }
+        }));
 
         // Only navigate automatically if no advance payment modal will be shown
         if (!showAdvancePayment || !advancePaymentForm.amount || parseFloat(advancePaymentForm.amount) <= 0) {
@@ -2191,32 +2222,61 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                           {doc.file && (
                             <div className="mt-3">
                               <div className="text-xs text-gray-500 mb-2">
-                                Preview: (File: {doc.file.name}, Type: {doc.file.type}, Has Preview: {doc.preview ? 'Yes' : 'No'})
+                                File Preview
                               </div>
                               {doc.file.type.startsWith('image/') ? (
-                                doc.preview && doc.preview !== 'non-image' ? (
-                                  <div className="relative">
+                                doc.preview && doc.preview !== 'non-image' && doc.preview !== 'error' ? (
+                                  <div className="relative group">
                                     <img
                                       src={doc.preview}
                                       alt="Document preview"
-                                      className="w-48 h-36 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
+                                      className="w-48 h-36 object-cover rounded-lg border-2 border-gray-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
                                       onLoad={() => console.log('Image loaded successfully:', doc.file?.name)}
                                       onError={(e) => {
                                         console.error('Image failed to load:', doc.file?.name, e);
                                         console.log('Preview data length:', doc.preview?.length);
                                       }}
+                                      onClick={() => {
+                                        setModalImageSrc(doc.preview);
+                                        setModalImageTitle(doc.file?.name || 'Document Preview');
+                                        setShowImageModal(true);
+                                      }}
                                     />
                                     <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
                                       Image
                                     </div>
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                      <span className="text-white text-sm font-medium bg-black bg-opacity-50 px-2 py-1 rounded">
+                                        Click to view full size
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : doc.preview === 'error' ? (
+                                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                                    <p className="text-sm text-red-700">
+                                      ❌ Failed to generate preview for {doc.file.name}
+                                    </p>
                                   </div>
                                 ) : (
                                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                                     <p className="text-sm text-yellow-700">
-                                      🖼️ Image preview loading... ({doc.file.name})
+                                      🖼️ Generating image preview... ({doc.file.name})
                                     </p>
                                   </div>
                                 )
+                              ) : doc.file.type === 'application/pdf' ? (
+                                <div className="flex items-center space-x-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                                  <FileText className="w-8 h-8 text-red-600 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{doc.file.name}</p>
+                                    <p className="text-xs text-gray-500">
+                                      PDF Document • {(doc.file.size / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                  </div>
+                                  <div className="bg-red-500 text-white text-xs px-2 py-1 rounded">
+                                    PDF
+                                  </div>
+                                </div>
                               ) : (
                                 <div className="flex items-center space-x-3 p-3 bg-gray-100 rounded-lg border border-gray-200">
                                   <FileText className="w-8 h-8 text-gray-600 flex-shrink-0" />
@@ -2458,6 +2518,28 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
               >
                 Close & Return to List
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-4xl max-h-full">
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full p-2 z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={modalImageSrc}
+              alt={modalImageTitle}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+            <div className="absolute bottom-4 left-4 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+              {modalImageTitle}
             </div>
           </div>
         </div>

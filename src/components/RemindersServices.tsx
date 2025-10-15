@@ -24,7 +24,8 @@ import {
   ToggleLeft,
   ToggleRight,
   DollarSign,
-  Mail
+  Mail,
+  RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { dbHelpers, supabase } from '../lib/supabase';
@@ -54,6 +55,8 @@ const RemindersServices: React.FC = () => {
   const [dues, setDues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
 
   // Load reminders from database
   const loadReminders = async () => {
@@ -61,7 +64,11 @@ const RemindersServices: React.FC = () => {
     try {
       let query = supabase
         .from('reminders')
-        .select('*')
+        .select(`
+          *,
+          company:companies(company_name),
+          individual:individuals(individual_name)
+        `)
         .order('reminder_date', { ascending: true });
 
       // Only show enabled reminders if email notifications are enabled
@@ -73,7 +80,15 @@ const RemindersServices: React.FC = () => {
 
       if (error) throw error;
 
-      console.log('Loaded reminders:', data);
+      console.log('📋 Loaded reminders with details:', data?.map(r => ({
+        id: r.id,
+        title: r.title,
+        type: r.reminder_type,
+        date: r.reminder_date,
+        company: r.company?.company_name,
+        individual: r.individual?.individual_name
+      })));
+
       setReminders(data || []);
     } catch (error) {
       console.error('Error loading reminders:', error);
@@ -105,6 +120,41 @@ const RemindersServices: React.FC = () => {
       checkAndSendAutomaticReminders();
     }
   }, [emailNotificationsEnabled]);
+
+  // Listen for document updates to refresh reminders
+  useEffect(() => {
+    const handleDocumentUpdate = () => {
+      console.log('📄 Document update detected, refreshing reminders...');
+      loadReminders();
+      loadDues();
+      setLastRefresh(new Date());
+    };
+
+    // Listen for custom document update events
+    window.addEventListener('documentUpdated', handleDocumentUpdate);
+    window.addEventListener('reminderCreated', handleDocumentUpdate);
+
+    return () => {
+      window.removeEventListener('documentUpdated', handleDocumentUpdate);
+      window.removeEventListener('reminderCreated', handleDocumentUpdate);
+    };
+  }, []);
+
+  // Manual refresh function
+  const refreshData = async () => {
+    console.log('🔄 Manual refresh triggered');
+    setLoading(true);
+    try {
+      await Promise.all([loadReminders(), loadDues()]);
+      setLastRefresh(new Date());
+      toast.success('Data refreshed successfully!');
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      toast.error('Failed to refresh data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Check and send due reminder emails
   const checkAndSendDueReminders = async () => {
@@ -1334,8 +1384,26 @@ const RemindersServices: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Reminders & Services</h1>
             <p className="text-gray-600 mt-1">Intelligent reminder system and service milestone tracking</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </p>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={refreshData}
+              disabled={loading}
+              className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+            <button
+              onClick={() => setShowDebugInfo(!showDebugInfo)}
+              className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+              <span>Debug</span>
+            </button>
             <button className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <Settings className="w-4 h-4" />
               <span>Settings</span>
@@ -1350,6 +1418,38 @@ const RemindersServices: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Debug Panel */}
+      {showDebugInfo && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <h3 className="text-lg font-semibold text-blue-900 mb-3">Debug Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="bg-white p-3 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Data Status</h4>
+              <p className="text-gray-600">Reminders: {reminders.length}</p>
+              <p className="text-gray-600">Dues: {dues.length}</p>
+              <p className="text-gray-600">Loading: {loading ? 'Yes' : 'No'}</p>
+              <p className="text-gray-600">Email Notifications: {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Recent Reminders</h4>
+              {reminders.slice(0, 3).map(reminder => (
+                <p key={reminder.id} className="text-xs text-gray-600 truncate">
+                  {reminder.title} ({reminder.reminder_type})
+                </p>
+              ))}
+            </div>
+            <div className="bg-white p-3 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Document Reminders</h4>
+              {reminders.filter(r => r.reminder_type === 'document_expiry').slice(0, 3).map(reminder => (
+                <p key={reminder.id} className="text-xs text-gray-600 truncate">
+                  {reminder.title} - {reminder.document_type}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="bg-white rounded-xl border border-gray-200 p-2">

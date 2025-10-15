@@ -5,6 +5,7 @@ import { dbHelpers } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CardBalanceWidget from './CardBalanceWidget';
 import DailyCardSummary from './DailyCardSummary';
+import ImagePreviewTest from './ImagePreviewTest';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
@@ -14,6 +15,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const { user, isSuperAdmin } = useAuth();
   const [realReminders, setRealReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showImageTest, setShowImageTest] = useState(false);
 
   const totalCompanies = mockCompanies.length;
   const activeServices = mockServices.filter(s => s.status === 'in_progress').length;
@@ -217,6 +219,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      {/* Test Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowImageTest(!showImageTest)}
+          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          {showImageTest ? 'Hide' : 'Show'} Image Preview Test
+        </button>
+      </div>
+
+      {/* Image Preview Test Component */}
+      {showImageTest && (
+        <div className="bg-white rounded-lg shadow-lg">
+          <ImagePreviewTest />
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
