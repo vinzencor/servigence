@@ -145,8 +145,8 @@ class EmailService {
             
             <div style="text-align: center; margin: 30px 0;">
               <p style="color: #666; margin: 5px 0;"><strong>Support Contact:</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 support@servigence.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971-4-XXX-XXXX</p>
+              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
             </div>
             
             <p style="color: #666; line-height: 1.6; font-size: 16px;">
@@ -207,8 +207,8 @@ class EmailService {
 
             <div style="text-align: center; margin: 30px 0;">
               <p style="color: #666; margin: 5px 0;"><strong>Support Contact:</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 support@servigence.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971-4-XXX-XXXX</p>
+              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
             </div>
 
             <p style="color: #666; line-height: 1.6; font-size: 16px;">
@@ -259,8 +259,8 @@ class EmailService {
             
             <div style="text-align: center; margin: 30px 0;">
               <p style="color: #666; margin: 5px 0;"><strong>Need Assistance?</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 support@servigence.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971-4-XXX-XXXX</p>
+              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
             </div>
             
             <p style="color: #666; line-height: 1.6; font-size: 16px;">
@@ -319,7 +319,7 @@ class EmailService {
             <div style="text-align: center; margin: 30px 0;">
               <p style="color: #666; margin: 5px 0;"><strong>Payment Assistance:</strong></p>
               <p style="color: #667eea; margin: 5px 0;">📧 accounts@servigence.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971-4-XXX-XXXX</p>
+              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
             </div>
 
             <p style="color: #666; line-height: 1.6; font-size: 16px;">
@@ -392,8 +392,8 @@ class EmailService {
 
             <div style="text-align: center; margin: 30px 0;">
               <p style="color: #666; margin: 5px 0;"><strong>Need Assistance?</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 support@servigence.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971-4-XXX-XXXX</p>
+              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
             </div>
 
             <p style="color: #666; line-height: 1.6; font-size: 16px;">
