@@ -1,8 +1,11 @@
-// Email service using Resend
+// Email service using Supabase Edge Function with Resend
+import { dbHelpers } from './supabase';
+
 interface EmailTemplate {
   to: string | string[];
   subject: string;
   html: string;
+  from?: string;
 }
 
 interface WelcomeEmailData {
@@ -36,49 +39,63 @@ interface DueReminderEmailData {
   daysUntilDue: number;
 }
 
-class EmailService {
-  private backendUrl = 'http://localhost:3001';
+interface GeneralReminderEmailData {
+  recipientEmail: string;
+  recipientName: string;
+  reminderTitle: string;
+  reminderDescription?: string;
+  reminderType: string;
+  dueDate: string;
+  priority: string;
+  companyName?: string;
+  daysUntilDue: number;
+}
 
+class EmailService {
   private async sendEmail(template: EmailTemplate): Promise<boolean> {
     try {
-      console.log('🔄 Sending email via backend:', {
+      console.log('🔄 Sending email via Supabase Edge Function:', {
         to: template.to,
-        subject: template.subject,
-        backendUrl: this.backendUrl
+        subject: template.subject
       });
 
-      // Check if backend is available
-      try {
-        const healthCheck = await fetch(`${this.backendUrl}/api/health`);
-        if (!healthCheck.ok) {
-          console.error('❌ Email server is not responding');
-          return false;
-        }
-      } catch (healthError) {
-        console.error('❌ Email server is not available:', healthError);
-        return false;
+      // Get environment variables
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Missing Supabase environment variables');
       }
 
-      const response = await fetch(`${this.backendUrl}/api/send-email`, {
+      // Call the Supabase Edge Function directly with fetch
+      const response = await fetch(`${supabaseUrl}/functions/v1/resend`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           to: template.to,
           subject: template.subject,
           html: template.html,
-        }),
+          from: template.from || 'Servigence CRM <info@servigens.com>'
+        })
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error('❌ Email sending failed:', error);
+        const errorText = await response.text();
+        console.error('❌ HTTP error:', response.status, errorText);
         return false;
       }
 
-      const result = await response.json();
-      console.log('✅ Email sent successfully:', result);
+      const data = await response.json();
+
+      if (!data?.success) {
+        console.error('❌ Email sending failed:', data?.error);
+        return false;
+      }
+
+      console.log('✅ Email sent successfully via Supabase Edge Function:', data);
       return true;
     } catch (error) {
       console.error('❌ Email service error:', error);
@@ -313,6 +330,80 @@ class EmailService {
 
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
             <p>This is an automated payment reminder from Servigence CRM System.</p>
+          </div>
+        </div>
+      `,
+    };
+
+    return await this.sendEmail(template);
+  }
+
+  // Send general reminder email
+  async sendGeneralReminderEmail(data: GeneralReminderEmailData): Promise<boolean> {
+    const priorityColors = {
+      low: '#10b981',
+      medium: '#f59e0b',
+      high: '#ef4444',
+      urgent: '#dc2626'
+    };
+
+    const priorityColor = priorityColors[data.priority as keyof typeof priorityColors] || '#6b7280';
+
+    const template: EmailTemplate = {
+      to: data.recipientEmail,
+      subject: `⚠️ Reminder: ${data.reminderTitle} - Due ${data.daysUntilDue === 0 ? 'Today' : `in ${data.daysUntilDue} day${data.daysUntilDue === 1 ? '' : 's'}`}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: ${priorityColor}; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">📅 Reminder Alert</h1>
+          </div>
+
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+            <h2 style="color: #333; margin-top: 0;">Dear ${data.recipientName},</h2>
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+              This is a reminder about an important deadline that requires your attention.
+            </p>
+
+            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${priorityColor};">
+              <h3 style="color: #333; margin-top: 0;">Reminder Details:</h3>
+              <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
+                <strong>Title:</strong> ${data.reminderTitle}<br>
+                ${data.reminderDescription ? `<strong>Description:</strong> ${data.reminderDescription}<br>` : ''}
+                <strong>Type:</strong> ${data.reminderType.replace('_', ' ').toUpperCase()}<br>
+                <strong>Due Date:</strong> ${new Date(data.dueDate).toLocaleDateString()}<br>
+                <strong>Priority:</strong> <span style="color: ${priorityColor}; font-weight: bold;">${data.priority.toUpperCase()}</span><br>
+                ${data.companyName ? `<strong>Company:</strong> ${data.companyName}<br>` : ''}
+                <strong>Days Until Due:</strong> ${data.daysUntilDue === 0 ? 'DUE TODAY' : `${data.daysUntilDue} day${data.daysUntilDue === 1 ? '' : 's'}`}
+              </p>
+            </div>
+
+            ${data.daysUntilDue <= 1 ? `
+              <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #dc2626; font-weight: bold; margin: 0;">
+                  ⚠️ URGENT: This reminder is due ${data.daysUntilDue === 0 ? 'today' : 'tomorrow'}. Please take immediate action.
+                </p>
+              </div>
+            ` : ''}
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+              Please ensure you complete the necessary actions before the due date to avoid any complications.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <p style="color: #666; margin: 5px 0;"><strong>Need Assistance?</strong></p>
+              <p style="color: #667eea; margin: 5px 0;">📧 support@servigence.com</p>
+              <p style="color: #667eea; margin: 5px 0;">📞 +971-4-XXX-XXXX</p>
+            </div>
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+              Best regards,<br>
+              <strong>The Servigence Team</strong>
+            </p>
+          </div>
+
+          <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+            <p>This is an automated reminder from Servigence CRM System.</p>
           </div>
         </div>
       `,

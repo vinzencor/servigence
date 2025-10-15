@@ -17,6 +17,7 @@ const isValidUUID = (uuid: string): boolean => {
 
 // Database helper functions
 export const dbHelpers = {
+  supabase, // Add supabase client to dbHelpers
   // Companies
   async getCompanies(userId?: string, userRole?: string) {
     console.log('Loading companies for user:', userId, 'role:', userRole);
@@ -984,7 +985,7 @@ export const dbHelpers = {
     const { data, error } = await supabase.storage
       .from('documents')
       .upload(path, file)
-    
+
     if (error) throw error
     return data
   },
@@ -995,6 +996,43 @@ export const dbHelpers = {
       .getPublicUrl(path)
 
     return data.publicUrl
+  },
+
+  async createCompanyDocument(documentData: any) {
+    console.log('Creating company document via helper:', documentData);
+
+    const { data, error } = await supabase
+      .from('company_documents')
+      .insert([documentData])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Database helper error creating company document:', error);
+      throw error;
+    }
+
+    console.log('Company document created successfully:', data);
+    return data;
+  },
+
+  async updateCompanyDocument(id: string, updateData: any) {
+    console.log('Updating company document via helper:', id, updateData);
+
+    const { data, error } = await supabase
+      .from('company_documents')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Database helper error updating company document:', error);
+      throw error;
+    }
+
+    console.log('Company document updated successfully:', data);
+    return data;
   },
 
   // Payment Cards

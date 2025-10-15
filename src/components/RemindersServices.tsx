@@ -23,7 +23,8 @@ import {
   Users,
   ToggleLeft,
   ToggleRight,
-  DollarSign
+  DollarSign,
+  Mail
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { dbHelpers, supabase } from '../lib/supabase';
@@ -101,6 +102,7 @@ const RemindersServices: React.FC = () => {
     if (emailNotificationsEnabled) {
       checkAndSendDueReminders();
       checkAndSendDocumentReminders();
+      checkAndSendAutomaticReminders();
     }
   }, [emailNotificationsEnabled]);
 
@@ -225,6 +227,120 @@ const RemindersServices: React.FC = () => {
       }
     } catch (error) {
       console.error('Error checking document reminders:', error);
+    }
+  };
+
+  // Check and send automatic reminder emails (1-2 days before due date)
+  const checkAndSendAutomaticReminders = async () => {
+    if (!emailNotificationsEnabled) return;
+
+    try {
+      const today = new Date();
+      const twoDaysFromNow = new Date();
+      twoDaysFromNow.setDate(today.getDate() + 2);
+
+      // Get reminders that are due within 1-2 days and are enabled
+      const remindersToSend = reminders.filter(reminder => {
+        if (!reminder.enabled || reminder.status !== 'active') return false;
+
+        const reminderDate = new Date(reminder.reminder_date);
+        const daysUntilDue = Math.ceil((reminderDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Check if we already sent an email today
+        const lastEmailSent = reminder.last_email_sent ? new Date(reminder.last_email_sent) : null;
+        const alreadySentToday = lastEmailSent &&
+          lastEmailSent.toDateString() === today.toDateString();
+
+        // Send automatic reminder if due within 1-2 days and not already sent today
+        return daysUntilDue >= 1 && daysUntilDue <= 2 && !alreadySentToday;
+      });
+
+      console.log(`🔄 Found ${remindersToSend.length} reminders to send automatically`);
+
+      for (const reminder of remindersToSend) {
+        try {
+          const reminderDate = new Date(reminder.reminder_date);
+          const daysUntilDue = Math.ceil((reminderDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Get recipient information based on reminder type
+          let recipientEmail = '';
+          let recipientName = '';
+          let companyName = '';
+
+          if (reminder.company_id) {
+            // Get company information
+            const { data: company, error: companyError } = await supabase
+              .from('companies')
+              .select('company_name, email1, email2')
+              .eq('id', reminder.company_id)
+              .single();
+
+            if (!companyError && company) {
+              recipientEmail = company.email1 || company.email2 || '';
+              recipientName = company.company_name;
+              companyName = company.company_name;
+            }
+          } else if (reminder.employee_id) {
+            // Get employee information
+            const { data: employee, error: employeeError } = await supabase
+              .from('service_employees')
+              .select('name, email')
+              .eq('id', reminder.employee_id)
+              .single();
+
+            if (!employeeError && employee) {
+              recipientEmail = employee.email;
+              recipientName = employee.name;
+            }
+          } else if (reminder.individual_id) {
+            // Get individual information
+            const { data: individual, error: individualError } = await supabase
+              .from('individuals')
+              .select('individual_name, email1')
+              .eq('id', reminder.individual_id)
+              .single();
+
+            if (!individualError && individual) {
+              recipientEmail = individual.email1;
+              recipientName = individual.individual_name;
+            }
+          }
+
+          if (!recipientEmail) {
+            console.log(`⚠️ No email found for reminder: ${reminder.title}`);
+            continue;
+          }
+
+          // Send the automatic reminder email
+          const emailSent = await emailService.sendGeneralReminderEmail({
+            recipientEmail,
+            recipientName,
+            reminderTitle: reminder.title,
+            reminderDescription: reminder.description,
+            reminderType: reminder.reminder_type,
+            dueDate: reminder.reminder_date,
+            priority: reminder.priority,
+            companyName: companyName || undefined,
+            daysUntilDue
+          });
+
+          if (emailSent) {
+            // Update the last_email_sent timestamp
+            await supabase
+              .from('reminders')
+              .update({ last_email_sent: new Date().toISOString() })
+              .eq('id', reminder.id);
+
+            console.log(`✅ Automatic reminder email sent to ${recipientEmail} for ${reminder.title} (${daysUntilDue} days until due)`);
+          } else {
+            console.log(`❌ Failed to send automatic reminder email for ${reminder.title}`);
+          }
+        } catch (emailError) {
+          console.error('Error sending automatic reminder email:', emailError);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking automatic reminders:', error);
     }
   };
 
@@ -553,6 +669,108 @@ const RemindersServices: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
+  const handleSendReminder = async (reminder: any) => {
+    try {
+      console.log('🔄 Sending reminder email for:', reminder.title);
+
+      // Calculate days until due
+      const today = new Date();
+      const dueDate = new Date(reminder.reminder_date);
+      const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Get recipient information based on reminder type
+      let recipientEmail = '';
+      let recipientName = '';
+      let companyName = '';
+
+      if (reminder.company_id) {
+        // Get company information
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .select('company_name, email1, email2')
+          .eq('id', reminder.company_id)
+          .single();
+
+        if (companyError) {
+          console.error('Error fetching company:', companyError);
+          toast.error('Failed to get company information');
+          return;
+        }
+
+        if (company) {
+          recipientEmail = company.email1;
+          recipientName = company.company_name;
+          companyName = company.company_name;
+        }
+      } else if (reminder.employee_id) {
+        // Get employee information
+        const { data: employee, error: employeeError } = await supabase
+          .from('service_employees')
+          .select('name, email')
+          .eq('id', reminder.employee_id)
+          .single();
+
+        if (employeeError) {
+          console.error('Error fetching employee:', employeeError);
+          toast.error('Failed to get employee information');
+          return;
+        }
+
+        if (employee) {
+          recipientEmail = employee.email;
+          recipientName = employee.name;
+        }
+      } else if (reminder.individual_id) {
+        // Get individual information
+        const { data: individual, error: individualError } = await supabase
+          .from('individuals')
+          .select('individual_name, email1')
+          .eq('id', reminder.individual_id)
+          .single();
+
+        if (individualError) {
+          console.error('Error fetching individual:', individualError);
+          toast.error('Failed to get individual information');
+          return;
+        }
+
+        if (individual) {
+          recipientEmail = individual.email1;
+          recipientName = individual.individual_name;
+        }
+      }
+
+      if (!recipientEmail) {
+        toast.error('No email address found for this reminder');
+        return;
+      }
+
+      // Send the reminder email
+      const emailSent = await emailService.sendGeneralReminderEmail({
+        recipientEmail,
+        recipientName,
+        reminderTitle: reminder.title,
+        reminderDescription: reminder.description,
+        reminderType: reminder.reminder_type,
+        dueDate: reminder.reminder_date,
+        priority: reminder.priority,
+        companyName: companyName || undefined,
+        daysUntilDue
+      });
+
+      if (emailSent) {
+        toast.success(`Reminder email sent successfully to ${recipientEmail}`);
+        console.log('✅ Reminder email sent successfully');
+      } else {
+        toast.error('Failed to send reminder email');
+        console.log('❌ Failed to send reminder email');
+      }
+    } catch (error) {
+      console.error('❌ Error sending reminder email:', error);
+      toast.error('Error sending reminder email');
+    }
+  };
+
   const handleRecordPayment = (due: any) => {
     setSelectedDue(due);
     setPaymentForm({
@@ -842,6 +1060,16 @@ const RemindersServices: React.FC = () => {
                           >
                             <Eye className="w-4 h-4" />
                             <span>View Details</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleSendReminder(reminder);
+                              setShowReminderMenu(null);
+                            }}
+                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Mail className="w-4 h-4" />
+                            <span>Send Reminder</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1989,6 +2217,13 @@ const RemindersServices: React.FC = () => {
                         title="View Reminder"
                       >
                         <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleSendReminder(reminder)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        title="Send Reminder Email"
+                      >
+                        <Mail className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleEditReminder(reminder)}

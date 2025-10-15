@@ -20,6 +20,7 @@ import RemindersManagement from './components/RemindersManagement';
 import EmployeeLogin from './components/EmployeeLogin';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import Chat from './components/Chat';
+import EmailTest from './components/EmailTest';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
@@ -200,6 +201,8 @@ function AppContent() {
         return <InvoiceManagement />;
       case 'reminders-management':
         return <RemindersManagement />;
+      case 'email-test':
+        return <EmailTest />;
       default:
         return <Dashboard onNavigate={setCurrentView} />;
     }

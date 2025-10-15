@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Users, FileText, DollarSign, Home, Plus, Bell, Search, Settings, LogOut, MessageCircle, CreditCard } from 'lucide-react';
+import { Building2, Users, FileText, DollarSign, Home, Plus, Bell, Search, Settings, LogOut, MessageCircle, CreditCard, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { dbHelpers } from '../lib/supabase';
 
@@ -100,6 +100,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     { id: 'reminders', label: 'Reminders & Services', icon: Bell },
     { id: 'accounts', label: 'Account', icon: DollarSign },
     { id: 'invoices', label: 'Invoice', icon: FileText },
+    { id: 'email-test', label: 'Email Test', icon: Mail, superAdminOnly: true },
   ];
 
   // Filter navigation items based on user role

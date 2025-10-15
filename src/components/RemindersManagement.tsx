@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Calendar, AlertTriangle, CheckCircle, X, Plus, Search, Filter, Clock, User, Building2 } from 'lucide-react';
-import { dbHelpers } from '../lib/supabase';
+import { Bell, Calendar, AlertTriangle, CheckCircle, X, Plus, Search, Filter, Clock, User, Building2, Mail } from 'lucide-react';
+import { dbHelpers, supabase } from '../lib/supabase';
+import { emailService } from '../lib/emailService';
+import toast from 'react-hot-toast';
 
 interface Reminder {
   id: string;
@@ -112,6 +114,94 @@ const RemindersManagement: React.FC = () => {
       await loadReminders();
     } catch (error) {
       console.error('Error dismissing reminder:', error);
+    }
+  };
+
+  const handleSendReminder = async (reminder: Reminder) => {
+    try {
+      console.log('🔄 Sending reminder email for:', reminder.title);
+
+      // Calculate days until due
+      const today = new Date();
+      const dueDate = new Date(reminder.reminder_date);
+      const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Get recipient information based on reminder type
+      let recipientEmail = '';
+      let recipientName = '';
+      let companyName = '';
+
+      // Check if reminder has related entity data
+      if (reminder.company) {
+        recipientName = reminder.company.company_name;
+        companyName = reminder.company.company_name;
+
+        // Get company email from database
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .select('email1, email2')
+          .eq('company_name', reminder.company.company_name)
+          .single();
+
+        if (!companyError && company) {
+          recipientEmail = company.email1 || company.email2 || '';
+        }
+      } else if (reminder.employee) {
+        recipientName = reminder.employee.name;
+
+        // Get employee email from database
+        const { data: employee, error: employeeError } = await supabase
+          .from('service_employees')
+          .select('email')
+          .eq('employee_id', reminder.employee.employee_id)
+          .single();
+
+        if (!employeeError && employee) {
+          recipientEmail = employee.email;
+        }
+      } else if (reminder.individual) {
+        recipientName = reminder.individual.individual_name;
+
+        // Get individual email from database
+        const { data: individual, error: individualError } = await supabase
+          .from('individuals')
+          .select('email1')
+          .eq('individual_name', reminder.individual.individual_name)
+          .single();
+
+        if (!individualError && individual) {
+          recipientEmail = individual.email1;
+        }
+      }
+
+      if (!recipientEmail) {
+        toast.error('No email address found for this reminder');
+        return;
+      }
+
+      // Send the reminder email
+      const emailSent = await emailService.sendGeneralReminderEmail({
+        recipientEmail,
+        recipientName,
+        reminderTitle: reminder.title,
+        reminderDescription: reminder.description,
+        reminderType: reminder.reminder_type,
+        dueDate: reminder.reminder_date,
+        priority: reminder.priority,
+        companyName: companyName || undefined,
+        daysUntilDue
+      });
+
+      if (emailSent) {
+        toast.success(`Reminder email sent successfully to ${recipientEmail}`);
+        console.log('✅ Reminder email sent successfully');
+      } else {
+        toast.error('Failed to send reminder email');
+        console.log('❌ Failed to send reminder email');
+      }
+    } catch (error) {
+      console.error('❌ Error sending reminder email:', error);
+      toast.error('Error sending reminder email');
     }
   };
 
@@ -320,6 +410,13 @@ const RemindersManagement: React.FC = () => {
                       </div>
                       
                       <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleSendReminder(reminder)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Send Reminder Email"
+                        >
+                          <Mail className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleCompleteReminder(reminder.id)}
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
