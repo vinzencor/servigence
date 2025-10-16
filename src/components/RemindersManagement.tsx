@@ -189,6 +189,8 @@ const RemindersManagement: React.FC = () => {
         dueDate: reminder.reminder_date,
         priority: reminder.priority,
         companyName: companyName || undefined,
+        serviceName: reminder.service?.name,
+        serviceCategory: reminder.service?.category,
         daysUntilDue
       });
 

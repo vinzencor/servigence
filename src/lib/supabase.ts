@@ -89,7 +89,8 @@ export const dbHelpers = {
         *,
         employee:employees(name, employee_id),
         company:companies(company_name),
-        individual:individuals(individual_name)
+        individual:individuals(individual_name),
+        service:service_types(name, category)
       `)
       .eq('status', 'active')
       .order('reminder_date', { ascending: true })

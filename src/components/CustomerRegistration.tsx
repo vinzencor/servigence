@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Send, X, CheckCircle, AlertCircle, Phone, Mail, Users, User, Upload, FileText, Trash2, Eye, CreditCard, Receipt } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Company, Individual, ServiceEmployee, PaymentCard } from '../types';
+import { Company, Individual, ServiceEmployee, PaymentCard, ServiceType } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { emailService } from '../lib/emailService';
@@ -18,6 +18,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCard, setSelectedCard] = useState<PaymentCard | null>(null);
+  const [services, setServices] = useState<ServiceType[]>([]);
   const [formData, setFormData] = useState({
     // Common fields
     phone1: '',
@@ -66,6 +67,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     title: string;
     documentNumber: string;
     expiryDate: string;
+    serviceId?: string;
     file: File | null;
     fileUrl?: string;
     preview?: string;
@@ -92,6 +94,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   useEffect(() => {
     loadServiceEmployees();
     loadPaymentCards();
+    loadServices();
   }, []);
 
   const loadPaymentCards = async () => {
@@ -120,6 +123,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       setServiceEmployees(employees || []);
     } catch (error) {
       console.error('Error loading service employees:', error);
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const serviceData = await dbHelpers.getServices();
+      setServices(serviceData || []);
+    } catch (error) {
+      console.error('Error loading services:', error);
     }
   };
 
@@ -378,7 +390,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     return publicUrl;
   };
 
-  const createReminder = async (companyId: string, docTitle: string, expiryDate: string, documentType: string) => {
+  const createReminder = async (companyId: string, docTitle: string, expiryDate: string, documentType: string, serviceId?: string) => {
     if (!expiryDate) {
       console.log('⚠️ No expiry date provided, skipping reminder creation');
       return;
@@ -401,6 +413,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       reminder_type: 'document_expiry',
       document_type: documentType,
       company_id: companyId,
+      service_id: serviceId || null,
       priority: 'high',
       status: 'active', // Set to 'active' so it shows in dashboard
       days_before_reminder: 10,
@@ -536,6 +549,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 title: doc.title,
                 document_number: doc.documentNumber || null,
                 expiry_date: doc.expiryDate || null,
+                service_id: doc.serviceId || null,
                 file_attachments: fileUrl ? [{
                   name: doc.file?.name,
                   url: fileUrl,
@@ -561,7 +575,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 // Create reminder if expiry date is provided
                 if (doc.expiryDate) {
                   console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
-                  await createReminder(companyId, doc.title, doc.expiryDate, 'company_document');
+                  await createReminder(companyId, doc.title, doc.expiryDate, 'company_document', doc.serviceId);
 
                   // Dispatch event to notify other components about reminder creation
                   window.dispatchEvent(new CustomEvent('reminderCreated', {
@@ -2120,7 +2134,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Document Title *
@@ -2146,6 +2160,27 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               placeholder="Document ID/Number"
                             />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Related Service (Optional)
+                            </label>
+                            <select
+                              value={doc.serviceId || ''}
+                              onChange={(e) => updateDocument(doc.id, 'serviceId', e.target.value || undefined)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select a service...</option>
+                              {services.map((service) => (
+                                <option key={service.id} value={service.id}>
+                                  {service.name} ({service.category})
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Link this document to a specific service
+                            </p>
                           </div>
 
                           <div>

@@ -67,7 +67,8 @@ const RemindersServices: React.FC = () => {
         .select(`
           *,
           company:companies(company_name),
-          individual:individuals(individual_name)
+          individual:individuals(individual_name),
+          service:service_types(name, category)
         `)
         .order('reminder_date', { ascending: true });
 
@@ -267,6 +268,8 @@ const RemindersServices: React.FC = () => {
             documentType: reminder.document_type || reminder.reminder_type,
             expiryDate: reminder.reminder_date,
             companyName: companyName,
+            serviceName: reminder.service?.name,
+            serviceCategory: reminder.service?.category,
             daysUntilExpiry: daysUntilExpiry
           });
 
@@ -371,6 +374,8 @@ const RemindersServices: React.FC = () => {
             dueDate: reminder.reminder_date,
             priority: reminder.priority,
             companyName: companyName || undefined,
+            serviceName: reminder.service?.name,
+            serviceCategory: reminder.service?.category,
             daysUntilDue
           });
 
@@ -805,6 +810,8 @@ const RemindersServices: React.FC = () => {
         dueDate: reminder.reminder_date,
         priority: reminder.priority,
         companyName: companyName || undefined,
+        serviceName: reminder.service?.name,
+        serviceCategory: reminder.service?.category,
         daysUntilDue
       });
 

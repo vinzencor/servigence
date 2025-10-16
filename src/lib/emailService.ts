@@ -26,6 +26,8 @@ interface ReminderEmailData {
   documentType: string;
   expiryDate: string;
   companyName?: string;
+  serviceName?: string;
+  serviceCategory?: string;
   daysUntilExpiry: number;
 }
 
@@ -48,6 +50,8 @@ interface GeneralReminderEmailData {
   dueDate: string;
   priority: string;
   companyName?: string;
+  serviceName?: string;
+  serviceCategory?: string;
   daysUntilDue: number;
 }
 
@@ -249,6 +253,7 @@ class EmailService {
                 <strong>Expiry Date:</strong> ${data.expiryDate}<br>
                 <strong>Days Until Expiry:</strong> ${data.daysUntilExpiry} days
                 ${data.companyName ? `<br><strong>Company:</strong> ${data.companyName}` : ''}
+                ${data.serviceName ? `<br><strong>Related Service:</strong> ${data.serviceName}${data.serviceCategory ? ` (${data.serviceCategory})` : ''}` : ''}
               </p>
             </div>
             
@@ -374,6 +379,7 @@ class EmailService {
                 <strong>Due Date:</strong> ${new Date(data.dueDate).toLocaleDateString()}<br>
                 <strong>Priority:</strong> <span style="color: ${priorityColor}; font-weight: bold;">${data.priority.toUpperCase()}</span><br>
                 ${data.companyName ? `<strong>Company:</strong> ${data.companyName}<br>` : ''}
+                ${data.serviceName ? `<strong>Related Service:</strong> ${data.serviceName}${data.serviceCategory ? ` (${data.serviceCategory})` : ''}<br>` : ''}
                 <strong>Days Until Due:</strong> ${data.daysUntilDue === 0 ? 'DUE TODAY' : `${data.daysUntilDue} day${data.daysUntilDue === 1 ? '' : 's'}`}
               </p>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, AlertCircle, Save, DollarSign, CreditCard, Upload, Eye, Trash2, FileText, X } from 'lucide-react';
-import { Company, PaymentCard, ServiceEmployee } from '../types';
+import { Company, PaymentCard, ServiceEmployee, ServiceType } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -18,6 +18,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCard, setSelectedCard] = useState<PaymentCard | null>(null);
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
+  const [services, setServices] = useState<ServiceType[]>([]);
 
   const [formData, setFormData] = useState({
     companyName: company.companyName || '',
@@ -49,6 +50,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     title: string;
     documentNumber: string;
     expiryDate: string;
+    serviceId?: string;
     file: File | null;
     fileUrl?: string;
     preview?: string;
@@ -113,6 +115,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     loadCreditUsage();
     loadPaymentCards();
     loadServiceEmployees();
+    loadServices();
     loadCompanyDocuments();
   }, [company.id]);
 
@@ -122,6 +125,15 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
       setServiceEmployees(employees);
     } catch (error) {
       console.error('Error loading service employees:', error);
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const serviceData = await dbHelpers.getServices();
+      setServices(serviceData || []);
+    } catch (error) {
+      console.error('Error loading services:', error);
     }
   };
 
@@ -142,6 +154,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         title: doc.title || '',
         documentNumber: doc.document_number || '',
         expiryDate: doc.expiry_date || '',
+        serviceId: doc.service_id || undefined,
         file: null, // Existing files are already uploaded
         fileUrl: doc.file_attachments?.[0]?.url || '',
         preview: 'existing-file'
@@ -399,7 +412,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     }
   };
 
-  const createReminder = async (companyId: string, docTitle: string, expiryDate: string, reminderType: string) => {
+  const createReminder = async (companyId: string, docTitle: string, expiryDate: string, reminderType: string, serviceId?: string) => {
     try {
       const reminderData = {
         company_id: companyId,
@@ -407,6 +420,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         description: `The document "${docTitle}" is expiring soon. Please renew it before the expiry date.`,
         reminder_date: expiryDate,
         reminder_type: reminderType,
+        service_id: serviceId || null,
         status: 'pending',
         created_by: user?.name || 'System'
       };
@@ -563,6 +577,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 title: doc.title,
                 document_number: doc.documentNumber || null,
                 expiry_date: doc.expiryDate || null,
+                service_id: doc.serviceId || null,
                 ...(fileUrl && {
                   file_attachments: [{
                     name: doc.file?.name || 'existing-file',
@@ -610,6 +625,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 title: doc.title,
                 document_number: doc.documentNumber || null,
                 expiry_date: doc.expiryDate || null,
+                service_id: doc.serviceId || null,
                 file_attachments: fileUrl ? [{
                   name: doc.file?.name,
                   url: fileUrl,
@@ -653,7 +669,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
             // Create reminder if expiry date is provided (for both new and updated documents)
             if (doc.expiryDate) {
               console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
-              await createReminder(company.id, doc.title, doc.expiryDate, 'company_document');
+              await createReminder(company.id, doc.title, doc.expiryDate, 'company_document', doc.serviceId);
 
               // Dispatch event to notify other components about reminder creation
               window.dispatchEvent(new CustomEvent('reminderCreated', {
@@ -1174,7 +1190,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Document Title *
@@ -1200,6 +1216,27 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="Document ID/Number"
                           />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Related Service (Optional)
+                          </label>
+                          <select
+                            value={doc.serviceId || ''}
+                            onChange={(e) => updateDocument(doc.id, 'serviceId', e.target.value || undefined)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select a service...</option>
+                            {services.map((service) => (
+                              <option key={service.id} value={service.id}>
+                                {service.name} ({service.category})
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Link this document to a specific service
+                          </p>
                         </div>
 
                         <div>
