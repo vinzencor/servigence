@@ -57,6 +57,8 @@ const RemindersServices: React.FC = () => {
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [services, setServices] = useState<any[]>([]);
+  const [selectedServiceFilter, setSelectedServiceFilter] = useState<string>('all');
 
   // Load reminders from database
   const loadReminders = async () => {
@@ -68,6 +70,7 @@ const RemindersServices: React.FC = () => {
           *,
           company:companies(company_name),
           individual:individuals(individual_name),
+          employee:employees(name, employee_id),
           service:service_types(name, category)
         `)
         .order('reminder_date', { ascending: true });
@@ -112,9 +115,26 @@ const RemindersServices: React.FC = () => {
     }
   };
 
+  // Load services for filter dropdown
+  const loadServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('service_types')
+        .select('id, name, category')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setServices(data || []);
+    } catch (error) {
+      console.error('Error loading services:', error);
+    }
+  };
+
   useEffect(() => {
     loadReminders();
     loadDues();
+    loadServices();
     if (emailNotificationsEnabled) {
       checkAndSendDueReminders();
       checkAndSendDocumentReminders();
@@ -445,6 +465,13 @@ const RemindersServices: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
+
+  // Filter reminders based on selected service
+  const filteredReminders = reminders.filter(reminder => {
+    if (selectedServiceFilter === 'all') return true;
+    if (selectedServiceFilter === 'no-service') return !reminder.service_id;
+    return reminder.service_id === selectedServiceFilter;
+  });
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [showReminderDetails, setShowReminderDetails] = useState(false);
@@ -993,7 +1020,7 @@ const RemindersServices: React.FC = () => {
     setCurrentDate(new Date());
   };
 
-  const filteredReminders = reminders.filter(reminder => {
+  const searchAndPriorityFilteredReminders = filteredReminders.filter(reminder => {
     const matchesSearch = reminder.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (reminder.description && reminder.description.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -1090,7 +1117,14 @@ const RemindersServices: React.FC = () => {
                   <TypeIcon className="w-5 h-5 text-red-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-900">{reminder.title}</p>
+                  <p className="font-medium text-gray-900">
+                    {reminder.employee?.name || reminder.company?.company_name || reminder.individual?.individual_name || 'Unknown Entity'}
+                  </p>
+                  {reminder.service?.name && (
+                    <p className="text-sm font-medium text-blue-600">
+                      {reminder.service.name} {reminder.service.category && `(${reminder.service.category})`}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-600">{reminder.description}</p>
                   <p className="text-xs text-gray-500 mt-1">Due: {reminder.dueDate}</p>
                 </div>
@@ -1440,19 +1474,27 @@ const RemindersServices: React.FC = () => {
             </div>
             <div className="bg-white p-3 rounded-lg">
               <h4 className="font-medium text-gray-900 mb-2">Recent Reminders</h4>
-              {reminders.slice(0, 3).map(reminder => (
-                <p key={reminder.id} className="text-xs text-gray-600 truncate">
-                  {reminder.title} ({reminder.reminder_type})
-                </p>
-              ))}
+              {reminders.slice(0, 3).map(reminder => {
+                const displayName = reminder.employee?.name || reminder.company?.company_name || reminder.individual?.individual_name || 'Unknown';
+                const serviceName = reminder.service?.name || '';
+                return (
+                  <p key={reminder.id} className="text-xs text-gray-600 truncate">
+                    {displayName} {serviceName && `- ${serviceName}`} ({reminder.reminder_type})
+                  </p>
+                );
+              })}
             </div>
             <div className="bg-white p-3 rounded-lg">
               <h4 className="font-medium text-gray-900 mb-2">Document Reminders</h4>
-              {reminders.filter(r => r.reminder_type === 'document_expiry').slice(0, 3).map(reminder => (
-                <p key={reminder.id} className="text-xs text-gray-600 truncate">
-                  {reminder.title} - {reminder.document_type}
-                </p>
-              ))}
+              {reminders.filter(r => r.reminder_type === 'document_expiry').slice(0, 3).map(reminder => {
+                const displayName = reminder.employee?.name || reminder.company?.company_name || reminder.individual?.individual_name || 'Unknown';
+                const serviceName = reminder.service?.name || reminder.document_type || '';
+                return (
+                  <p key={reminder.id} className="text-xs text-gray-600 truncate">
+                    {displayName} - {serviceName}
+                  </p>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1480,6 +1522,34 @@ const RemindersServices: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Service Filter */}
+      {(activeTab === 'reminders' || activeTab === 'overview' || activeTab === 'calendar') && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <label className="text-sm font-medium text-gray-700">Filter by Service:</label>
+            </div>
+            <select
+              value={selectedServiceFilter}
+              onChange={(e) => setSelectedServiceFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+            >
+              <option value="all">All Services</option>
+              <option value="no-service">No Service Associated</option>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name} ({service.category})
+                </option>
+              ))}
+            </select>
+            <div className="text-sm text-gray-500">
+              Showing {filteredReminders.length} of {reminders.length} reminders
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       {activeTab === 'overview' && renderOverview()}
@@ -1672,7 +1742,14 @@ const RemindersServices: React.FC = () => {
             <div className="p-6">
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedReminder.title}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {selectedReminder.employee?.name || selectedReminder.company?.company_name || selectedReminder.individual?.individual_name || 'Unknown Entity'}
+                  </h3>
+                  {selectedReminder.service?.name && (
+                    <p className="text-sm font-medium text-blue-600 mb-2">
+                      Service: {selectedReminder.service.name} {selectedReminder.service.category && `(${selectedReminder.service.category})`}
+                    </p>
+                  )}
                   <p className="text-gray-600">{selectedReminder.description}</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2256,14 +2333,14 @@ const RemindersServices: React.FC = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
               <p className="text-gray-500 mt-2">Loading reminders...</p>
             </div>
-          ) : filteredReminders.length === 0 ? (
+          ) : searchAndPriorityFilteredReminders.length === 0 ? (
             <div className="text-center py-8">
               <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No reminders found</h3>
               <p className="text-gray-600">Create a new reminder to get started.</p>
             </div>
           ) : (
-            filteredReminders.map((reminder) => {
+            searchAndPriorityFilteredReminders.map((reminder) => {
             const TypeIcon = getTypeIcon(reminder.reminder_type);
             return (
               <div key={reminder.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200">
@@ -2273,7 +2350,16 @@ const RemindersServices: React.FC = () => {
                       <TypeIcon className="w-6 h-6 text-purple-600" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-2">{reminder.title}</h3>
+                      <div className="mb-2">
+                        <h3 className="font-semibold text-gray-900">
+                          {reminder.employee?.name || reminder.company?.company_name || reminder.individual?.individual_name || 'Unknown Entity'}
+                        </h3>
+                        {reminder.service?.name && (
+                          <p className="text-sm font-medium text-blue-600">
+                            {reminder.service.name} {reminder.service.category && `(${reminder.service.category})`}
+                          </p>
+                        )}
+                      </div>
                       <p className="text-gray-600 mb-3">{reminder.description}</p>
 
                       <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
@@ -2521,7 +2607,7 @@ const RemindersServices: React.FC = () => {
             {Array.from({ length: 42 }, (_, i) => {
               const date = new Date(startDate);
               date.setDate(startDate.getDate() + i);
-              const dayReminders = reminders.filter(r => r.reminder_date === date.toISOString().split('T')[0]);
+              const dayReminders = filteredReminders.filter(r => r.reminder_date === date.toISOString().split('T')[0]);
               const isCurrentMonth = date.getMonth() === currentDate.getMonth();
               const isToday = date.toDateString() === new Date().toDateString();
 
@@ -2535,11 +2621,16 @@ const RemindersServices: React.FC = () => {
                     {date.getDate()}
                   </div>
                   <div className="space-y-1">
-                    {dayReminders.slice(0, 2).map((reminder) => (
-                      <div key={reminder.id} className={`text-xs p-1 rounded ${getPriorityColor(reminder.priority)}`}>
-                        {reminder.title.substring(0, 20)}...
-                      </div>
-                    ))}
+                    {dayReminders.slice(0, 2).map((reminder) => {
+                      const displayName = reminder.employee?.name || reminder.company?.company_name || reminder.individual?.individual_name || 'Unknown';
+                      const serviceName = reminder.service?.name || '';
+                      const displayText = serviceName ? `${displayName} - ${serviceName}` : displayName;
+                      return (
+                        <div key={reminder.id} className={`text-xs p-1 rounded ${getPriorityColor(reminder.priority)}`}>
+                          {displayText.substring(0, 25)}...
+                        </div>
+                      );
+                    })}
                     {dayReminders.length > 2 && (
                       <div className="text-xs text-gray-500">
                         +{dayReminders.length - 2} more

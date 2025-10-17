@@ -235,30 +235,32 @@ class EmailService {
     const urgencyColor = data.daysUntilExpiry <= 5 ? '#dc3545' : data.daysUntilExpiry <= 10 ? '#ffc107' : '#28a745';
     const urgencyText = data.daysUntilExpiry <= 5 ? 'URGENT' : data.daysUntilExpiry <= 10 ? 'IMPORTANT' : 'REMINDER';
 
+    // Use service name as the primary identifier, fallback to document type if service name not available
+    const serviceDisplayName = data.serviceName || data.documentType || 'Service Document';
+
     const template: EmailTemplate = {
       to: data.recipientEmail,
-      subject: `${urgencyText}: ${data.documentType} Expiring in ${data.daysUntilExpiry} days`,
+      subject: `${urgencyText}: ${serviceDisplayName} Document Expiring in ${data.daysUntilExpiry} days`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: ${urgencyColor}; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">${urgencyText}: Document Expiry Notice</h1>
+            <h1 style="color: white; margin: 0; font-size: 24px;">${urgencyText}: Service Document Expiry Notice</h1>
           </div>
-          
+
           <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Document Expiry Reminder</h2>
-            
+            <h2 style="color: #333; margin-top: 0;">Service Document Expiry Reminder</h2>
+
             <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
               <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
-                <strong>Document:</strong> ${data.documentType}<br>
+                <strong>Service:</strong> ${serviceDisplayName}${data.serviceCategory ? ` (${data.serviceCategory})` : ''}<br>
                 <strong>Expiry Date:</strong> ${data.expiryDate}<br>
                 <strong>Days Until Expiry:</strong> ${data.daysUntilExpiry} days
                 ${data.companyName ? `<br><strong>Company:</strong> ${data.companyName}` : ''}
-                ${data.serviceName ? `<br><strong>Related Service:</strong> ${data.serviceName}${data.serviceCategory ? ` (${data.serviceCategory})` : ''}` : ''}
               </p>
             </div>
-            
+
             <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              This is an automated reminder that your ${data.documentType} will expire in ${data.daysUntilExpiry} days. 
+              This is an automated reminder that your ${serviceDisplayName} document will expire in ${data.daysUntilExpiry} days.
               Please take the necessary action to renew this document before the expiry date.
             </p>
             

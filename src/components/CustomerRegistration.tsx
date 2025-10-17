@@ -64,8 +64,6 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   // Document upload state
   const [documents, setDocuments] = useState<Array<{
     id: string;
-    title: string;
-    documentNumber: string;
     expiryDate: string;
     serviceId?: string;
     file: File | null;
@@ -202,8 +200,6 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
   const addDocument = () => {
     const newDoc = {
       id: Date.now().toString(),
-      title: '',
-      documentNumber: '',
       expiryDate: '',
       file: null,
       preview: undefined
@@ -525,31 +521,33 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         for (const doc of documents) {
           console.log('🔄 Processing document:', {
             hasFile: !!doc.file,
-            hasTitle: !!doc.title,
-            hasDocNumber: !!doc.documentNumber,
             hasExpiryDate: !!doc.expiryDate,
-            title: doc.title
+            hasServiceId: !!doc.serviceId
           });
 
-          // Process documents that have at least a title (file and document number are optional)
-          if (doc.title) {
+          // Process documents that have at least a service and expiry date
+          if (doc.serviceId && doc.expiryDate) {
             try {
               let fileUrl = null;
 
               // Upload file to Supabase Storage if file exists
               if (doc.file) {
-                console.log('📤 Uploading file for document:', doc.title);
-                fileUrl = await uploadDocumentToSupabase(doc.file, companyId, doc.title);
+                console.log('📤 Uploading file for document');
+                fileUrl = await uploadDocumentToSupabase(doc.file, companyId, `document_${Date.now()}`);
                 console.log('✅ File uploaded successfully:', fileUrl);
               }
+
+              // Get service name for document title
+              const service = services.find(s => s.id === doc.serviceId);
+              const documentTitle = service ? `${service.name} Document` : 'Service Document';
 
               // Save document metadata to database
               const documentData = {
                 company_id: companyId,
-                title: doc.title,
-                document_number: doc.documentNumber || null,
-                expiry_date: doc.expiryDate || null,
-                service_id: doc.serviceId || null,
+                title: documentTitle,
+                document_number: null,
+                expiry_date: doc.expiryDate,
+                service_id: doc.serviceId,
                 file_attachments: fileUrl ? [{
                   name: doc.file?.name,
                   url: fileUrl,
@@ -568,29 +566,27 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
               if (docError) {
                 console.error('❌ Error saving document:', docError);
-                toast.error(`Failed to save document: ${doc.title}`);
+                toast.error(`Failed to save document: ${documentTitle}`);
               } else {
-                console.log('✅ Document saved successfully:', doc.title);
+                console.log('✅ Document saved successfully:', documentTitle);
 
-                // Create reminder if expiry date is provided
-                if (doc.expiryDate) {
-                  console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
-                  await createReminder(companyId, doc.title, doc.expiryDate, 'company_document', doc.serviceId);
+                // Create reminder for expiry date (required field)
+                console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
+                await createReminder(companyId, documentTitle, doc.expiryDate, 'company_document', doc.serviceId);
 
-                  // Dispatch event to notify other components about reminder creation
-                  window.dispatchEvent(new CustomEvent('reminderCreated', {
-                    detail: { companyId, documentTitle: doc.title, expiryDate: doc.expiryDate }
-                  }));
-                } else {
-                  console.log('ℹ️ No expiry date for document:', doc.title);
-                }
+                // Dispatch event to notify other components about reminder creation
+                window.dispatchEvent(new CustomEvent('reminderCreated', {
+                  detail: { companyId, documentTitle: documentTitle, expiryDate: doc.expiryDate }
+                }));
               }
             } catch (error) {
               console.error('❌ Error processing document:', error);
-              toast.error(`Failed to process document: ${doc.title}`);
+              const service = services.find(s => s.id === doc.serviceId);
+              const documentTitle = service ? `${service.name} Document` : 'Service Document';
+              toast.error(`Failed to process document: ${documentTitle}`);
             }
           } else {
-            console.log('⚠️ Skipping document without title');
+            console.log('⚠️ Skipping document without service or expiry date');
           }
         }
 
@@ -686,31 +682,33 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         for (const doc of documents) {
           console.log('🔄 Processing individual document:', {
             hasFile: !!doc.file,
-            hasTitle: !!doc.title,
-            hasDocNumber: !!doc.documentNumber,
             hasExpiryDate: !!doc.expiryDate,
-            title: doc.title
+            hasServiceId: !!doc.serviceId
           });
 
-          // Process documents that have at least a title
-          if (doc.title) {
+          // Process documents that have at least a service and expiry date
+          if (doc.serviceId && doc.expiryDate) {
             try {
               let fileUrl = null;
 
               // Upload file to Supabase Storage if file exists
               if (doc.file) {
-                console.log('📤 Uploading file for individual document:', doc.title);
-                fileUrl = await uploadDocumentToSupabase(doc.file, createdIndividual.id, doc.title);
+                console.log('📤 Uploading file for individual document');
+                fileUrl = await uploadDocumentToSupabase(doc.file, createdIndividual.id, `document_${Date.now()}`);
                 console.log('✅ Individual file uploaded successfully:', fileUrl);
               }
+
+              // Get service name for document title
+              const service = services.find(s => s.id === doc.serviceId);
+              const documentTitle = service ? `${service.name} Document` : 'Service Document';
 
               // Prepare document data for individual_documents table
               const documentData = {
                 individual_id: createdIndividual.id,
-                title: doc.title,
-                document_number: doc.documentNumber || null,
-                issue_date: doc.issueDate || null,
-                expiry_date: doc.expiryDate || null,
+                title: documentTitle,
+                document_number: null,
+                issue_date: null,
+                expiry_date: doc.expiryDate,
                 document_type: 'individual_document',
                 file_attachments: fileUrl ? [{ name: doc.file?.name, url: fileUrl }] : [],
                 created_by: user?.name || 'System',
@@ -725,28 +723,28 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
               if (docError) {
                 console.error('❌ Error saving individual document:', docError);
-                toast.error(`Failed to save document: ${doc.title}`);
+                toast.error(`Failed to save document: ${documentTitle}`);
               } else {
-                console.log('✅ Individual document saved successfully:', doc.title);
+                console.log('✅ Individual document saved successfully:', documentTitle);
 
-                // Create reminder if expiry date is provided
-                if (doc.expiryDate) {
-                  console.log('📅 Creating reminder for individual document with expiry date:', doc.expiryDate);
-                  await dbHelpers.createIndividualDocumentReminder(
-                    createdIndividual.id,
-                    doc.title,
-                    doc.expiryDate,
-                    'individual_document',
-                    newIndividual.individualName
-                  );
-                } else {
-                  console.log('ℹ️ No expiry date for individual document:', doc.title);
-                }
+                // Create reminder for expiry date (required field)
+                console.log('📅 Creating reminder for individual document with expiry date:', doc.expiryDate);
+                await dbHelpers.createIndividualDocumentReminder(
+                  createdIndividual.id,
+                  documentTitle,
+                  doc.expiryDate,
+                  'individual_document',
+                  newIndividual.individualName
+                );
               }
             } catch (error) {
               console.error('❌ Error processing individual document:', error);
-              toast.error(`Failed to process document: ${doc.title}`);
+              const service = services.find(s => s.id === doc.serviceId);
+              const documentTitle = service ? `${service.name} Document` : 'Service Document';
+              toast.error(`Failed to process document: ${documentTitle}`);
             }
+          } else {
+            console.log('⚠️ Skipping individual document without service or expiry date');
           }
         }
 
@@ -2134,42 +2132,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Document Title *
-                            </label>
-                            <input
-                              type="text"
-                              value={doc.title}
-                              onChange={(e) => updateDocument(doc.id, 'title', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="e.g., Trade License, MOH Certificate"
-                              required
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Document Number
-                            </label>
-                            <input
-                              type="text"
-                              value={doc.documentNumber}
-                              onChange={(e) => updateDocument(doc.id, 'documentNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Document ID/Number"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Related Service (Optional)
+                              Related Service *
                             </label>
                             <select
                               value={doc.serviceId || ''}
                               onChange={(e) => updateDocument(doc.id, 'serviceId', e.target.value || undefined)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              required
                             >
                               <option value="">Select a service...</option>
                               {services.map((service) => (
@@ -2185,13 +2157,14 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
 
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Expiry Date (Optional)
+                              Expiry Date *
                             </label>
                             <input
                               type="date"
                               value={doc.expiryDate}
                               onChange={(e) => updateDocument(doc.id, 'expiryDate', e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              required
                             />
                             <p className="text-xs text-gray-500 mt-1">
                               Documents with expiry dates will create automatic reminders
@@ -2222,7 +2195,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                                     docId: doc.id,
                                     hasFile: !!doc.file,
                                     hasPreview: !!doc.preview,
-                                    title: doc.title
+                                    serviceId: doc.serviceId
                                   });
 
                                   handleFileUpload(doc.id, file);

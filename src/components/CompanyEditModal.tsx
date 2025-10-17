@@ -47,8 +47,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   // Document upload state
   const [documents, setDocuments] = useState<Array<{
     id: string;
-    title: string;
-    documentNumber: string;
     expiryDate: string;
     serviceId?: string;
     file: File | null;
@@ -58,6 +56,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   }>>([]);
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
+
+
 
   // Image preview modal state
   const [showImageModal, setShowImageModal] = useState(false);
@@ -139,6 +139,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
   const loadCompanyDocuments = async () => {
     try {
+      console.log('🔍 Loading documents for company:', company.id);
+
       const { data, error } = await supabase
         .from('company_documents')
         .select('*')
@@ -146,13 +148,16 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         .eq('status', 'active')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database error loading documents:', error);
+        throw error;
+      }
+
+      console.log('✅ Loaded', data?.length || 0, 'documents for company');
 
       // Transform database documents to component state format
       const transformedDocs = (data || []).map((doc: any) => ({
         id: doc.id,
-        title: doc.title || '',
-        documentNumber: doc.document_number || '',
         expiryDate: doc.expiry_date || '',
         serviceId: doc.service_id || undefined,
         file: null, // Existing files are already uploaded
@@ -160,20 +165,12 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         preview: 'existing-file'
       }));
 
-      console.log('📄 Loaded company documents:', transformedDocs.map(d => ({
-        id: d.id,
-        title: d.title,
-        hasFileUrl: !!d.fileUrl,
-        fileUrl: d.fileUrl
-      })));
-
       setDocuments(transformedDocs);
       setDocumentsLoaded(true);
 
       // Generate previews for existing files
       transformedDocs.forEach(doc => {
         if (doc.fileUrl) {
-          console.log('🔍 Generating preview for document:', { id: doc.id, fileUrl: doc.fileUrl });
           generateExistingFilePreview(doc.fileUrl, doc.id);
         }
       });
@@ -189,8 +186,6 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newDoc = {
       id: tempId,
-      title: '',
-      documentNumber: '',
       expiryDate: '',
       file: null,
       preview: undefined
@@ -209,7 +204,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
       console.log('📊 Documents state after update:', updatedDocs.map(doc => ({
         id: doc.id,
-        title: doc.title,
+        serviceId: doc.serviceId,
         hasFile: !!doc.file,
         fileName: doc.file?.name,
         hasPreview: !!doc.preview
@@ -543,28 +538,30 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
       for (const doc of documents) {
         console.log('🔄 Processing document:', {
           hasFile: !!doc.file,
-          hasTitle: !!doc.title,
-          hasDocNumber: !!doc.documentNumber,
           hasExpiryDate: !!doc.expiryDate,
-          title: doc.title
+          hasServiceId: !!doc.serviceId
         });
 
-        // Process documents that have at least a title (file and document number are optional)
-        if (doc.title) {
+        // Process documents that have at least a service and expiry date
+        if (doc.serviceId && doc.expiryDate) {
           documentsProcessed++;
           try {
             let fileUrl = doc.fileUrl; // Keep existing file URL if no new file
 
+            // Get service name for document title
+            const service = services.find(s => s.id === doc.serviceId);
+            const documentTitle = service ? `${service.name} Document` : 'Service Document';
+
             // Upload new file to Supabase Storage if file exists
             if (doc.file) {
-              console.log('📤 Uploading new file for document:', doc.title);
+              console.log('📤 Uploading new file for document');
               try {
-                fileUrl = await uploadDocumentToSupabase(doc.file, company.id, doc.title);
+                fileUrl = await uploadDocumentToSupabase(doc.file, company.id, `document_${Date.now()}`);
                 console.log('✅ File uploaded successfully:', fileUrl);
               } catch (uploadError) {
                 console.error('❌ File upload failed, saving document without file:', uploadError);
-                fileUrl = null; // Continue without file
-                toast.error(`File upload failed for "${doc.title}". Document saved without file. Please run the database migration script to fix storage.`);
+                fileUrl = undefined; // Continue without file
+                toast.error(`File upload failed for "${documentTitle}". Document saved without file. Please run the database migration script to fix storage.`);
               }
             }
 
@@ -574,10 +571,10 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
             if (isExistingDocument) {
               // Update existing document
               const updateData = {
-                title: doc.title,
-                document_number: doc.documentNumber || null,
-                expiry_date: doc.expiryDate || null,
-                service_id: doc.serviceId || null,
+                title: documentTitle,
+                document_number: null,
+                expiry_date: doc.expiryDate,
+                service_id: doc.serviceId,
                 ...(fileUrl && {
                   file_attachments: [{
                     name: doc.file?.name || 'existing-file',
@@ -594,7 +591,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
               try {
                 // Try using database helper first
                 const updatedDoc = await dbHelpers.updateCompanyDocument(doc.id, updateData);
-                console.log('✅ Document updated successfully via helper:', doc.title);
+                console.log('✅ Document updated successfully via helper:', documentTitle);
               } catch (helperError) {
                 console.log('⚠️ Helper failed, trying direct update:', helperError);
 
@@ -609,23 +606,23 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
                   // Check if it's an RLS policy error
                   if (updateError.message?.includes('row-level security policy') || updateError.code === '42501') {
-                    toast.error(`Document "${doc.title}" updated locally but database access restricted. Contact administrator.`);
+                    toast.error(`Document "${documentTitle}" updated locally but database access restricted. Contact administrator.`);
                     console.log('ℹ️ RLS policy prevents document update - changes saved locally only');
                   } else {
-                    toast.error(`Failed to update document: ${doc.title} - ${updateError.message}`);
+                    toast.error(`Failed to update document: ${documentTitle} - ${updateError.message}`);
                   }
                 } else {
-                  console.log('✅ Document updated successfully via direct update:', doc.title);
+                  console.log('✅ Document updated successfully via direct update:', documentTitle);
                 }
               }
             } else {
               // Create new document
               const documentData = {
                 company_id: company.id,
-                title: doc.title,
-                document_number: doc.documentNumber || null,
-                expiry_date: doc.expiryDate || null,
-                service_id: doc.serviceId || null,
+                title: documentTitle,
+                document_number: null,
+                expiry_date: doc.expiryDate,
+                service_id: doc.serviceId,
                 file_attachments: fileUrl ? [{
                   name: doc.file?.name,
                   url: fileUrl,
@@ -641,7 +638,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
               try {
                 // Try using database helper first
                 const savedDoc = await dbHelpers.createCompanyDocument(documentData);
-                console.log('✅ Document saved successfully via helper:', doc.title);
+                console.log('✅ Document saved successfully via helper:', documentTitle);
               } catch (helperError) {
                 console.log('⚠️ Helper failed, trying direct insert:', helperError);
 
@@ -655,37 +652,35 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
                   // Check if it's an RLS policy error
                   if (docError.message?.includes('row-level security policy') || docError.code === '42501') {
-                    toast.error(`Document "${doc.title}" saved locally but database access restricted. Contact administrator to enable document storage.`);
+                    toast.error(`Document "${documentTitle}" saved locally but database access restricted. Contact administrator to enable document storage.`);
                     console.log('ℹ️ RLS policy prevents document insert - document saved locally only');
                   } else {
-                    toast.error(`Failed to save document: ${doc.title} - ${docError.message}`);
+                    toast.error(`Failed to save document: ${documentTitle} - ${docError.message}`);
                   }
                 } else {
-                  console.log('✅ Document saved successfully via direct insert:', doc.title);
+                  console.log('✅ Document saved successfully via direct insert:', documentTitle);
                 }
               }
             }
 
-            // Create reminder if expiry date is provided (for both new and updated documents)
-            if (doc.expiryDate) {
-              console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
-              await createReminder(company.id, doc.title, doc.expiryDate, 'company_document', doc.serviceId);
+            // Create reminder for expiry date (required field)
+            console.log('📅 Creating reminder for document with expiry date:', doc.expiryDate);
+            await createReminder(company.id, documentTitle, doc.expiryDate, 'company_document', doc.serviceId);
 
-              // Dispatch event to notify other components about reminder creation
-              window.dispatchEvent(new CustomEvent('reminderCreated', {
-                detail: { companyId: company.id, documentTitle: doc.title, expiryDate: doc.expiryDate }
-              }));
-            } else {
-              console.log('ℹ️ No expiry date for document:', doc.title);
-            }
+            // Dispatch event to notify other components about reminder creation
+            window.dispatchEvent(new CustomEvent('reminderCreated', {
+              detail: { companyId: company.id, documentTitle: documentTitle, expiryDate: doc.expiryDate }
+            }));
           } catch (docError) {
             documentsWithErrors++;
             const errorMsg = docError instanceof Error ? docError.message : 'Unknown error';
-            errorMessages.push(`${doc.title}: ${errorMsg}`);
-            console.error('❌ Error processing document:', doc.title, docError);
+            const service = services.find(s => s.id === doc.serviceId);
+            const documentTitle = service ? `${service.name} Document` : 'Service Document';
+            errorMessages.push(`${documentTitle}: ${errorMsg}`);
+            console.error('❌ Error processing document:', documentTitle, docError);
           }
         } else {
-          console.log('⚠️ Skipping document without title:', doc);
+          console.log('⚠️ Skipping document without service or expiry date:', doc);
         }
       }
 
@@ -1160,7 +1155,12 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
             <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Documents & Certificates</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Documents & Certificates
+                    <span className={`ml-2 px-2 py-1 text-xs rounded ${documents.length > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {documents.length} docs loaded
+                    </span>
+                  </h3>
                   <p className="text-sm text-gray-600 mt-1">
                     Upload company documents and certificates (optional). Documents with expiry dates will automatically create reminders.
                   </p>
@@ -1175,7 +1175,22 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 </button>
               </div>
 
-              {documents.length > 0 && (
+
+
+
+
+              {documents.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">No Documents Found</h4>
+                  <p className="text-gray-600">
+                    {documentsLoaded
+                      ? 'This company has no documents yet. Click "Add Document" to upload the first document.'
+                      : 'Loading documents...'
+                    }
+                  </p>
+                </div>
+              ) : (
                 <div className="space-y-4">
                   {documents.map((doc, index) => (
                     <div key={doc.id} className="p-4 border border-gray-200 rounded-lg bg-gray-50">
@@ -1190,42 +1205,16 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Document Title *
-                          </label>
-                          <input
-                            type="text"
-                            value={doc.title}
-                            onChange={(e) => updateDocument(doc.id, 'title', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="e.g., Trade License, MOH Certificate"
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Document Number
-                          </label>
-                          <input
-                            type="text"
-                            value={doc.documentNumber}
-                            onChange={(e) => updateDocument(doc.id, 'documentNumber', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Document ID/Number"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Related Service (Optional)
+                            Related Service *
                           </label>
                           <select
                             value={doc.serviceId || ''}
                             onChange={(e) => updateDocument(doc.id, 'serviceId', e.target.value || undefined)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            required
                           >
                             <option value="">Select a service...</option>
                             {services.map((service) => (
@@ -1241,13 +1230,14 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Expiry Date (Optional)
+                            Expiry Date *
                           </label>
                           <input
                             type="date"
                             value={doc.expiryDate}
                             onChange={(e) => updateDocument(doc.id, 'expiryDate', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            required
                           />
                           <p className="text-xs text-gray-500 mt-1">
                             Documents with expiry dates will create automatic reminders
@@ -1278,7 +1268,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                                   docId: doc.id,
                                   hasFile: !!doc.file,
                                   hasPreview: !!doc.preview,
-                                  title: doc.title
+                                  serviceId: doc.serviceId
                                 });
 
                                 handleFileUpload(doc.id, file, e.target);
@@ -1339,7 +1329,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                                     <div className="relative group">
                                       <img
                                         src={doc.preview}
-                                        alt={`Preview of ${doc.title}`}
+                                        alt="Document Preview"
                                         className="max-w-full max-h-48 object-contain rounded border border-gray-300 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
                                         onError={(e) => {
                                           console.error('Preview image failed to load');
@@ -1347,7 +1337,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                                         }}
                                         onClick={() => {
                                           setModalImageSrc(doc.preview || '');
-                                          setModalImageTitle(doc.title || 'Document Preview');
+                                          setModalImageTitle('Document Preview');
                                           setShowImageModal(true);
                                         }}
                                       />

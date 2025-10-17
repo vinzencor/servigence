@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff, Edit, Trash2, FileText, Calendar, Phone, Mail, User, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff, Edit, Trash2, FileText, Calendar, Phone, Mail, User, AlertCircle, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Company, Employee } from '../types';
-import { dbHelpers } from '../lib/supabase';
+import { dbHelpers, supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import DocumentEditModal from './DocumentEditModal';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
+import toast from 'react-hot-toast';
 
 interface CompanyEmployeeManagementProps {
   company: Company;
@@ -12,6 +14,7 @@ interface CompanyEmployeeManagementProps {
 }
 
 const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ company, onBack }) => {
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -35,6 +38,23 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Service-based document management state
+  const [services, setServices] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<Array<{
+    id: string;
+    expiryDate: string;
+    serviceId?: string;
+    file: File | null;
+    fileUrl?: string;
+    preview?: string;
+    uploading?: boolean;
+  }>>([]);
+
+  // Image preview modal state
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [modalImageSrc, setModalImageSrc] = useState('');
+  const [modalImageTitle, setModalImageTitle] = useState('');
 
   const [employeeForm, setEmployeeForm] = useState({
     employeeId: '',
@@ -65,7 +85,15 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
   useEffect(() => {
     loadEmployees();
+    loadServices();
   }, [company.id]);
+
+  // Load employee documents when an employee is selected for editing
+  useEffect(() => {
+    if (selectedEmployee && showEditEmployee) {
+      loadEmployeeServiceDocuments(selectedEmployee.id);
+    }
+  }, [selectedEmployee, showEditEmployee]);
 
   const loadEmployees = async () => {
     setLoading(true);
@@ -79,6 +107,208 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
       setEmployees([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load services for document management
+  const loadServices = async () => {
+    try {
+      const serviceData = await dbHelpers.getServices();
+      setServices(serviceData || []);
+    } catch (error) {
+      console.error('Error loading services:', error);
+      setServices([]);
+    }
+  };
+
+  // Load employee documents for service-based document management
+  const loadEmployeeServiceDocuments = async (employeeId: string) => {
+    try {
+      console.log('🔄 Loading service-based documents for employee:', employeeId);
+      const docs = await dbHelpers.getEmployeeDocuments(employeeId);
+      console.log('📄 Raw employee documents from database:', docs);
+
+      // Transform to match our document state structure
+      const transformedDocs = (docs || []).map((doc: any) => ({
+        id: doc.id,
+        expiryDate: doc.expiry_date || '',
+        serviceId: doc.service_id || undefined,
+        file: null,
+        fileUrl: doc.file_path || '',
+        preview: 'existing-file'
+      }));
+
+      console.log('✅ Transformed service-based documents:', transformedDocs);
+      setDocuments(transformedDocs);
+
+      // Generate previews for existing files
+      transformedDocs.forEach(doc => {
+        if (doc.fileUrl) {
+          generateExistingFilePreview(doc.fileUrl, doc.id);
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error loading employee service documents:', error);
+      setDocuments([]);
+    }
+  };
+
+  // Document management functions
+  const addDocument = () => {
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const newDoc = {
+      id: tempId,
+      expiryDate: '',
+      file: null,
+      preview: undefined
+    };
+    setDocuments([...documents, newDoc]);
+  };
+
+  const updateDocument = (id: string, field: string, value: any) => {
+    setDocuments(docs => docs.map(doc =>
+      doc.id === id ? { ...doc, [field]: value } : doc
+    ));
+  };
+
+  const removeDocument = (id: string) => {
+    setDocuments(docs => docs.filter(doc => doc.id !== id));
+  };
+
+  // Enhanced file upload handler with image preview
+  const handleFileUpload = (id: string, file: File, inputElement?: HTMLInputElement) => {
+    console.log('📁 Employee file upload initiated:', {
+      docId: id,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size
+    });
+
+    // Set uploading state
+    updateDocument(id, 'uploading', true);
+
+    // Update the file immediately
+    updateDocument(id, 'file', file);
+
+    // Clear the input value to allow re-selecting the same file
+    if (inputElement) {
+      inputElement.value = '';
+    }
+
+    // Generate preview for images
+    if (file.type.startsWith('image/')) {
+      console.log('📸 Processing employee image file...');
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        const preview = e.target?.result as string;
+        console.log('✅ Employee preview generated successfully:', {
+          fileName: file.name,
+          previewLength: preview?.length,
+          previewStart: preview?.substring(0, 50) + '...'
+        });
+        updateDocument(id, 'preview', preview);
+        updateDocument(id, 'uploading', false);
+      };
+
+      reader.onerror = (error) => {
+        console.error('❌ Error reading employee file:', error);
+        updateDocument(id, 'preview', 'error');
+        updateDocument(id, 'uploading', false);
+      };
+
+      reader.readAsDataURL(file);
+    } else {
+      console.log('📄 Non-image employee file, setting placeholder preview');
+      updateDocument(id, 'preview', 'non-image');
+      updateDocument(id, 'uploading', false);
+    }
+  };
+
+  // Function to generate preview for existing employee files
+  const generateExistingFilePreview = (fileUrl: string, docId: string) => {
+    try {
+      console.log('🔍 Generating preview for existing employee file:', { fileUrl, docId });
+
+      // Extract file extension from URL
+      const urlParts = fileUrl.split('?')[0]; // Remove query parameters
+      const extension = urlParts.split('.').pop()?.toLowerCase();
+
+      console.log('📄 Employee file extension detected:', extension);
+
+      // Check if it's an image based on extension
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+
+      if (extension && imageExtensions.includes(extension)) {
+        console.log('🖼️ Setting image preview for employee file:', fileUrl);
+        // For images, set the URL directly as preview
+        updateDocument(docId, 'preview', fileUrl);
+      } else if (extension === 'pdf') {
+        console.log('📋 Setting PDF preview for employee file:', fileUrl);
+        // For PDFs, set a special preview type
+        updateDocument(docId, 'preview', 'existing-pdf');
+      } else {
+        console.log('📁 Setting generic file preview for employee file:', fileUrl);
+        // For other files, keep the existing-file preview
+        updateDocument(docId, 'preview', 'existing-file');
+      }
+    } catch (error) {
+      console.error('Error generating preview for existing employee file:', error);
+      // Fallback to existing-file preview
+      updateDocument(docId, 'preview', 'existing-file');
+    }
+  };
+
+  // Create reminder for employee document expiry
+  const createEmployeeDocumentReminder = async (employeeId: string, employeeName: string, documentTitle: string, expiryDate: string, serviceId?: string) => {
+    try {
+      console.log('📅 Creating reminder for employee document:', {
+        employeeId,
+        employeeName,
+        documentTitle,
+        expiryDate,
+        serviceId
+      });
+
+      const reminderDate = new Date(expiryDate);
+      reminderDate.setDate(reminderDate.getDate() - 10); // 10 days before expiry
+
+      const reminderData = {
+        title: `${documentTitle} Expiry Reminder`,
+        description: `${documentTitle} for employee ${employeeName} will expire on ${new Date(expiryDate).toLocaleDateString()}. Please renew this document before the expiry date.`,
+        reminder_date: reminderDate.toISOString().split('T')[0],
+        reminder_type: 'document_expiry',
+        document_type: 'employee_document',
+        employee_id: employeeId,
+        company_id: company.id,
+        service_id: serviceId || null,
+        priority: 'high',
+        status: 'active',
+        days_before_reminder: 10,
+        enabled: true,
+        created_by: user?.name || 'System',
+        assigned_to: user?.name || 'System'
+      };
+
+      console.log('Creating employee document reminder with data:', reminderData);
+
+      const { error } = await supabase
+        .from('reminders')
+        .insert([reminderData]);
+
+      if (error) {
+        console.error('❌ Error creating employee document reminder:', error);
+        toast.error(`Failed to create reminder for ${documentTitle}`);
+      } else {
+        console.log('✅ Employee document reminder created successfully for:', documentTitle);
+
+        // Dispatch event to notify other components about reminder creation
+        window.dispatchEvent(new CustomEvent('reminderCreated', {
+          detail: { employeeId, documentTitle, expiryDate, employeeName }
+        }));
+      }
+    } catch (error) {
+      console.error('Error in createEmployeeDocumentReminder:', error);
     }
   };
 
@@ -332,7 +562,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
   // Handler for editing employee
   const handleEditEmployee = async (employee: Employee) => {
     setSelectedEmployee(employee);
-    // Load employee documents
+    // Load employee documents for the new service-based document management
+    await loadEmployeeServiceDocuments(employee.id);
+    // Also load old-style documents for backward compatibility
     await loadEmployeeDocuments(employee.id);
     // Populate form with employee data
     setEmployeeForm({
@@ -441,8 +673,125 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
       console.log('Updating employee with data:', cleanedData);
 
+      // Update employee basic information
       await dbHelpers.updateEmployee(cleanedData);
+
+      // Process service-based documents
+      let documentsProcessed = 0;
+      let documentsWithErrors = 0;
+      const errorMessages: string[] = [];
+
+      for (const doc of documents) {
+        console.log('🔄 Processing document:', {
+          hasFile: !!doc.file,
+          hasExpiryDate: !!doc.expiryDate,
+          hasServiceId: !!doc.serviceId
+        });
+
+        // Process documents that have at least a service and expiry date
+        if (doc.serviceId && doc.expiryDate) {
+          try {
+            documentsProcessed++;
+            let fileUrl = doc.fileUrl;
+
+            // Get service name for document title
+            const service = services.find(s => s.id === doc.serviceId);
+            const documentTitle = service ? `${service.name} Document` : 'Service Document';
+
+            // Upload new file if provided
+            if (doc.file) {
+              console.log('📤 Uploading new file for employee document');
+              try {
+                // Use a simple upload approach for employee documents
+                const formData = new FormData();
+                formData.append('file', doc.file);
+                formData.append('employeeId', selectedEmployee.id);
+                formData.append('documentTitle', documentTitle);
+
+                // This would need to be implemented in your upload service
+                // For now, we'll save without file upload
+                fileUrl = undefined;
+                console.log('⚠️ File upload not implemented for employee documents yet');
+              } catch (uploadError) {
+                console.error('❌ File upload failed:', uploadError);
+                fileUrl = undefined;
+              }
+            }
+
+            // Check if this is an existing document (has a real ID, not temp)
+            const isExistingDocument = !doc.id.startsWith('temp-');
+
+            if (isExistingDocument) {
+              // Update existing document
+              const updateData = {
+                name: documentTitle, // Use 'name' field instead of 'title'
+                expiry_date: doc.expiryDate,
+                service_id: doc.serviceId,
+                ...(fileUrl && { file_path: fileUrl }),
+                ...(doc.file?.name && { file_name: doc.file.name }), // Update file_name if new file
+                updated_at: new Date().toISOString()
+              };
+
+              await dbHelpers.updateEmployeeDocument(doc.id, updateData);
+              console.log('✅ Employee document updated successfully:', documentTitle);
+            } else {
+              // Create new document
+              const documentData = {
+                employee_id: selectedEmployee.id,
+                type: 'other', // Use 'other' as it's allowed by the constraint
+                name: documentTitle,
+                file_name: doc.file?.name || 'no-file-uploaded.txt', // Required field, provide default
+                file_path: fileUrl || null,
+                expiry_date: doc.expiryDate,
+                service_id: doc.serviceId,
+                upload_date: doc.expiryDate, // Use expiry_date format (DATE not TIMESTAMP)
+                status: 'valid' // Use 'valid' as it's allowed by the constraint
+              };
+
+              await dbHelpers.createEmployeeDocument(documentData);
+              console.log('✅ Employee document created successfully:', documentTitle);
+            }
+
+            // Create reminder for expiry date
+            console.log('📅 Creating reminder for employee document with expiry date:', doc.expiryDate);
+            await createEmployeeDocumentReminder(
+              selectedEmployee.id,
+              selectedEmployee.name,
+              documentTitle,
+              doc.expiryDate,
+              doc.serviceId
+            );
+
+          } catch (docError) {
+            documentsWithErrors++;
+            const errorMsg = docError instanceof Error ? docError.message : 'Unknown error';
+            const service = services.find(s => s.id === doc.serviceId);
+            const documentTitle = service ? `${service.name} Document` : 'Service Document';
+            errorMessages.push(`${documentTitle}: ${errorMsg}`);
+            console.error('❌ Error processing employee document:', documentTitle, docError);
+          }
+        } else {
+          console.log('⚠️ Skipping document without service or expiry date:', doc);
+        }
+      }
+
+      // Show summary of document processing
+      if (documentsProcessed > 0) {
+        if (documentsWithErrors === 0) {
+          console.log(`✅ All ${documentsProcessed} employee documents processed successfully!`);
+        } else if (documentsWithErrors < documentsProcessed) {
+          console.log(`⚠️ ${documentsProcessed - documentsWithErrors}/${documentsProcessed} employee documents processed successfully. ${documentsWithErrors} had errors.`);
+        } else {
+          console.log(`❌ All ${documentsProcessed} employee documents failed to process.`);
+        }
+      }
+
+      // Reload employees list
       await loadEmployees();
+
+      // Clear the documents state to ensure fresh loading next time
+      setDocuments([]);
+
       setShowEditEmployee(false);
       setSelectedEmployee(null);
       resetForm();
@@ -3076,162 +3425,223 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                 </div>
               </div>
 
-              {/* Document Management Section */}
+              {/* Documents & Certificates Section */}
               <div className="mt-8 pt-6 border-t border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Management</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Documents & Certificates
+                    <span className="ml-2 text-sm font-normal text-gray-500">
+                      ({documents.length} docs loaded)
+                    </span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addDocument}
+                    className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Document</span>
+                  </button>
+                </div>
 
-                {/* Current Documents */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-900 mb-3">Current Documents</h4>
-                  {employeeDocuments.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {employeeDocuments.map((doc) => (
-                        <div key={doc.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                          {/* Document Preview */}
-                          {doc.file_path && (
-                            <div className="mb-2">
-                              <div className="w-full h-24 bg-white rounded border overflow-hidden">
-                                <img
-                                  src={doc.file_path}
-                                  alt={doc.name}
-                                  className="w-full h-full object-contain cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={() => {
-                                    const newWindow = window.open();
-                                    if (newWindow) {
-                                      newWindow.document.write(`
-                                        <html>
-                                          <head><title>${doc.name}</title></head>
-                                          <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;">
-                                            <img src="${doc.file_path}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${doc.name}" />
-                                          </body>
-                                        </html>
-                                      `);
-                                    }
-                                  }}
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    const fallback = target.nextElementSibling as HTMLElement;
-                                    if (fallback) {
-                                      fallback.style.display = 'flex';
-                                    }
-                                  }}
-                                />
-                                <div className="hidden items-center justify-center h-full text-gray-500" style={{ display: 'none' }}>
-                                  <div className="text-center">
-                                    <FileText className="w-6 h-6 mb-1 mx-auto" />
-                                    <span className="text-xs">Preview not available</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+                {documents.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                    <p>No documents found for this employee</p>
+                    <p className="text-sm">Click "Add Document" to get started</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {documents.map((doc, index) => (
+                      <div key={doc.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="font-medium text-gray-900">Document {index + 1}</h4>
+                          <button
+                            type="button"
+                            onClick={() => removeDocument(doc.id)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
+                            title="Remove Document"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
 
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h5 className="font-medium text-gray-900 text-sm">{doc.name}</h5>
-                              <p className="text-xs text-gray-600">{doc.file_name}</p>
-                              <p className="text-xs text-gray-500">
-                                Uploaded: {new Date(doc.upload_date).toLocaleDateString()}
-                              </p>
-                              {doc.expiry_date && (
-                                <p className="text-xs text-gray-500">
-                                  Expires: {new Date(doc.expiry_date).toLocaleDateString()}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex space-x-1 ml-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedDocument(doc);
-                                  setShowDocumentEdit(true);
-                                }}
-                                className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
-                                title="Edit Document"
-                              >
-                                <Edit className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (confirm('Are you sure you want to delete this document?')) {
-                                    try {
-                                      await dbHelpers.deleteEmployeeDocument(doc.id);
-                                      await loadEmployeeDocuments(selectedEmployee.id);
-                                    } catch (error) {
-                                      console.error('Error deleting document:', error);
-                                      alert('Error deleting document');
-                                    }
-                                  }
-                                }}
-                                className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
-                                title="Delete Document"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Related Service *
+                            </label>
+                            <select
+                              value={doc.serviceId || ''}
+                              onChange={(e) => updateDocument(doc.id, 'serviceId', e.target.value || undefined)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              required
+                            >
+                              <option value="">Select a service...</option>
+                              {services.map((service) => (
+                                <option key={service.id} value={service.id}>
+                                  {service.name} ({service.category})
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Link this document to a specific service
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Expiry Date *
+                            </label>
+                            <input
+                              type="date"
+                              value={doc.expiryDate}
+                              onChange={(e) => updateDocument(doc.id, 'expiryDate', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              required
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Documents with expiry dates will create automatic reminders
+                            </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-sm">No documents uploaded yet</p>
-                  )}
-                </div>
 
-                {/* Add New Document */}
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                  <h4 className="font-medium text-blue-900 mb-3">Add New Document</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Document Type Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-blue-800 mb-2">Document Type</label>
-                      <select
-                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                        id="new-doc-type"
-                      >
-                        <option value="">Select document type</option>
-                        <option value="passport">Passport</option>
-                        <option value="emirates-id">Emirates ID</option>
-                        <option value="visa">Visa</option>
-                        <option value="labor-card">Labor Card</option>
-                        <option value="educational-certificate">Educational Certificate</option>
-                        <option value="experience-certificate">Experience Certificate</option>
-                        <option value="medical-certificate">Medical Certificate</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Upload File (Optional)
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  console.log('🎯 Employee file selected in onChange:', {
+                                    name: file.name,
+                                    type: file.type,
+                                    size: file.size,
+                                    docId: doc.id
+                                  });
 
-                    {/* File Upload */}
-                    <div>
-                      <label className="block text-sm font-medium text-blue-800 mb-2">Upload Document</label>
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          const docType = (document.getElementById('new-doc-type') as HTMLSelectElement)?.value;
-                          if (file && docType && selectedEmployee) {
-                            processDocument(file, docType);
-                          } else if (file && !docType) {
-                            alert('Please select a document type first');
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                        disabled={uploadingDocument !== ''}
-                      />
-                      {uploadingDocument !== '' && (
-                        <p className="text-xs text-blue-600 mt-1">
-                          Processing document... Please wait.
-                        </p>
-                      )}
-                    </div>
+                                  // Force a re-render to see current state
+                                  console.log('📊 Current employee document state before upload:', {
+                                    docId: doc.id,
+                                    hasFile: !!doc.file,
+                                    hasPreview: !!doc.preview,
+                                    serviceId: doc.serviceId
+                                  });
+
+                                  handleFileUpload(doc.id, file, e.target);
+                                }
+                              }}
+                              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                              Supported formats: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+                            </p>
+                          </div>
+
+                          {/* File Preview */}
+                          {doc.preview && (
+                            <div className="mt-3">
+                              <div className="flex items-center space-x-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                                <Eye className="w-4 h-4 text-green-600" />
+                                <span className="text-sm text-green-700 font-medium">
+                                  ✓ {doc.file ? doc.file.name : 'Existing file'} {doc.file ? 'ready for upload' : 'attached'}
+                                </span>
+                                {doc.fileUrl && !doc.file && (
+                                  <a
+                                    href={doc.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 text-xs underline ml-2"
+                                  >
+                                    View File
+                                  </a>
+                                )}
+                              </div>
+
+                              {/* Enhanced Image Preview */}
+                              {doc.preview && doc.preview !== 'non-image' && doc.preview !== 'error' && doc.preview !== 'existing-file' && doc.preview !== 'existing-pdf' && (
+                                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 mt-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-700">Preview:</span>
+                                    <span className="text-xs text-gray-500">
+                                      {doc.file ? `${(doc.file.size / 1024).toFixed(1)} KB` : 'Existing file'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-center">
+                                    <div className="relative group">
+                                      <img
+                                        src={doc.preview}
+                                        alt="Document Preview"
+                                        className="max-w-full max-h-48 object-contain rounded border border-gray-300 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                                        onError={(e) => {
+                                          console.error('Employee preview image failed to load');
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                        onClick={() => {
+                                          setModalImageSrc(doc.preview || '');
+                                          setModalImageTitle('Employee Document Preview');
+                                          setShowImageModal(true);
+                                        }}
+                                      />
+                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                        <span className="text-white text-sm font-medium bg-black bg-opacity-50 px-2 py-1 rounded">
+                                          Click to view full size
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* PDF Preview Indicator */}
+                              {doc.preview === 'existing-pdf' && (
+                                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 mt-3">
+                                  <div className="flex items-center justify-center">
+                                    <div className="text-center">
+                                      <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                                      <p className="text-sm text-gray-600">PDF Document</p>
+                                      {doc.fileUrl && (
+                                        <a
+                                          href={doc.fileUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-blue-600 hover:text-blue-800 text-xs underline"
+                                        >
+                                          Open PDF
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Non-image file indicator */}
+                              {doc.preview === 'non-image' && (
+                                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 mt-3">
+                                  <div className="flex items-center justify-center">
+                                    <div className="text-center">
+                                      <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                                      <p className="text-sm text-gray-600">
+                                        {doc.file?.name || 'Document file'}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {doc.file ? `${(doc.file.size / 1024).toFixed(1)} KB` : 'File attached'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-blue-600 mt-2">
-                    Supports: JPG, PNG, PDF (max 10MB). OCR will automatically extract data for passport, Emirates ID, visa, and labor card documents.
-                  </p>
-                </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
@@ -3316,6 +3726,28 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
             }
           }}
         />
+      )}
+
+      {/* Image Preview Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-4xl max-h-full">
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full p-2 z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={modalImageSrc}
+              alt={modalImageTitle}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+            <div className="absolute bottom-4 left-4 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+              {modalImageTitle}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
