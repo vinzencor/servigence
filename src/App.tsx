@@ -21,6 +21,7 @@ import EmployeeLogin from './components/EmployeeLogin';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import Chat from './components/Chat';
 import EmailTest from './components/EmailTest';
+import Reports from './components/Reports';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
@@ -199,6 +200,8 @@ function AppContent() {
         return <AccountManagement />;
       case 'invoices':
         return <InvoiceManagement />;
+      case 'reports':
+        return <Reports />;
       case 'reminders-management':
         return <RemindersManagement />;
       case 'email-test':

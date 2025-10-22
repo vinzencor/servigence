@@ -65,7 +65,9 @@ const ServiceBilling: React.FC = () => {
     assignedVendorId: '',
     vendorCost: '0',
     discount: '0',
-    cardId: ''
+    cardId: '',
+    customServiceCharges: '',
+    customGovernmentCharges: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -91,7 +93,9 @@ const ServiceBilling: React.FC = () => {
     vendorCost: '0',
     vatPercentage: '0',
     discount: '0',
-    cardId: ''
+    cardId: '',
+    customServiceCharges: '',
+    customGovernmentCharges: ''
   });
 
   const tabs = [
@@ -100,7 +104,7 @@ const ServiceBilling: React.FC = () => {
     { id: 'reports', label: 'Reports', icon: TrendingUp },
   ];
 
-  const cashTypes = [
+  const paymentTypes = [
     { value: 'cash', label: 'Cash' },
     { value: 'bank', label: 'Bank Transfer' },
     { value: 'card', label: 'Credit Card' },
@@ -335,7 +339,9 @@ const ServiceBilling: React.FC = () => {
       vendorCost: billing.vendor_cost?.toString() || '0',
       vatPercentage: billing.vat_percentage?.toString() || '0',
       discount: billing.discount?.toString() || '0',
-      cardId: billing.card_id || ''
+      cardId: billing.card_id || '',
+      customServiceCharges: billing.typing_charges?.toString() || '',
+      customGovernmentCharges: billing.government_charges?.toString() || ''
     });
 
     // Load company employees if it's a company billing
@@ -359,8 +365,13 @@ const ServiceBilling: React.FC = () => {
       }
 
       const quantity = parseInt(editBillingForm.quantity);
-      const typingCharges = selectedService.typingCharges * quantity;
-      const governmentCharges = selectedService.governmentCharges * quantity;
+      // Use custom charges if provided, otherwise use service defaults
+      const typingCharges = editBillingForm.customServiceCharges ?
+        parseFloat(editBillingForm.customServiceCharges) :
+        selectedService.typingCharges * quantity;
+      const governmentCharges = editBillingForm.customGovernmentCharges ?
+        parseFloat(editBillingForm.customGovernmentCharges) :
+        selectedService.governmentCharges * quantity;
       const discount = parseFloat(editBillingForm.discount) || 0;
       const vendorCost = parseFloat(editBillingForm.vendorCost) || 0;
       const subtotal = typingCharges + governmentCharges;
@@ -772,8 +783,13 @@ const ServiceBilling: React.FC = () => {
       if (!selectedService) return;
 
       const quantity = parseInt(billingForm.quantity);
-      const typingCharges = selectedService.typingCharges * quantity;
-      const governmentCharges = selectedService.governmentCharges * quantity;
+      // Use custom charges if provided, otherwise use service defaults
+      const typingCharges = billingForm.customServiceCharges ?
+        parseFloat(billingForm.customServiceCharges) :
+        selectedService.typingCharges * quantity;
+      const governmentCharges = billingForm.customGovernmentCharges ?
+        parseFloat(billingForm.customGovernmentCharges) :
+        selectedService.governmentCharges * quantity;
       const discount = parseFloat(billingForm.discount) || 0;
       const vendorCost = parseFloat(billingForm.vendorCost) || 0;
       const subtotal = typingCharges + governmentCharges;
@@ -970,7 +986,9 @@ const ServiceBilling: React.FC = () => {
       assignedVendorId: '',
       vendorCost: '0',
       discount: '0',
-      cardId: ''
+      cardId: '',
+      customServiceCharges: '',
+      customGovernmentCharges: ''
     });
     setErrors({});
   };
@@ -1019,8 +1037,13 @@ const ServiceBilling: React.FC = () => {
     if (!selectedService) return { typing: 0, government: 0, total: 0, discount: 0, profit: 0, vendorCost: 0, vatPercentage: 0, vatAmount: 0, totalWithVat: 0 };
 
     const quantity = parseInt(billingForm.quantity) || 1;
-    const typing = selectedService.typingCharges * quantity;
-    const government = selectedService.governmentCharges * quantity;
+    // Use custom charges if provided, otherwise use service defaults
+    const typing = billingForm.customServiceCharges ?
+      parseFloat(billingForm.customServiceCharges) :
+      selectedService.typingCharges * quantity;
+    const government = billingForm.customGovernmentCharges ?
+      parseFloat(billingForm.customGovernmentCharges) :
+      selectedService.governmentCharges * quantity;
     const discount = parseFloat(billingForm.discount) || 0;
     const vendorCost = parseFloat(billingForm.vendorCost) || 0;
     const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
@@ -1864,16 +1887,16 @@ Servigence Business Services
                   )}
                 </div>
 
-                {/* Cash Type */}
+                {/* Payment Type */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Cash Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
                   <select
                     name="cashType"
                     value={billingForm.cashType}
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {cashTypes.map((type) => (
+                    {paymentTypes.map((type) => (
                       <option key={type.value} value={type.value}>
                         {type.label}
                       </option>
@@ -1881,7 +1904,7 @@ Servigence Business Services
                   </select>
                 </div>
 
-                {/* Card Selection - Show only when Cash Type is 'card' */}
+                {/* Card Selection - Show only when Payment Type is 'card' */}
                 {billingForm.cashType === 'card' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1939,6 +1962,46 @@ Servigence Business Services
                     </p>
                   )}
                 </div>
+
+                {/* Custom Service Charges */}
+                {billingForm.serviceTypeId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Charges (AED) <span className="text-gray-500">(Optional - Override default)</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="customServiceCharges"
+                      value={billingForm.customServiceCharges}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      placeholder={`Default: ${services.find(s => s.id === billingForm.serviceTypeId)?.typingCharges || 0}`}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Leave empty to use default service charges</p>
+                  </div>
+                )}
+
+                {/* Custom Government Charges */}
+                {billingForm.serviceTypeId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Government Charges (AED) <span className="text-gray-500">(Optional - Override default)</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="customGovernmentCharges"
+                      value={billingForm.customGovernmentCharges}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      placeholder={`Default: ${services.find(s => s.id === billingForm.serviceTypeId)?.governmentCharges || 0}`}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Leave empty to use default government charges</p>
+                  </div>
+                )}
 
                 {/* Discount */}
                 <div>
@@ -2455,16 +2518,16 @@ Servigence Business Services
                   />
                 </div>
 
-                {/* Cash Type */}
+                {/* Payment Type */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Cash Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
                   <select
                     name="cashType"
                     value={editBillingForm.cashType}
                     onChange={(e) => setEditBillingForm(prev => ({ ...prev, cashType: e.target.value as any }))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   >
-                    {cashTypes.map((type) => (
+                    {paymentTypes.map((type) => (
                       <option key={type.value} value={type.value}>
                         {type.label}
                       </option>
@@ -2472,7 +2535,7 @@ Servigence Business Services
                   </select>
                 </div>
 
-                {/* Card Selection - Show only when Cash Type is 'card' */}
+                {/* Card Selection - Show only when Payment Type is 'card' */}
                 {editBillingForm.cashType === 'card' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2515,6 +2578,46 @@ Servigence Business Services
                     required
                   />
                 </div>
+
+                {/* Custom Service Charges */}
+                {editBillingForm.serviceTypeId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Charges (AED) <span className="text-gray-500">(Optional - Override default)</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="customServiceCharges"
+                      value={editBillingForm.customServiceCharges}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, customServiceCharges: e.target.value }))}
+                      min="0"
+                      step="0.01"
+                      placeholder={`Default: ${services.find(s => s.id === editBillingForm.serviceTypeId)?.typingCharges || 0}`}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Leave empty to use default service charges</p>
+                  </div>
+                )}
+
+                {/* Custom Government Charges */}
+                {editBillingForm.serviceTypeId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Government Charges (AED) <span className="text-gray-500">(Optional - Override default)</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="customGovernmentCharges"
+                      value={editBillingForm.customGovernmentCharges}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, customGovernmentCharges: e.target.value }))}
+                      min="0"
+                      step="0.01"
+                      placeholder={`Default: ${services.find(s => s.id === editBillingForm.serviceTypeId)?.governmentCharges || 0}`}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Leave empty to use default government charges</p>
+                  </div>
+                )}
 
                 {/* Discount */}
                 <div>
