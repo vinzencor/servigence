@@ -153,6 +153,7 @@ const AccountManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState<'all' | string>('all');
   const [dateRange, setDateRange] = useState({
     startDate: '',
     endDate: ''
@@ -525,6 +526,7 @@ const AccountManagement: React.FC = () => {
 
     const matchesType = filterType === 'all' || account.type === filterType;
     const matchesStatus = filterStatus === 'all' || account.status === filterStatus;
+    const matchesPaymentMethod = filterPaymentMethod === 'all' || account.paymentMethod === filterPaymentMethod;
 
     // Date range filtering
     let matchesDateRange = true;
@@ -544,7 +546,7 @@ const AccountManagement: React.FC = () => {
       }
     }
 
-    return matchesSearch && matchesType && matchesStatus && matchesDateRange;
+    return matchesSearch && matchesType && matchesStatus && matchesPaymentMethod && matchesDateRange;
   });
 
   // Calculate totals
@@ -1408,6 +1410,19 @@ const AccountManagement: React.FC = () => {
                   <option value="completed">Completed</option>
                   <option value="pending">Pending</option>
                   <option value="cancelled">Cancelled</option>
+                </select>
+                <select
+                  value={filterPaymentMethod}
+                  onChange={(e) => setFilterPaymentMethod(e.target.value)}
+                  className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                >
+                  <option value="all">All Payment Methods</option>
+                  <option value="cash">Cash</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="card">Card</option>
+                  <option value="credit_card">Credit Card</option>
+                  <option value="online">Online</option>
                 </select>
 
                 {/* Date Range Filters */}

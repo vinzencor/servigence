@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Edit, Trash2, Phone, Mail, FileText, Users, Eye, MoreVertical, Building2, Calendar, DollarSign, UserPlus, FileEdit, Download, ExternalLink, X } from 'lucide-react';
-import { Company } from '../types';
+import { Search, Filter, Edit, Trash2, Phone, Mail, FileText, Users, Eye, MoreVertical, Building2, Calendar, DollarSign, UserPlus, FileEdit, Download, ExternalLink, X, CreditCard } from 'lucide-react';
+import { Company, Individual } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import IndividualEditModal from './IndividualEditModal';
+import CompanyFinancialModal from './CompanyFinancialModal';
 
 interface CompaniesSectionProps {
   companies: Company[];
@@ -30,6 +32,8 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   const [notes, setNotes] = useState('');
   const [allCompanies, setAllCompanies] = useState<Company[]>(companies);
   const [loading, setLoading] = useState(false);
+  const [showFinancialModal, setShowFinancialModal] = useState(false);
+  const [financialCompany, setFinancialCompany] = useState<Company | null>(null);
   const [activeTab, setActiveTab] = useState<'companies' | 'individuals'>('companies');
   const [individuals, setIndividuals] = useState<any[]>([]);
   const [selectedIndividual, setSelectedIndividual] = useState<any>(null);
@@ -198,6 +202,11 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
     setNotesCompany(company);
     setNotes(company.notes || '');
     setShowNotesModal(true);
+  };
+
+  const handleViewFinancials = (company: Company) => {
+    setFinancialCompany(company);
+    setShowFinancialModal(true);
   };
 
   const handleSaveNotes = async () => {
@@ -529,6 +538,13 @@ This action cannot be undone. Are you sure?`;
                           >
                             <FileEdit className="w-4 h-4" />
                           </button> */}
+                          <button
+                            onClick={() => handleViewFinancials(company)}
+                            className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="Financial Details"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleAddNotes(company)}
                             className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -1099,41 +1115,21 @@ This action cannot be undone. Are you sure?`;
 
       {/* Edit Individual Modal */}
       {showEditIndividual && selectedIndividual && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Edit Individual</h2>
-                <button
-                  onClick={() => setShowEditIndividual(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              <div className="text-center py-8">
-                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Edit Individual</h3>
-                <p className="text-gray-600">Individual editing functionality will be implemented soon.</p>
-                <p className="text-sm text-gray-500 mt-2">
-                  For now, you can view details and manage notes.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowEditIndividual(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <IndividualEditModal
+          individual={selectedIndividual}
+          onClose={() => {
+            setShowEditIndividual(false);
+            setSelectedIndividual(null);
+          }}
+          onSave={(updatedIndividual) => {
+            // Update the individual in the local state
+            setAllIndividuals(prev =>
+              prev.map(ind => ind.id === updatedIndividual.id ? updatedIndividual : ind)
+            );
+            setShowEditIndividual(false);
+            setSelectedIndividual(null);
+          }}
+        />
       )}
 
       {/* Delete Individual Confirmation Modal */}
@@ -1171,6 +1167,18 @@ This action cannot be undone. Are you sure?`;
             </div>
           </div>
         </div>
+      )}
+
+      {/* Company Financial Modal */}
+      {financialCompany && (
+        <CompanyFinancialModal
+          company={financialCompany}
+          isOpen={showFinancialModal}
+          onClose={() => {
+            setShowFinancialModal(false);
+            setFinancialCompany(null);
+          }}
+        />
       )}
     </div>
   );

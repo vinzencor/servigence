@@ -33,6 +33,7 @@ import EmployeeWiseReport from './reports/EmployeeWiseReport';
 import BankReport from './reports/BankReport';
 import CashReport from './reports/CashReport';
 import ServiceWiseReport from './reports/ServiceWiseReport';
+import OutstandingReport from './reports/OutstandingReport';
 
 interface ReportType {
   id: string;
@@ -121,6 +122,14 @@ const Reports: React.FC = () => {
       icon: Target,
       color: 'pink',
       category: 'operational'
+    },
+    {
+      id: 'outstanding',
+      title: 'Outstanding Report',
+      description: 'Customer balances, advance payments, and outstanding amounts',
+      icon: AlertTriangle,
+      color: 'amber',
+      category: 'client'
     }
   ];
 
@@ -174,6 +183,8 @@ const Reports: React.FC = () => {
         return <CashReport />;
       case 'service-wise':
         return <ServiceWiseReport />;
+      case 'outstanding':
+        return <OutstandingReport />;
       default:
         return null;
     }

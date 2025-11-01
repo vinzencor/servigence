@@ -835,6 +835,46 @@ export const dbHelpers = {
     };
   },
 
+  async getIndividualCreditUsage(individualId: string) {
+    console.log('Calculating credit usage for individual:', individualId);
+
+    // Get total outstanding dues
+    const { data: dues, error: duesError } = await supabase
+      .from('dues')
+      .select('due_amount')
+      .eq('individual_id', individualId)
+      .in('status', ['pending', 'partial', 'overdue']);
+
+    if (duesError) {
+      console.error('Error loading individual dues for credit calculation:', duesError);
+      throw duesError;
+    }
+
+    const totalOutstanding = dues?.reduce((sum, due) => sum + due.due_amount, 0) || 0;
+
+    // Get individual credit limit
+    const { data: individual, error: individualError } = await supabase
+      .from('individuals')
+      .select('credit_limit')
+      .eq('id', individualId)
+      .single();
+
+    if (individualError) {
+      console.error('Error loading individual for credit calculation:', individualError);
+      throw individualError;
+    }
+
+    const creditLimit = individual?.credit_limit || 0;
+    const availableCredit = Math.max(0, creditLimit - totalOutstanding);
+
+    return {
+      creditLimit,
+      totalOutstanding,
+      availableCredit,
+      creditUsagePercentage: creditLimit > 0 ? (totalOutstanding / creditLimit) * 100 : 0
+    };
+  },
+
   // Chat Functions
   async getConversations(userId: string) {
     const { data, error } = await supabase
@@ -2533,5 +2573,240 @@ export const dbHelpers = {
       .eq('id', paymentId);
 
     if (error) throw error;
+  },
+
+  // Service Types Management
+  async getServiceTypes() {
+    const { data, error } = await supabase
+      .from('service_types')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Quotations Management
+  async createQuotation(quotationData: any) {
+    // Generate unique quotation number
+    const quotationNumber = `QUO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+
+    const dataWithNumber = {
+      ...quotationData,
+      quotation_number: quotationNumber,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('quotations')
+      .insert([dataWithNumber])
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getQuotations(filters?: {
+    quotationType?: 'existing_company' | 'new_company' | 'all';
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) {
+    let query = supabase
+      .from('quotations')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (filters?.quotationType && filters.quotationType !== 'all') {
+      query = query.eq('quotation_type', filters.quotationType);
+    }
+
+    if (filters?.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters?.dateFrom) {
+      query = query.gte('quotation_date', filters.dateFrom);
+    }
+
+    if (filters?.dateTo) {
+      query = query.lte('quotation_date', filters.dateTo);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  async updateQuotation(id: string, updates: any) {
+    const { data, error } = await supabase
+      .from('quotations')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteQuotation(id: string) {
+    const { error } = await supabase
+      .from('quotations')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+
+  async convertQuotationToCompany(quotationId: string, companyData: any) {
+    // First create the company
+    const { data: newCompany, error: companyError } = await supabase
+      .from('companies')
+      .insert([{
+        ...companyData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (companyError) throw companyError;
+
+    // Then update the quotation to mark it as converted
+    const { data: updatedQuotation, error: quotationError } = await supabase
+      .from('quotations')
+      .update({
+        status: 'converted',
+        lead_status: 'converted',
+        converted_to_company_id: newCompany.id,
+        converted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', quotationId)
+      .select()
+      .single();
+
+    if (quotationError) throw quotationError;
+
+    return { company: newCompany, quotation: updatedQuotation };
+  },
+
+  async getQuotationById(id: string) {
+    const { data, error } = await supabase
+      .from('quotations')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Company Financial Data Functions
+  async getCompanyServiceBillings(companyId: string, startDate?: string, endDate?: string) {
+    let query = supabase
+      .from('service_billings')
+      .select(`
+        id,
+        invoice_number,
+        service_date,
+        typing_charges,
+        government_charges,
+        vat_amount,
+        total_amount_with_vat,
+        status,
+        cash_type,
+        created_at,
+        service_type:service_types(name)
+      `)
+      .eq('company_id', companyId)
+      .order('service_date', { ascending: false });
+
+    if (startDate) {
+      query = query.gte('service_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('service_date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  async getCompanyAccountTransactions(companyId: string, startDate?: string, endDate?: string) {
+    let query = supabase
+      .from('account_transactions')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('transaction_date', { ascending: false });
+
+    if (startDate) {
+      query = query.gte('transaction_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('transaction_date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  async getCompanyFinancialSummary(companyId: string, startDate?: string, endDate?: string) {
+    try {
+      // Get service billings
+      const billings = await this.getCompanyServiceBillings(companyId, startDate, endDate);
+
+      // Get account transactions
+      const transactions = await this.getCompanyAccountTransactions(companyId, startDate, endDate);
+
+      // Get advance payments from localStorage (temporary storage)
+      const storedPayments = localStorage.getItem('advancePayments');
+      const allPayments = storedPayments ? JSON.parse(storedPayments) : [];
+      const companyPayments = allPayments.filter((payment: any) =>
+        payment.companyId === companyId &&
+        (!startDate || payment.payment_date >= startDate) &&
+        (!endDate || payment.payment_date <= endDate)
+      );
+
+      // Calculate totals
+      const totalBilled = billings.reduce((sum, billing) =>
+        sum + (parseFloat(billing.total_amount_with_vat?.toString() || '0')), 0);
+
+      const totalPaid = companyPayments.reduce((sum, payment) =>
+        sum + (parseFloat(payment.amount?.toString() || '0')), 0);
+
+      const totalCredits = transactions
+        .filter(t => t.transaction_type === 'credit' || parseFloat(t.amount?.toString() || '0') > 0)
+        .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
+
+      const totalDebits = transactions
+        .filter(t => t.transaction_type === 'debit' || parseFloat(t.amount?.toString() || '0') < 0)
+        .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
+
+      const totalOutstanding = totalBilled - totalPaid;
+
+      return {
+        totalBilled,
+        totalPaid,
+        totalOutstanding,
+        totalCredits,
+        totalDebits,
+        billingCount: billings.length,
+        paymentCount: companyPayments.length,
+        transactionCount: transactions.length
+      };
+    } catch (error) {
+      console.error('Error calculating financial summary:', error);
+      throw error;
+    }
   }
 }

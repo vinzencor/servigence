@@ -91,6 +91,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     { id: 'dashboard', label: 'Home', icon: Home },
     { id: 'customer-registration', label: 'Customer Registration', icon: Plus },
     { id: 'companies', label: 'Registered Companies', icon: Building2 },
+    { id: 'quotations', label: 'Quotations', icon: FileText },
     { id: 'service-management', label: 'Service Management', icon: FileText },
     { id: 'services', label: 'Service Billing', icon: FileText },
     { id: 'employees', label: 'Employee Management', icon: Users, superAdminOnly: true },

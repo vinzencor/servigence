@@ -22,6 +22,7 @@ import EmployeeDashboard from './components/EmployeeDashboard';
 import Chat from './components/Chat';
 import EmailTest from './components/EmailTest';
 import Reports from './components/Reports';
+import Quotations from './components/Quotations';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
@@ -173,6 +174,8 @@ function AppContent() {
             onNavigate={setCurrentView}
           />
         );
+      case 'quotations':
+        return <Quotations />;
       case 'company-employees':
         return selectedCompany ? (
           <CompanyEmployeeManagement

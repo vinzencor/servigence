@@ -53,7 +53,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       change: '+12%',
       trend: 'up',
       icon: Building2,
-      color: 'blue'
+      color: 'blue',
+      navigateTo: 'companies'
     },
     {
       title: 'Active Services',
@@ -61,7 +62,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       change: '+8%',
       trend: 'up',
       icon: FileText,
-      color: 'green'
+      color: 'green',
+      navigateTo: 'service-management'
     },
     {
       title: 'Pending Invoices',
@@ -69,7 +71,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       change: '-5%',
       trend: 'down',
       icon: DollarSign,
-      color: 'amber'
+      color: 'amber',
+      navigateTo: 'invoices'
     },
     {
       title: 'Urgent Reminders',
@@ -77,7 +80,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       change: '+3%',
       trend: 'up',
       icon: AlertCircle,
-      color: 'red'
+      color: 'red',
+      navigateTo: 'reminders'
     }
   ];
 
@@ -242,11 +246,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           const TrendIcon = stat.trend === 'up' ? ArrowUpRight : ArrowDownRight;
-          
+
           return (
-            <div key={index} className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-200">
+            <button
+              key={index}
+              onClick={() => onNavigate?.(stat.navigateTo)}
+              className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg hover:scale-105 transition-all duration-200 cursor-pointer text-left w-full group"
+            >
               <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getColorClasses(stat.color, 'bg')}`}>
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getColorClasses(stat.color, 'bg')} group-hover:scale-110 transition-transform duration-200`}>
                   <Icon className={`w-6 h-6 ${getColorClasses(stat.color, 'text')}`} />
                 </div>
                 <div className={`flex items-center space-x-1 text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
@@ -255,10 +263,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 </div>
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</h3>
-                <p className="text-gray-500 font-medium">{stat.title}</p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors duration-200">{stat.value}</h3>
+                <p className="text-gray-500 font-medium group-hover:text-blue-500 transition-colors duration-200">{stat.title}</p>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

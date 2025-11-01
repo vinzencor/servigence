@@ -378,9 +378,11 @@ const ServiceBilling: React.FC = () => {
       const totalAmount = Math.max(0, subtotal - discount);
       const profit = typingCharges - vendorCost;
 
-      // Calculate VAT
+      // Calculate VAT (only on typing charges, not on government charges)
       const vatPercentage = parseFloat(editBillingForm.vatPercentage) || 0;
-      const vatAmount = (totalAmount * vatPercentage) / 100;
+      const discountOnTyping = Math.min(discount, typingCharges); // Apply discount to typing charges first
+      const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
+      const vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
       const totalAmountWithVat = totalAmount + vatAmount;
 
       const updatedBillingData = {
@@ -716,7 +718,7 @@ const ServiceBilling: React.FC = () => {
           <div class="total-row">Subtotal: AED ${subtotal.toFixed(2)}</div>
           ${discount > 0 ? `<div class="total-row" style="color: #dc2626;">Discount: -AED ${discount.toFixed(2)}</div>` : ''}
           <div class="total-row">Net Amount: AED ${totalAmount.toFixed(2)}</div>
-          ${vatPercentage > 0 ? `<div class="total-row">VAT (${vatPercentage}%): AED ${vatAmount.toFixed(2)}</div>` : ''}
+          ${vatPercentage > 0 ? `<div class="total-row">VAT (${vatPercentage}%) on Service Charges: AED ${vatAmount.toFixed(2)}</div>` : ''}
           <div class="total-final">Total Amount: AED ${totalAmountWithVat.toFixed(2)}</div>
         </div>
 
@@ -796,9 +798,11 @@ const ServiceBilling: React.FC = () => {
       const totalAmount = Math.max(0, subtotal - discount);
       const profit = typingCharges - vendorCost;
 
-      // Calculate VAT
+      // Calculate VAT (only on typing charges, not on government charges)
       const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
-      const vatAmount = (totalAmount * vatPercentage) / 100;
+      const discountOnTyping = Math.min(discount, typingCharges); // Apply discount to typing charges first
+      const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
+      const vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
       const totalAmountWithVat = totalAmount + vatAmount;
 
       // Generate invoice number
@@ -1049,7 +1053,10 @@ const ServiceBilling: React.FC = () => {
     const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
     const subtotal = typing + government;
     const total = Math.max(0, subtotal - discount); // Ensure total doesn't go negative
-    const vatAmount = (total * vatPercentage) / 100;
+    // Calculate VAT only on typing charges (service charges), not on government charges
+    const discountOnTyping = Math.min(discount, typing); // Apply discount to typing charges first
+    const typingAfterDiscount = Math.max(0, typing - discountOnTyping);
+    const vatAmount = (typingAfterDiscount * vatPercentage) / 100;
     const totalWithVat = total + vatAmount;
     const profit = typing - vendorCost; // Profit = Service Charges - Vendor Cost
 
@@ -2069,7 +2076,7 @@ Servigence Business Services
                         </div>
                         {parseFloat(billingForm.vatPercentage) > 0 && (
                           <div className="flex justify-between text-green-600">
-                            <span>VAT ({calculateTotal().vatPercentage}%):</span>
+                            <span>VAT ({calculateTotal().vatPercentage}%) on Service Charges:</span>
                             <span className="font-medium">AED {calculateTotal().vatAmount.toFixed(2)}</span>
                           </div>
                         )}
@@ -2302,7 +2309,7 @@ Servigence Business Services
                     </div>
                     {parseFloat(selectedBilling.vat_percentage || 0) > 0 && (
                       <div className="flex justify-between items-center w-64">
-                        <span>VAT ({parseFloat(selectedBilling.vat_percentage || 0)}%):</span>
+                        <span>VAT ({parseFloat(selectedBilling.vat_percentage || 0)}%) on Service Charges:</span>
                         <span>AED {parseFloat(selectedBilling.vat_amount || 0).toFixed(2)}</span>
                       </div>
                     )}

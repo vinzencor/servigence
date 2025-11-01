@@ -57,6 +57,20 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
 
+  // Advance payment state
+  const [showAdvancePayment, setShowAdvancePayment] = useState(false);
+  const [advancePaymentForm, setAdvancePaymentForm] = useState({
+    amount: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMethod: 'cash',
+    paymentReference: '',
+    notes: ''
+  });
+
+  // Receipt modal state
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [advancePaymentReceipt, setAdvancePaymentReceipt] = useState<any>(null);
+
 
 
   // Image preview modal state
@@ -489,11 +503,16 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+  };
+
+  const handleAdvancePaymentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setAdvancePaymentForm(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -723,6 +742,45 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         status: formData.status as 'active' | 'inactive' | 'pending'
       };
 
+      // Process advance payment if provided
+      if (showAdvancePayment && advancePaymentForm.amount && parseFloat(advancePaymentForm.amount) > 0) {
+        try {
+          console.log('💰 Processing advance payment:', advancePaymentForm);
+
+          const paymentData = {
+            company_id: company.id,
+            individual_id: null,
+            amount: parseFloat(advancePaymentForm.amount),
+            payment_date: advancePaymentForm.paymentDate,
+            payment_method: advancePaymentForm.paymentMethod,
+            payment_reference: advancePaymentForm.paymentReference || null,
+            notes: advancePaymentForm.notes || null,
+            created_by: user?.name || 'System'
+          };
+
+          console.log('💾 Saving advance payment:', paymentData);
+
+          const createdPayment = await dbHelpers.createCustomerAdvancePayment(paymentData);
+
+          console.log('✅ Advance payment created:', createdPayment);
+
+          // Set receipt data for modal
+          setAdvancePaymentReceipt({
+            ...createdPayment,
+            customerName: formData.companyName,
+            customerType: 'company'
+          });
+
+          // Show receipt modal
+          setShowReceiptModal(true);
+
+          toast.success(`💰 Advance payment of AED ${parseFloat(advancePaymentForm.amount).toLocaleString()} recorded successfully!`);
+        } catch (error) {
+          console.error('❌ Error processing advance payment:', error);
+          toast.error('Failed to process advance payment. Company updated successfully.');
+        }
+      }
+
       onSave(updatedCompany);
 
       // Dispatch event to notify other components about document updates
@@ -730,7 +788,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         detail: { companyId: company.id, documentsProcessed, documentsWithErrors }
       }));
 
-      alert('Company updated successfully!');
+      toast.success('Company updated successfully!');
     } catch (error) {
       console.error('Error updating company:', error);
       alert(`Error updating company: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1430,6 +1488,110 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Advance Payment Section */}
+            <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Advance Payment (Optional)</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Record an advance payment for this company. A receipt will be generated automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancePayment(!showAdvancePayment)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 shrink-0"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>{showAdvancePayment ? 'Hide' : 'Add'} Advance Payment</span>
+                </button>
+              </div>
+
+              {showAdvancePayment && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-green-50 border border-green-200 rounded-lg">
+                  {/* Payment Amount */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Amount (AED) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="amount"
+                      value={advancePaymentForm.amount}
+                      onChange={handleAdvancePaymentChange}
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      name="paymentDate"
+                      value={advancePaymentForm.paymentDate}
+                      onChange={handleAdvancePaymentChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Method <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="paymentMethod"
+                      value={advancePaymentForm.paymentMethod}
+                      onChange={handleAdvancePaymentChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      required
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="card">Card</option>
+                      <option value="credit_card">Credit Card</option>
+                      <option value="online">Online</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Reference */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Reference</label>
+                    <input
+                      type="text"
+                      name="paymentReference"
+                      value={advancePaymentForm.paymentReference}
+                      onChange={handleAdvancePaymentChange}
+                      placeholder="Transaction ID, Cheque number, etc."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+
+                  {/* Notes */}
+                  <div className="col-span-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                    <textarea
+                      name="notes"
+                      value={advancePaymentForm.notes}
+                      onChange={handleAdvancePaymentChange}
+                      rows={3}
+                      placeholder="Additional notes about the payment..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
                 </div>
               )}
             </div>
