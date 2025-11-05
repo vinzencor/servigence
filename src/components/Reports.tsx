@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  BarChart3, 
-  TrendingUp, 
-  DollarSign, 
-  FileText, 
+import {
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  FileText,
   Calendar,
   Download,
   Filter,
@@ -34,6 +35,9 @@ import BankReport from './reports/BankReport';
 import CashReport from './reports/CashReport';
 import ServiceWiseReport from './reports/ServiceWiseReport';
 import OutstandingReport from './reports/OutstandingReport';
+import CreditReport from './reports/CreditReport';
+import DebitReport from './reports/DebitReport';
+import AdvancePaymentReport from './reports/AdvancePaymentReport';
 
 interface ReportType {
   id: string;
@@ -130,6 +134,30 @@ const Reports: React.FC = () => {
       icon: AlertTriangle,
       color: 'amber',
       category: 'client'
+    },
+    {
+      id: 'credit',
+      title: 'Credit Report',
+      description: 'All credit transactions and receivables',
+      icon: TrendingUp,
+      color: 'teal',
+      category: 'financial'
+    },
+    {
+      id: 'debit',
+      title: 'Debit Report',
+      description: 'All debit transactions and payables',
+      icon: TrendingDown,
+      color: 'rose',
+      category: 'financial'
+    },
+    {
+      id: 'advance-payment',
+      title: 'Advance Payment Report',
+      description: 'All advance payment transactions and prepayments',
+      icon: Clock,
+      color: 'violet',
+      category: 'financial'
     }
   ];
 
@@ -158,7 +186,11 @@ const Reports: React.FC = () => {
       orange: 'bg-orange-100 text-orange-600 border-orange-200',
       cyan: 'bg-cyan-100 text-cyan-600 border-cyan-200',
       emerald: 'bg-emerald-100 text-emerald-600 border-emerald-200',
-      pink: 'bg-pink-100 text-pink-600 border-pink-200'
+      pink: 'bg-pink-100 text-pink-600 border-pink-200',
+      amber: 'bg-amber-100 text-amber-600 border-amber-200',
+      teal: 'bg-teal-100 text-teal-600 border-teal-200',
+      rose: 'bg-rose-100 text-rose-600 border-rose-200',
+      violet: 'bg-violet-100 text-violet-600 border-violet-200'
     };
     return colorMap[color] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
@@ -185,6 +217,12 @@ const Reports: React.FC = () => {
         return <ServiceWiseReport />;
       case 'outstanding':
         return <OutstandingReport />;
+      case 'credit':
+        return <CreditReport />;
+      case 'debit':
+        return <DebitReport />;
+      case 'advance-payment':
+        return <AdvancePaymentReport />;
       default:
         return null;
     }
@@ -310,7 +348,7 @@ const Reports: React.FC = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Statistics</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <div className="text-2xl font-bold text-blue-600">9</div>
+            <div className="text-2xl font-bold text-blue-600">13</div>
             <div className="text-sm text-gray-600">Available Reports</div>
           </div>
           <div className="text-center p-4 bg-green-50 rounded-lg">

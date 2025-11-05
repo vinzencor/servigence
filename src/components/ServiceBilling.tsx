@@ -6,6 +6,7 @@ import { Company, Individual, ServiceType, ServiceEmployee, ServiceBilling as Se
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import DailyCardSummary from './DailyCardSummary';
+import PaymentMethodSelector from './PaymentMethodSelector';
 
 const ServiceBilling: React.FC = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -31,16 +32,6 @@ const ServiceBilling: React.FC = () => {
   const [reportType, setReportType] = useState('');
   const [reportData, setReportData] = useState<any>(null);
   const [selectedCompanyForReport, setSelectedCompanyForReport] = useState('');
-
-  // Advance Payment states
-  const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
-  const [selectedBillingForPayment, setSelectedBillingForPayment] = useState<any>(null);
-  const [advancePaymentForm, setAdvancePaymentForm] = useState({
-    amount: '',
-    paymentMethod: 'cash',
-    paymentReference: '',
-    notes: ''
-  });
 
   // Receipt states
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -77,6 +68,7 @@ const ServiceBilling: React.FC = () => {
     totalOutstanding: number;
     creditUsagePercentage: number;
   } | null>(null);
+  const [selectedCustomerAdvanceBalance, setSelectedCustomerAdvanceBalance] = useState<number>(0);
 
   // Edit billing form state
   const [editBillingForm, setEditBillingForm] = useState({
@@ -128,11 +120,39 @@ const ServiceBilling: React.FC = () => {
       if (e.key === 'company_updated') {
         loadData(); // Refresh companies when a company is updated
       }
+      if (e.key === 'advance_payment_updated') {
+        console.log('🔄 Advance payment updated, refreshing data...');
+
+        // Refresh advance payment balance for the currently selected customer
+        const currentCustomerId = billingForm.clientType === 'company' ? billingForm.companyId : billingForm.individualId;
+        const currentCustomerType = billingForm.clientType;
+
+        if (currentCustomerId) {
+          console.log('🔄 Refreshing balance for customer:', currentCustomerId);
+          refreshAdvancePaymentBalance(currentCustomerId, currentCustomerType);
+        }
+
+        // Also refresh the service billings list to update applied advance payment amounts
+        console.log('🔄 Refreshing service billings list...');
+        loadServiceBillings();
+      }
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [billingForm.companyId, billingForm.individualId, billingForm.clientType]);
+
+  // Helper function to refresh advance payment balance
+  const refreshAdvancePaymentBalance = async (customerId: string, customerType: 'company' | 'individual') => {
+    try {
+      const balanceData = await dbHelpers.getAvailableAdvanceBalance(customerId, customerType);
+      setSelectedCustomerAdvanceBalance(balanceData.availableBalance);
+      console.log('💰 Refreshed advance payment balance:', balanceData);
+    } catch (error) {
+      console.error('Error refreshing advance balance:', error);
+      setSelectedCustomerAdvanceBalance(0);
+    }
+  };
 
   const loadData = async () => {
     if (!user) {
@@ -533,7 +553,7 @@ const ServiceBilling: React.FC = () => {
           parseFloat(billing.discount || 0).toFixed(2),
           parseFloat(billing.total_amount || 0).toFixed(2),
           parseFloat(billing.profit || 0).toFixed(2),
-          billing.status?.replace('_', ' ').toUpperCase() || 'PENDING'
+          getStatusLabel(billing.status)
         ])
       ];
 
@@ -842,6 +862,61 @@ const ServiceBilling: React.FC = () => {
 
       const createdBilling = await dbHelpers.createServiceBilling(billingData);
 
+      // Auto-apply advance payments if customer has available balance
+      const customerId = billingForm.clientType === 'company' ? billingForm.companyId : billingForm.individualId;
+      const customerType = billingForm.clientType;
+
+      if (customerId && selectedCustomerAdvanceBalance > 0) {
+        try {
+          console.log('🤖 Auto-applying advance payments to new billing:', {
+            billingId: createdBilling.id,
+            customerId,
+            customerType,
+            availableBalance: selectedCustomerAdvanceBalance
+          });
+
+          // Get customer's advance payment receipts
+          const balanceData = await dbHelpers.getAvailableAdvanceBalance(customerId, customerType);
+
+          if (balanceData.receipts && balanceData.receipts.length > 0) {
+            // Apply each receipt to the billing until fully paid or receipts exhausted
+            let remainingBillingAmount = totalAmount;
+
+            for (const receipt of balanceData.receipts) {
+              if (remainingBillingAmount <= 0) break;
+
+              // Get available balance for this receipt
+              const receiptBalance = await dbHelpers.getReceiptAvailableBalance(receipt.id);
+
+              if (receiptBalance.availableBalance > 0) {
+                // Apply the lesser of: receipt balance or remaining billing amount
+                const amountToApply = Math.min(receiptBalance.availableBalance, remainingBillingAmount);
+
+                await dbHelpers.applyAdvancePaymentToBilling(
+                  receipt.id,
+                  createdBilling.id,
+                  amountToApply,
+                  user?.id || 'system'
+                );
+
+                remainingBillingAmount -= amountToApply;
+
+                console.log(`✅ Applied AED ${amountToApply} from receipt ${receipt.id} to billing ${createdBilling.id}`);
+              }
+            }
+
+            const totalApplied = totalAmount - remainingBillingAmount;
+            if (totalApplied > 0) {
+              toast.success(`💰 Auto-applied AED ${totalApplied.toLocaleString()} from advance payments!`);
+            }
+          }
+        } catch (autoApplyError) {
+          console.error('Error auto-applying advance payments:', autoApplyError);
+          // Don't fail the billing creation if auto-apply fails
+          toast.error('Billing created but failed to auto-apply advance payments');
+        }
+      }
+
       // Check credit limit and create due entry if needed (only for companies)
       if (billingForm.clientType === 'company' && billingForm.companyId) {
         try {
@@ -1016,14 +1091,42 @@ const ServiceBilling: React.FC = () => {
         console.error('Error loading company credit info:', error);
         setSelectedCompanyCredit(null);
       }
+
+      // Load advance payment balance
+      try {
+        const balanceData = await dbHelpers.getAvailableAdvanceBalance(value, 'company');
+        setSelectedCustomerAdvanceBalance(balanceData.availableBalance);
+        console.log('💰 Company advance payment balance:', balanceData);
+      } catch (error) {
+        console.error('Error loading advance balance:', error);
+        setSelectedCustomerAdvanceBalance(0);
+      }
     } else if (name === 'companyId' && !value) {
       setSelectedCompanyCredit(null);
+      setSelectedCustomerAdvanceBalance(0);
+    }
+
+    // Load advance payment balance when individual is selected
+    if (name === 'individualId' && value) {
+      try {
+        const balanceData = await dbHelpers.getAvailableAdvanceBalance(value, 'individual');
+        setSelectedCustomerAdvanceBalance(balanceData.availableBalance);
+        console.log('💰 Individual advance payment balance:', balanceData);
+      } catch (error) {
+        console.error('Error loading advance balance:', error);
+        setSelectedCustomerAdvanceBalance(0);
+      }
+    } else if (name === 'individualId' && !value) {
+      setSelectedCustomerAdvanceBalance(0);
     }
 
     // Clear company employees when switching to individual
     if (name === 'clientType' && value === 'individual') {
       setCompanyEmployees([]);
       setBillingForm(prev => ({ ...prev, assignedEmployeeId: '' }));
+      setSelectedCustomerAdvanceBalance(0);
+    } else if (name === 'clientType' && value === 'company') {
+      setSelectedCustomerAdvanceBalance(0);
     }
 
     // Clear error when user starts typing
@@ -1086,91 +1189,13 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
-  // Advance Payment Functions
-  const handleAdvancePayment = async (billing: any) => {
-    try {
-      // Load billing details with payment history
-      const billingWithPayments = await dbHelpers.getBillingWithPayments(billing.id);
-      setSelectedBillingForPayment(billingWithPayments);
-      setPaymentHistory(billingWithPayments.payments || []);
-
-      // Pre-fill with outstanding amount
-      const outstandingAmount = billingWithPayments.outstandingAmount || 0;
-      setAdvancePaymentForm({
-        amount: outstandingAmount.toString(),
-        paymentMethod: 'cash',
-        paymentReference: '',
-        notes: ''
-      });
-      setShowAdvancePaymentModal(true);
-    } catch (error) {
-      console.error('Error loading billing details:', error);
-      toast.error('Failed to load billing details');
-    }
-  };
-
-  const submitAdvancePayment = async () => {
-    try {
-      if (!selectedBillingForPayment || !advancePaymentForm.amount) {
-        toast.error('Please enter payment amount');
-        return;
-      }
-
-      const amount = parseFloat(advancePaymentForm.amount);
-      const totalAmount = parseFloat(selectedBillingForPayment.total_amount || 0);
-      const currentPaid = parseFloat(selectedBillingForPayment.paid_amount || 0);
-
-      if (amount <= 0) {
-        toast.error('Payment amount must be greater than 0');
-        return;
-      }
-
-      if (currentPaid + amount > totalAmount) {
-        toast.error('Payment amount exceeds outstanding balance');
-        return;
-      }
-
-      // Update the billing status locally
-      const newPaidAmount = currentPaid + amount;
-      let newStatus = 'pending';
-      if (newPaidAmount >= totalAmount) {
-        newStatus = 'paid';
-      } else if (newPaidAmount > 0) {
-        newStatus = 'partial';
-      }
-
-      // Update the local state
-      setServiceBillings(prev => prev.map(billing =>
-        billing.id === selectedBillingForPayment.id
-          ? { ...billing, paid_amount: newPaidAmount, status: newStatus }
-          : billing
-      ));
-
-      toast.success('Advance payment recorded successfully');
-      setShowAdvancePaymentModal(false);
-
-      // Generate receipt
-      const receipt = {
-        receiptNumber: `RCP-${Date.now()}`,
-        paymentDate: new Date().toLocaleDateString(),
-        amount: amount,
-        paymentMethod: advancePaymentForm.paymentMethod,
-        notes: advancePaymentForm.notes,
-        billing: {
-          invoiceNumber: selectedBillingForPayment.invoice_number,
-          totalAmount: totalAmount,
-          paidAmount: newPaidAmount,
-          clientName: selectedBillingForPayment.company?.company_name || selectedBillingForPayment.individual?.individual_name || 'Unknown Client',
-          serviceName: selectedBillingForPayment.service_type?.name || 'Unknown Service'
-        }
-      };
-
-      setReceiptData(receipt);
-      setShowReceiptModal(true);
-
-    } catch (error) {
-      console.error('Error recording advance payment:', error);
-      toast.error('Failed to record advance payment');
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'completed': return 'PAID';
+      case 'in_progress': return 'PARTIAL';
+      case 'pending': return 'PENDING';
+      case 'cancelled': return 'CANCELLED';
+      default: return status?.replace('_', ' ').toUpperCase() || 'PENDING';
     }
   };
 
@@ -1410,6 +1435,7 @@ Servigence Business Services
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Services</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Payment Info</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
@@ -1450,8 +1476,29 @@ Servigence Business Services
                         </div>
                       </td>
                       <td className="px-6 py-4">
+                        <div className="text-sm">
+                          {(billing.totalPaid || 0) > 0 ? (
+                            <>
+                              <div className="text-green-600 font-medium">
+                                Paid: AED {parseFloat(billing.totalPaid || 0).toLocaleString()}
+                              </div>
+                              <div className="text-red-600 text-xs">
+                                Due: AED {parseFloat(billing.outstandingAmount || 0).toLocaleString()}
+                              </div>
+                              {billing.appliedAdvanceAmount && billing.appliedAdvanceAmount > 0 && (
+                                <div className="text-xs text-purple-600 mt-1">
+                                  Applied Advance: AED {parseFloat(billing.appliedAdvanceAmount).toLocaleString()}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-gray-500 text-xs">No payments yet</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(billing.status)}`}>
-                          {billing.status?.replace('_', ' ').toUpperCase() || 'PENDING'}
+                          {getStatusLabel(billing.status)}
                         </span>
                         {billing.invoice_generated && (
                           <div className="text-xs text-green-600 mt-1">✓ Invoice Generated</div>
@@ -1472,13 +1519,6 @@ Servigence Business Services
                             title="Edit Billing"
                           >
                             <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleAdvancePayment(billing)}
-                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
-                            title="Record Payment"
-                          >
-                            <CreditCard className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => viewPaymentHistory(billing)}
@@ -1779,6 +1819,24 @@ Servigence Business Services
                         </div>
                       </div>
                     )}
+
+                    {/* Advance Payment Balance Display for Company */}
+                    {billingForm.companyId && selectedCustomerAdvanceBalance > 0 && (
+                      <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div>
+                              <p className="text-sm font-medium text-green-900">Available Advance Payment</p>
+                              <p className="text-xs text-green-700">Customer has advance payments available</p>
+                            </div>
+                          </div>
+                          <p className="text-lg font-bold text-green-600">AED {selectedCustomerAdvanceBalance.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div>
@@ -1805,6 +1863,24 @@ Servigence Business Services
                         <AlertCircle className="w-4 h-4 mr-1" />
                         {errors.individualId}
                       </p>
+                    )}
+
+                    {/* Advance Payment Balance Display for Individual */}
+                    {billingForm.individualId && selectedCustomerAdvanceBalance > 0 && (
+                      <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div>
+                              <p className="text-sm font-medium text-green-900">Available Advance Payment</p>
+                              <p className="text-xs text-green-700">Customer has advance payments available</p>
+                            </div>
+                          </div>
+                          <p className="text-lg font-bold text-green-600">AED {selectedCustomerAdvanceBalance.toLocaleString()}</p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
@@ -2886,154 +2962,6 @@ Servigence Business Services
                   Close
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Advance Payment Modal */}
-      {showAdvancePaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Record Advance Payment</h3>
-              <button
-                onClick={() => setShowAdvancePaymentModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {selectedBillingForPayment && (
-              <div className="mb-4 space-y-3">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Invoice: {selectedBillingForPayment.invoice_number}</p>
-                  <p className="text-sm text-gray-600">
-                    Client: {selectedBillingForPayment.clientName}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Service: {selectedBillingForPayment.serviceName}
-                  </p>
-                </div>
-
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Total Amount</p>
-                      <p className="font-semibold text-gray-900">AED {selectedBillingForPayment.totalAmount?.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Paid Amount</p>
-                      <p className="font-semibold text-green-600">AED {selectedBillingForPayment.paidAmount?.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Outstanding</p>
-                      <p className="font-bold text-red-600 text-lg">AED {selectedBillingForPayment.outstandingAmount?.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {paymentHistory.length > 0 && (
-                  <div className="p-3 bg-green-50 rounded-lg">
-                    <p className="text-sm font-medium text-gray-900 mb-2">Recent Payments ({paymentHistory.length})</p>
-                    <div className="space-y-1 max-h-20 overflow-y-auto">
-                      {paymentHistory.slice(0, 3).map((payment, index) => (
-                        <div key={index} className="flex justify-between text-xs text-gray-600">
-                          <span>{payment.paymentDate} - {payment.paymentMethod}</span>
-                          <span className="font-medium">AED {payment.amount.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {paymentHistory.length > 3 && (
-                      <p className="text-xs text-gray-500 mt-1">+{paymentHistory.length - 3} more payments</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Payment Amount
-                  {selectedBillingForPayment && (
-                    <span className="text-sm text-gray-500 ml-2">
-                      (Max: AED {selectedBillingForPayment.outstandingAmount?.toLocaleString()})
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  max={selectedBillingForPayment?.outstandingAmount || 0}
-                  value={advancePaymentForm.amount}
-                  onChange={(e) => {
-                    const value = parseFloat(e.target.value) || 0;
-                    const maxAmount = selectedBillingForPayment?.outstandingAmount || 0;
-                    if (value <= maxAmount) {
-                      setAdvancePaymentForm(prev => ({ ...prev, amount: e.target.value }));
-                    }
-                  }}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter payment amount"
-                />
-                {parseFloat(advancePaymentForm.amount) > (selectedBillingForPayment?.outstandingAmount || 0) && (
-                  <p className="text-red-500 text-sm mt-1">Payment amount cannot exceed outstanding balance</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                <select
-                  value={advancePaymentForm.paymentMethod}
-                  onChange={(e) => setAdvancePaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                >
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="cheque">Cheque</option>
-                  <option value="online">Online Payment</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Reference</label>
-                <input
-                  type="text"
-                  value={advancePaymentForm.paymentReference}
-                  onChange={(e) => setAdvancePaymentForm(prev => ({ ...prev, paymentReference: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Reference number (optional)"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <textarea
-                  value={advancePaymentForm.notes}
-                  onChange={(e) => setAdvancePaymentForm(prev => ({ ...prev, notes: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  rows={3}
-                  placeholder="Additional notes (optional)"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowAdvancePaymentModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitAdvancePayment}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Record Payment
-              </button>
             </div>
           </div>
         </div>

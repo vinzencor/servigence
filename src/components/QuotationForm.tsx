@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, Users, Search, Calculator } from 'lucide-react';
+import { X, Building2, Users, Search, Calculator, Plus, Trash2 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -20,6 +20,17 @@ interface ServiceType {
   description?: string;
 }
 
+interface QuotationItem {
+  id: string;
+  service_id: string;
+  service_name: string;
+  service_category: string;
+  quantity: number;
+  service_charge: number;
+  government_charge: number;
+  line_total: number;
+}
+
 interface QuotationFormProps {
   quotation?: any;
   onSubmit: (data: any) => void;
@@ -36,6 +47,12 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
   const [searchCompany, setSearchCompany] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
+  // Manual amount entry toggle
+  const [manualAmountEntry, setManualAmountEntry] = useState(false);
+
+  // Service items state
+  const [serviceItems, setServiceItems] = useState<QuotationItem[]>([]);
+
   const [formData, setFormData] = useState({
     company_id: quotation?.company_id || '',
     company_name: quotation?.company_name || '',
@@ -43,8 +60,6 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
     phone: quotation?.phone || '',
     email: quotation?.email || '',
     address: quotation?.address || '',
-    service_id: quotation?.service_id || '',
-    service_name: quotation?.service_name || '',
     total_amount: quotation?.total_amount || '',
     quotation_date: quotation?.quotation_date || new Date().toISOString().split('T')[0],
     validity_period: quotation?.validity_period || 30,
@@ -60,10 +75,26 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
     loadData();
   }, []);
 
+  // Load existing quotation items when editing
+  useEffect(() => {
+    if (quotation?.items && quotation.items.length > 0) {
+      setServiceItems(quotation.items.map((item: any) => ({
+        id: item.id || Date.now().toString() + Math.random(),
+        service_id: item.service_id || '',
+        service_name: item.service_name || '',
+        service_category: item.service_category || '',
+        quantity: item.quantity || 1,
+        service_charge: item.service_charge || 0,
+        government_charge: item.government_charge || 0,
+        line_total: item.line_total || 0
+      })));
+    }
+  }, [quotation]);
+
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Load companies for existing company quotations
       const companiesData = await dbHelpers.getCompanies();
       setCompanies(companiesData || []);
@@ -92,18 +123,66 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
     setShowCompanyDropdown(false);
   };
 
-  const handleServiceSelect = (serviceId: string) => {
-    const service = services.find(s => s.id === serviceId);
-    if (service) {
-      const totalAmount = service.typing_charges + service.government_charges;
+  // Service items management
+  const addServiceItem = () => {
+    const newItem: QuotationItem = {
+      id: Date.now().toString(),
+      service_id: '',
+      service_name: '',
+      service_category: '',
+      quantity: 1,
+      service_charge: 0,
+      government_charge: 0,
+      line_total: 0
+    };
+    setServiceItems(prev => [...prev, newItem]);
+  };
+
+  const updateServiceItem = (id: string, field: string, value: any) => {
+    setServiceItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const updatedItem = { ...item, [field]: value };
+
+        // If service is selected, populate charges
+        if (field === 'service_id') {
+          const service = services.find(s => s.id === value);
+          if (service) {
+            updatedItem.service_name = service.name;
+            updatedItem.service_category = service.category;
+            updatedItem.service_charge = service.typing_charges;
+            updatedItem.government_charge = service.government_charges;
+          }
+        }
+
+        // Recalculate line total
+        if (field === 'quantity' || field === 'service_charge' || field === 'government_charge' || field === 'service_id') {
+          updatedItem.line_total = (updatedItem.service_charge + updatedItem.government_charge) * updatedItem.quantity;
+        }
+
+        return updatedItem;
+      }
+      return item;
+    }));
+  };
+
+  const removeServiceItem = (id: string) => {
+    setServiceItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleManualAmountToggle = () => {
+    setManualAmountEntry(!manualAmountEntry);
+  };
+
+  // Calculate total from service items
+  useEffect(() => {
+    if (!manualAmountEntry && serviceItems.length > 0) {
+      const total = serviceItems.reduce((sum, item) => sum + item.line_total, 0);
       setFormData(prev => ({
         ...prev,
-        service_id: serviceId,
-        service_name: service.name,
-        total_amount: totalAmount.toString()
+        total_amount: total.toString()
       }));
     }
-  };
+  }, [serviceItems, manualAmountEntry]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -112,8 +191,19 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
       newErrors.company_name = 'Company name is required';
     }
 
-    if (!formData.service_name.trim()) {
-      newErrors.service_name = 'Service is required';
+    if (serviceItems.length === 0) {
+      newErrors.service_items = 'At least one service is required';
+      toast.error('Please add at least one service');
+    }
+
+    // Validate each service item
+    const hasInvalidItems = serviceItems.some(item =>
+      !item.service_id || !item.service_name || item.quantity <= 0
+    );
+
+    if (hasInvalidItems) {
+      newErrors.service_items = 'All service items must have a service selected and valid quantity';
+      toast.error('Please complete all service items');
     }
 
     if (!formData.total_amount || parseFloat(formData.total_amount) <= 0) {
@@ -142,7 +232,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -151,7 +241,16 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
       ...formData,
       quotation_type: quotationType,
       total_amount: parseFloat(formData.total_amount),
-      validity_period: parseInt(formData.validity_period.toString())
+      validity_period: parseInt(formData.validity_period.toString()),
+      service_items: serviceItems.map(item => ({
+        service_id: item.service_id,
+        service_name: item.service_name,
+        service_category: item.service_category,
+        quantity: item.quantity,
+        service_charge: item.service_charge,
+        government_charge: item.government_charge,
+        line_total: item.line_total
+      }))
     };
 
     // Remove company_id for new company quotations
@@ -372,38 +471,130 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
             )}
           </div>
 
-          {/* Service Information */}
+          {/* Service Items */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">Service Information</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">Service Items</h3>
+              <button
+                type="button"
+                onClick={addServiceItem}
+                className="flex items-center space-x-2 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Service</span>
+              </button>
+            </div>
 
+            {errors.service_items && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-600 text-sm">{errors.service_items}</p>
+              </div>
+            )}
+
+            {serviceItems.length === 0 ? (
+              <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <Calculator className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600 font-medium mb-1">No services added yet</p>
+                <p className="text-gray-500 text-sm">Click "Add Service" to add services to this quotation</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {serviceItems.map((item, index) => (
+                  <div key={item.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Service *
+                        </label>
+                        <select
+                          value={item.service_id}
+                          onChange={(e) => updateServiceItem(item.id, 'service_id', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        >
+                          <option value="">Select service</option>
+                          {services.map((service) => (
+                            <option key={service.id} value={service.id}>
+                              {service.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Quantity *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateServiceItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Service Charge
+                        </label>
+                        <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700">
+                          AED {item.service_charge.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Govt. Charge
+                        </label>
+                        <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700">
+                          AED {item.government_charge.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="flex items-end space-x-2">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Line Total
+                          </label>
+                          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 font-medium">
+                            AED {item.line_total.toFixed(2)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeServiceItem(item.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove service"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Total Amount */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">Quotation Total</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Service *
-                </label>
-                <select
-                  value={formData.service_id}
-                  onChange={(e) => handleServiceSelect(e.target.value)}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent ${
-                    errors.service_name ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">Select a service</option>
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name} - AED {(service.typing_charges + service.government_charges).toLocaleString()}
-                    </option>
-                  ))}
-                </select>
-                {errors.service_name && (
-                  <p className="text-red-500 text-sm mt-1">{errors.service_name}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Total Amount (AED) *
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Total Amount (AED) *
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={manualAmountEntry}
+                      onChange={handleManualAmountToggle}
+                      className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                    />
+                    <span className="text-sm text-gray-600">Manual entry</span>
+                  </label>
+                </div>
                 <div className="relative">
                   <Calculator className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
@@ -412,12 +603,24 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
                     min="0"
                     value={formData.total_amount}
                     onChange={(e) => setFormData(prev => ({ ...prev, total_amount: e.target.value }))}
+                    disabled={!manualAmountEntry && serviceItems.length === 0}
                     className={`pl-10 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent ${
                       errors.total_amount ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="0.00"
+                    } ${!manualAmountEntry && serviceItems.length > 0 ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                    placeholder={manualAmountEntry ? "Enter amount manually" : "Add services to auto-calculate"}
+                    readOnly={!manualAmountEntry && serviceItems.length > 0}
                   />
                 </div>
+                {!manualAmountEntry && serviceItems.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Amount auto-calculated from service items. Enable "Manual entry" to override.
+                  </p>
+                )}
+                {manualAmountEntry && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Manual amount entry enabled. Amount will not auto-calculate from service.
+                  </p>
+                )}
                 {errors.total_amount && (
                   <p className="text-red-500 text-sm mt-1">{errors.total_amount}</p>
                 )}

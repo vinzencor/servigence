@@ -198,19 +198,19 @@ Largest Expense: AED ${data.summary.largestExpense.toLocaleString()}
 
 CATEGORY BREAKDOWN
 ------------------
-${Object.entries(data.categoryBreakdown).map(([category, data]) => 
+${Object.entries(data.categoryBreakdown).map(([category, data]) =>
   `${category}: AED ${data.amount.toLocaleString()} (${data.count} transactions)`
 ).join('\n')}
 
 PAYMENT METHOD BREAKDOWN
 ------------------------
-${Object.entries(data.paymentMethodBreakdown).map(([method, data]) => 
+${Object.entries(data.paymentMethodBreakdown).map(([method, data]) =>
   `${method}: AED ${data.amount.toLocaleString()} (${data.count} transactions)`
 ).join('\n')}
 
 DETAILED EXPENSES
 -----------------
-${sortedExpenses.map(expense => 
+${sortedExpenses.map(expense =>
   `${expense.date} | ${expense.category} | AED ${expense.amount.toLocaleString()} | ${expense.paymentMethod} | ${expense.description}`
 ).join('\n')}
     `;
@@ -224,8 +224,167 @@ ${sortedExpenses.map(expense =>
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast.success('Expense report exported successfully');
+  };
+
+  const exportCSV = () => {
+    if (!data) return;
+
+    const headers = [
+      'Date',
+      'Category',
+      'Description',
+      'Amount (AED)',
+      'Payment Method',
+      'Reference Number',
+      'Status'
+    ];
+
+    const csvRows = [
+      headers.join(','),
+      ...sortedExpenses.map(expense => [
+        expense.date,
+        expense.category,
+        `"${expense.description}"`,
+        expense.amount,
+        expense.paymentMethod,
+        expense.referenceNumber || 'N/A',
+        expense.status
+      ].join(','))
+    ];
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `expense-report-${dateFrom}-to-${dateTo}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success('CSV report exported successfully');
+  };
+
+  const exportPDF = () => {
+    if (!data) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Expense Report - ${new Date(dateFrom).toLocaleDateString()} to ${new Date(dateTo).toLocaleDateString()}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+          .title { font-size: 24px; font-weight: bold; color: #2563eb; }
+          .period { font-size: 14px; color: #666; margin-top: 5px; }
+          .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 30px; }
+          .summary-card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; }
+          .summary-title { font-weight: bold; color: #374151; margin-bottom: 5px; }
+          .summary-amount { font-size: 18px; font-weight: bold; color: #dc2626; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+          th { background-color: #f3f4f6; font-weight: bold; }
+          .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }
+          @media print { body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">Expense Report</div>
+          <div class="period">Period: ${new Date(dateFrom).toLocaleDateString()} to ${new Date(dateTo).toLocaleDateString()}</div>
+          <div class="period">Generated: ${new Date().toLocaleDateString()}</div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-card">
+            <div class="summary-title">Total Expenses</div>
+            <div class="summary-amount">AED ${data.summary.totalExpenses.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Total Records</div>
+            <div class="summary-amount">${data.summary.totalTransactions}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Average Expense</div>
+            <div class="summary-amount">AED ${data.summary.averageExpense.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Largest Expense</div>
+            <div class="summary-amount">AED ${data.summary.largestExpense.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <h3>Category Breakdown</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Total Amount (AED)</th>
+              <th>Count</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(data.categoryBreakdown).map(([category, categoryData]) => `
+              <tr>
+                <td>${category}</td>
+                <td>AED ${categoryData.amount.toLocaleString()}</td>
+                <td>${categoryData.count}</td>
+                <td>${((categoryData.amount / data.summary.totalExpenses) * 100).toFixed(1)}%</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <h3>Detailed Expense Records</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Category</th>
+              <th>Description</th>
+              <th>Amount (AED)</th>
+              <th>Payment Method</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedExpenses.map(expense => `
+              <tr>
+                <td>${new Date(expense.date).toLocaleDateString()}</td>
+                <td>${expense.category}</td>
+                <td>${expense.description}</td>
+                <td>AED ${expense.amount.toLocaleString()}</td>
+                <td>${expense.paymentMethod.replace('_', ' ')}</td>
+                <td>${expense.referenceNumber || 'N/A'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <p>This report was generated automatically by Servigence Management System</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+
+    toast.success('PDF report generated successfully');
   };
 
   const getPaymentMethodIcon = (method: string) => {
@@ -272,13 +431,29 @@ ${sortedExpenses.map(expense =>
           <h1 className="text-2xl font-bold text-gray-900">Expense Report</h1>
           <p className="text-gray-600">Detailed breakdown of all expenses</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportCSV}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={exportPDF}
+            className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

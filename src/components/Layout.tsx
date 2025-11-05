@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Users, FileText, DollarSign, Home, Plus, Bell, Search, Settings, LogOut, MessageCircle, CreditCard, Mail, TrendingUp } from 'lucide-react';
+import { Building2, Users, FileText, DollarSign, Home, Plus, Bell, Search, Settings, LogOut, MessageCircle, CreditCard, Mail, TrendingUp, TrendingDown, Receipt } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { dbHelpers } from '../lib/supabase';
 
@@ -94,12 +94,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     { id: 'quotations', label: 'Quotations', icon: FileText },
     { id: 'service-management', label: 'Service Management', icon: FileText },
     { id: 'services', label: 'Service Billing', icon: FileText },
+    { id: 'receipts', label: 'Receipt Management', icon: Receipt },
     { id: 'employees', label: 'Employee Management', icon: Users, superAdminOnly: true },
     { id: 'vendors', label: 'Vendors', icon: Building2 },
     { id: 'cards', label: 'Cards', icon: CreditCard },
     { id: 'chat', label: 'Chat', icon: MessageCircle },
     { id: 'reminders', label: 'Reminders & Services', icon: Bell },
     { id: 'accounts', label: 'Account', icon: DollarSign },
+    { id: 'expenses', label: 'Expenses', icon: TrendingDown },
     { id: 'invoices', label: 'Invoice', icon: FileText },
     { id: 'reports', label: 'Reports', icon: TrendingUp },
     { id: 'email-test', label: 'Email Test', icon: Mail, superAdminOnly: true },

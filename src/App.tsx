@@ -23,6 +23,8 @@ import Chat from './components/Chat';
 import EmailTest from './components/EmailTest';
 import Reports from './components/Reports';
 import Quotations from './components/Quotations';
+import ExpenseManagement from './components/ExpenseManagement';
+import ReceiptManagement from './components/ReceiptManagement';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
@@ -189,6 +191,8 @@ function AppContent() {
         return <ServiceManagement />;
       case 'services':
         return <ServiceBilling />;
+      case 'receipts':
+        return <ReceiptManagement />;
       case 'employees':
         return <ServiceEmployeeManagement />;
       case 'vendors':
@@ -205,6 +209,8 @@ function AppContent() {
         return <InvoiceManagement />;
       case 'reports':
         return <Reports />;
+      case 'expenses':
+        return <ExpenseManagement />;
       case 'reminders-management':
         return <RemindersManagement />;
       case 'email-test':

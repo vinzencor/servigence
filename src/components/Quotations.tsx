@@ -16,7 +16,8 @@ interface Quotation {
   phone?: string;
   email?: string;
   service_id?: string;
-  service_name: string;
+  service_name?: string; // DEPRECATED: Now stored in items array
+  items?: any[]; // Array of quotation_items
   total_amount: number;
   quotation_date: string;
   validity_period: number;
@@ -48,6 +49,10 @@ const Quotations: React.FC = () => {
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
+
+  // Multi-select state
+  const [selectedQuotations, setSelectedQuotations] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -167,24 +172,39 @@ const Quotations: React.FC = () => {
     }
   };
 
-  const filteredQuotations = quotations.filter(quotation =>
-    quotation.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quotation.quotation_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quotation.service_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredQuotations = quotations.filter(quotation => {
+    const searchLower = searchTerm.toLowerCase();
+    const companyMatch = quotation.company_name.toLowerCase().includes(searchLower);
+    const numberMatch = quotation.quotation_number.toLowerCase().includes(searchLower);
+
+    // Search in service items
+    const serviceMatch = quotation.items?.some((item: any) =>
+      item.service_name?.toLowerCase().includes(searchLower)
+    ) || false;
+
+    return companyMatch || numberMatch || serviceMatch;
+  });
 
   const exportToCSV = () => {
-    const headers = ['Quotation Number', 'Type', 'Company Name', 'Service', 'Amount', 'Date', 'Status', 'Valid Until'];
-    const csvData = filteredQuotations.map(q => [
-      q.quotation_number,
-      q.quotation_type === 'existing_company' ? 'Existing Company' : 'New Company',
-      q.company_name,
-      q.service_name,
-      q.total_amount,
-      q.quotation_date,
-      q.status,
-      q.valid_until
-    ]);
+    const headers = ['Quotation Number', 'Type', 'Company Name', 'Services', 'Service Count', 'Amount', 'Date', 'Status', 'Valid Until'];
+    const csvData = filteredQuotations.map(q => {
+      const servicesList = q.items && q.items.length > 0
+        ? q.items.map((item: any) => item.service_name).join('; ')
+        : 'No services';
+      const serviceCount = q.items ? q.items.length : 0;
+
+      return [
+        q.quotation_number,
+        q.quotation_type === 'existing_company' ? 'Existing Company' : 'New Company',
+        q.company_name,
+        servicesList,
+        serviceCount,
+        q.total_amount,
+        q.quotation_date,
+        q.status,
+        q.valid_until
+      ];
+    });
 
     const csvContent = [headers, ...csvData]
       .map(row => row.map(cell => `"${cell}"`).join(','))
@@ -198,6 +218,101 @@ const Quotations: React.FC = () => {
     a.click();
     window.URL.revokeObjectURL(url);
   };
+
+  // Multi-select handlers
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedQuotations(new Set());
+      setSelectAll(false);
+    } else {
+      const allIds = new Set(filteredQuotations.map(q => q.id));
+      setSelectedQuotations(allIds);
+      setSelectAll(true);
+    }
+  };
+
+  const handleSelectQuotation = (quotationId: string) => {
+    const newSelected = new Set(selectedQuotations);
+    if (newSelected.has(quotationId)) {
+      newSelected.delete(quotationId);
+    } else {
+      newSelected.add(quotationId);
+    }
+    setSelectedQuotations(newSelected);
+    setSelectAll(newSelected.size === filteredQuotations.length && filteredQuotations.length > 0);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedQuotations.size === 0) {
+      toast.error('Please select quotations to delete');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedQuotations.size} quotation(s)?`)) {
+      return;
+    }
+
+    try {
+      const deletePromises = Array.from(selectedQuotations).map(id =>
+        dbHelpers.deleteQuotation(id)
+      );
+      await Promise.all(deletePromises);
+      toast.success(`${selectedQuotations.size} quotation(s) deleted successfully`);
+      setSelectedQuotations(new Set());
+      setSelectAll(false);
+      loadQuotations();
+    } catch (error) {
+      console.error('Error deleting quotations:', error);
+      toast.error('Failed to delete quotations');
+    }
+  };
+
+  const exportSelectedToCSV = () => {
+    if (selectedQuotations.size === 0) {
+      toast.error('Please select quotations to export');
+      return;
+    }
+
+    const selectedData = filteredQuotations.filter(q => selectedQuotations.has(q.id));
+    const headers = ['Quotation Number', 'Type', 'Company Name', 'Services', 'Service Count', 'Amount', 'Date', 'Status', 'Valid Until'];
+    const csvData = selectedData.map(q => {
+      const servicesList = q.items && q.items.length > 0
+        ? q.items.map((item: any) => item.service_name).join('; ')
+        : 'No services';
+      const serviceCount = q.items ? q.items.length : 0;
+
+      return [
+        q.quotation_number,
+        q.quotation_type === 'existing_company' ? 'Existing Company' : 'New Company',
+        q.company_name,
+        servicesList,
+        serviceCount,
+        q.total_amount,
+        q.quotation_date,
+        q.status,
+        q.valid_until
+      ];
+    });
+
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `selected-quotations-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success(`${selectedQuotations.size} quotation(s) exported successfully`);
+  };
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedQuotations(new Set());
+    setSelectAll(false);
+  }, [searchTerm, filterType, filterStatus, dateFrom, dateTo]);
 
   if (loading) {
     return (
@@ -280,7 +395,7 @@ const Quotations: React.FC = () => {
               className="pl-10 pr-4 py-2 w-full border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             />
           </div>
-          
+
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as any)}
@@ -290,7 +405,7 @@ const Quotations: React.FC = () => {
             <option value="existing_company">Existing Company</option>
             <option value="new_company">New Company</option>
           </select>
-          
+
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
@@ -304,7 +419,7 @@ const Quotations: React.FC = () => {
             <option value="expired">Expired</option>
             <option value="converted">Converted</option>
           </select>
-          
+
           <input
             type="date"
             value={dateFrom}
@@ -312,7 +427,7 @@ const Quotations: React.FC = () => {
             className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             placeholder="From Date"
           />
-          
+
           <input
             type="date"
             value={dateTo}
@@ -320,7 +435,7 @@ const Quotations: React.FC = () => {
             className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             placeholder="To Date"
           />
-          
+
           <button
             onClick={exportToCSV}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
@@ -331,12 +446,59 @@ const Quotations: React.FC = () => {
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {selectedQuotations.size > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-amber-900">
+                {selectedQuotations.size} quotation{selectedQuotations.size !== 1 ? 's' : ''} selected
+              </span>
+              <button
+                onClick={() => {
+                  setSelectedQuotations(new Set());
+                  setSelectAll(false);
+                }}
+                className="text-sm text-amber-700 hover:text-amber-900 underline"
+              >
+                Clear selection
+              </button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={exportSelectedToCSV}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export Selected</span>
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Selected</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quotations Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectAll}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 cursor-pointer"
+                    title="Select all quotations"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quotation</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
@@ -351,7 +513,7 @@ const Quotations: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredQuotations.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
                     <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                     <p className="text-lg font-medium">No quotations found</p>
                     <p className="text-sm">Create your first quotation to get started</p>
@@ -360,6 +522,14 @@ const Quotations: React.FC = () => {
               ) : (
                 filteredQuotations.map((quotation) => (
                   <tr key={quotation.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedQuotations.has(quotation.id)}
+                        onChange={() => handleSelectQuotation(quotation.id)}
+                        className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{quotation.quotation_number}</div>
                     </td>
@@ -382,7 +552,19 @@ const Quotations: React.FC = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{quotation.service_name}</div>
+                      {quotation.items && quotation.items.length > 0 ? (
+                        <div className="text-sm text-gray-900">
+                          {quotation.items.length === 1 ? (
+                            quotation.items[0].service_name
+                          ) : (
+                            <span className="font-medium">
+                              {quotation.items.length} services
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No services</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">AED {quotation.total_amount.toLocaleString()}</div>

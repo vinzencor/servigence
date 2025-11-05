@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, AlertCircle, Save, DollarSign, CreditCard, Upload, Eye, Trash2, FileText, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Save, DollarSign, CreditCard, Upload, Eye, Trash2, FileText, X, Edit2, Calendar } from 'lucide-react';
 import { Individual, PaymentCard, ServiceEmployee, ServiceType } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +48,19 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
     paymentMethod: 'cash',
     paymentReference: '',
     notes: ''
+  });
+
+  // Existing advance payments state
+  const [existingAdvancePayments, setExistingAdvancePayments] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<any>(null);
+  const [editPaymentForm, setEditPaymentForm] = useState({
+    amount: '',
+    paymentDate: '',
+    paymentMethod: 'cash',
+    paymentReference: '',
+    notes: '',
+    description: ''
   });
 
   // Receipt modal state
@@ -122,6 +135,21 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
     }
   };
 
+  // Load existing advance payments
+  const loadExistingAdvancePayments = async () => {
+    setLoadingPayments(true);
+    try {
+      const payments = await dbHelpers.getCustomerAdvancePayments(individual.id, 'individual');
+      console.log('📋 Loaded existing advance payments:', payments);
+      setExistingAdvancePayments(payments);
+    } catch (error) {
+      console.error('Error loading advance payments:', error);
+      toast.error('Failed to load advance payments');
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
   // Load credit usage information and payment cards
   useEffect(() => {
     const loadCreditUsage = async () => {
@@ -145,6 +173,7 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
     loadServiceEmployees();
     loadServices();
     loadIndividualDocuments();
+    loadExistingAdvancePayments();
   }, [individual.id]);
 
   const validateForm = () => {
@@ -187,6 +216,85 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
   const handleAdvancePaymentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setAdvancePaymentForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditPaymentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditPaymentForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditPayment = (payment: any) => {
+    setEditingPayment(payment);
+    setEditPaymentForm({
+      amount: payment.amount.toString(),
+      paymentDate: payment.payment_date,
+      paymentMethod: payment.payment_method === 'credit_card' ? 'card' : payment.payment_method,
+      paymentReference: payment.payment_reference || '',
+      notes: payment.notes || '',
+      description: payment.description || ''
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPayment(null);
+    setEditPaymentForm({
+      amount: '',
+      paymentDate: '',
+      paymentMethod: 'cash',
+      paymentReference: '',
+      notes: '',
+      description: ''
+    });
+  };
+
+  const handleSaveEditedPayment = async () => {
+    if (!editingPayment) return;
+
+    try {
+      const updateData = {
+        amount: editPaymentForm.amount,
+        payment_date: editPaymentForm.paymentDate,
+        payment_method: editPaymentForm.paymentMethod,
+        notes: editPaymentForm.notes,
+        description: editPaymentForm.description
+      };
+
+      const result = await dbHelpers.updateAdvancePayment(editingPayment.id, updateData);
+
+      // Check if this fixed a data inconsistency
+      if (result._wasOverApplied) {
+        toast.success(
+          `✅ Advance payment updated and data inconsistency fixed!\n` +
+          `The receipt was previously over-applied (AED ${result._totalApplied} applied from AED ${result._oldAmount} receipt). ` +
+          `This has now been corrected.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success('Advance payment updated successfully!');
+      }
+
+      // Trigger storage event to notify other components (e.g., Service Billing)
+      localStorage.setItem('advance_payment_updated', Date.now().toString());
+      localStorage.removeItem('advance_payment_updated');
+
+      // Reload payments
+      await loadExistingAdvancePayments();
+
+      // Clear editing state
+      handleCancelEdit();
+    } catch (error) {
+      console.error('Error updating advance payment:', error);
+
+      // Show the full error message if it's a data inconsistency error
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update advance payment';
+
+      if (errorMessage.includes('Data Inconsistency')) {
+        // Show detailed error in an alert for better visibility
+        alert(errorMessage);
+      } else {
+        toast.error(errorMessage);
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -242,6 +350,7 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
             payment_method: advancePaymentForm.paymentMethod,
             payment_reference: advancePaymentForm.paymentReference || null,
             notes: advancePaymentForm.notes || null,
+            description: `Advance payment for individual: ${formData.individualName}`,
             created_by: user?.name || 'System'
           };
 
@@ -250,6 +359,13 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
           const createdPayment = await dbHelpers.createCustomerAdvancePayment(paymentData);
 
           console.log('✅ Advance payment created:', createdPayment);
+
+          // Trigger storage event to notify other components (e.g., Service Billing)
+          localStorage.setItem('advance_payment_updated', Date.now().toString());
+          localStorage.removeItem('advance_payment_updated');
+
+          // Reload existing payments list
+          await loadExistingAdvancePayments();
 
           // Set receipt data for modal
           setAdvancePaymentReceipt({
@@ -607,9 +723,9 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
           <div className="col-span-full mt-8 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Advance Payment (Optional)</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Advance Payments</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  Record an advance payment for this individual. A receipt will be generated automatically.
+                  View and manage advance payments for this individual.
                 </p>
               </div>
               <button
@@ -618,9 +734,171 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 shrink-0"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>{showAdvancePayment ? 'Hide' : 'Add'} Advance Payment</span>
+                <span>{showAdvancePayment ? 'Hide' : 'Add New'} Advance Payment</span>
               </button>
             </div>
+
+            {/* Existing Advance Payments List */}
+            {loadingPayments ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                <p className="mt-2 text-sm text-gray-600">Loading advance payments...</p>
+              </div>
+            ) : existingAdvancePayments.length > 0 ? (
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Existing Advance Payments</h4>
+                <div className="space-y-3">
+                  {existingAdvancePayments.map((payment) => (
+                    <div key={payment.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      {editingPayment?.id === payment.id ? (
+                        // Edit Mode
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Amount (AED) <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                name="amount"
+                                value={editPaymentForm.amount}
+                                onChange={handleEditPaymentChange}
+                                min="0.01"
+                                step="0.01"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Payment Date <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="date"
+                                name="paymentDate"
+                                value={editPaymentForm.paymentDate}
+                                onChange={handleEditPaymentChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Payment Method <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                name="paymentMethod"
+                                value={editPaymentForm.paymentMethod}
+                                onChange={handleEditPaymentChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="cash">Cash</option>
+                                <option value="bank_transfer">Bank Transfer</option>
+                                <option value="cheque">Cheque</option>
+                                <option value="card">Card</option>
+                                <option value="online">Online</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Reference</label>
+                              <input
+                                type="text"
+                                name="paymentReference"
+                                value={editPaymentForm.paymentReference}
+                                onChange={handleEditPaymentChange}
+                                placeholder="Transaction ID, Cheque number, etc."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div className="col-span-full">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                              <textarea
+                                name="notes"
+                                value={editPaymentForm.notes}
+                                onChange={handleEditPaymentChange}
+                                rows={2}
+                                placeholder="Additional notes..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              type="button"
+                              onClick={handleCancelEdit}
+                              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveEditedPayment}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                            >
+                              <Save className="w-4 h-4" />
+                              <span>Save Changes</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // View Mode
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-600">Amount</p>
+                              <p className="text-lg font-semibold text-gray-900">AED {parseFloat(payment.amount).toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Payment Date</p>
+                              <p className="text-sm font-medium text-gray-900 flex items-center">
+                                <Calendar className="w-4 h-4 mr-1" />
+                                {new Date(payment.payment_date).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Payment Method</p>
+                              <p className="text-sm font-medium text-gray-900 capitalize">
+                                {payment.payment_method === 'credit_card' ? 'Card' : payment.payment_method.replace('_', ' ')}
+                              </p>
+                            </div>
+                            {payment.receipt_number && (
+                              <div>
+                                <p className="text-xs text-gray-600">Receipt Number</p>
+                                <p className="text-sm font-medium text-gray-900">{payment.receipt_number}</p>
+                              </div>
+                            )}
+                            {payment.payment_reference && (
+                              <div>
+                                <p className="text-xs text-gray-600">Reference</p>
+                                <p className="text-sm font-medium text-gray-900">{payment.payment_reference}</p>
+                              </div>
+                            )}
+                            {payment.notes && (
+                              <div className="col-span-full">
+                                <p className="text-xs text-gray-600">Notes</p>
+                                <p className="text-sm text-gray-700">{payment.notes}</p>
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleEditPayment(payment)}
+                            className="ml-4 p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                            title="Edit Payment"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
+                <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">No advance payments recorded yet</p>
+                <p className="text-xs text-gray-500 mt-1">Click "Add New Advance Payment" to record one</p>
+              </div>
+            )}
 
             {showAdvancePayment && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-green-50 border border-green-200 rounded-lg">

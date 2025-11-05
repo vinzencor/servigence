@@ -32,12 +32,12 @@ import { useAuth } from '../contexts/AuthContext';
 interface Account {
   id: string;
   companyId: string;
-  type: 'service_charge' | 'government_fee' | 'expense' | 'refund';
+  type: 'service_charge' | 'government_fee' | 'expense' | 'refund' | 'income';
   category: string;
   description: string;
   amount: number;
   date: string;
-  paymentMethod: 'cash' | 'bank_transfer' | 'cheque' | 'card';
+  paymentMethod: 'cash' | 'bank_transfer' | 'cheque' | 'card' | 'credit_card' | 'online';
   reference?: string;
   invoiceId?: string;
   status: 'pending' | 'completed' | 'cancelled';
@@ -49,15 +49,32 @@ interface Account {
   notes?: string;
 }
 
+interface IncomeTransaction {
+  id: string;
+  category: string;
+  description: string;
+  amount: number;
+  date: string;
+  paymentMethod: 'cash' | 'bank_transfer' | 'credit_card' | 'cheque' | 'online';
+  referenceNumber?: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  companyName?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 const AccountManagement: React.FC = () => {
   const { user, isSuperAdmin } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [incomeTransactions, setIncomeTransactions] = useState<IncomeTransaction[]>([]);
+  const [incomeLoading, setIncomeLoading] = useState(false);
 
   useEffect(() => {
     loadAccountTransactions();
     loadCompanies();
+    loadIncomeTransactions();
   }, []);
 
   const loadCompanies = async () => {
@@ -149,7 +166,21 @@ const AccountManagement: React.FC = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'government' | 'vendors' | 'reports'>('overview');
+  const loadIncomeTransactions = async () => {
+    setIncomeLoading(true);
+    try {
+      const data = await dbHelpers.getIncomeTransactions();
+      console.log('Loaded income transactions:', data);
+      setIncomeTransactions(data || []);
+    } catch (error) {
+      console.error('Error loading income transactions:', error);
+      setIncomeTransactions([]);
+    } finally {
+      setIncomeLoading(false);
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'income' | 'transactions' | 'government' | 'vendors' | 'reports'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
@@ -165,6 +196,14 @@ const AccountManagement: React.FC = () => {
   const [selectedTransaction, setSelectedTransaction] = useState<Account | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
+  // Income-related modal states
+  const [showAddIncome, setShowAddIncome] = useState(false);
+  const [showIncomeDetails, setShowIncomeDetails] = useState(false);
+  const [showEditIncome, setShowEditIncome] = useState(false);
+  const [showDeleteIncomeConfirm, setShowDeleteIncomeConfirm] = useState(false);
+  const [selectedIncome, setSelectedIncome] = useState<IncomeTransaction | null>(null);
+  const [incomeToDelete, setIncomeToDelete] = useState<string | null>(null);
+
   // Transaction Form State
   const [transactionForm, setTransactionForm] = useState({
     type: 'service_charge' as 'service_charge' | 'government_fee' | 'expense' | 'refund',
@@ -177,6 +216,28 @@ const AccountManagement: React.FC = () => {
     companyId: '',
     gstRate: '5',
     notes: ''
+  });
+
+  // Income Form State
+  const [incomeForm, setIncomeForm] = useState({
+    category: 'Service Income',
+    description: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'credit_card' | 'cheque' | 'online',
+    reference: '',
+    companyId: '',
+    notes: ''
+  });
+
+  // Income filtering states
+  const [incomeSearchTerm, setIncomeSearchTerm] = useState('');
+  const [incomeFilterCategory, setIncomeFilterCategory] = useState<'all' | string>('all');
+  const [incomeFilterStatus, setIncomeFilterStatus] = useState<'all' | string>('all');
+  const [incomeFilterPaymentMethod, setIncomeFilterPaymentMethod] = useState<'all' | string>('all');
+  const [incomeDateRange, setIncomeDateRange] = useState({
+    startDate: '',
+    endDate: ''
   });
 
   const handleCreateTransaction = async () => {
@@ -424,6 +485,181 @@ const AccountManagement: React.FC = () => {
     }
   };
 
+  // Income Management Functions
+  const handleCreateIncome = async () => {
+    try {
+      // Validate required fields
+      if (!incomeForm.description.trim()) {
+        alert('Please enter an income description');
+        return;
+      }
+      if (!incomeForm.amount || parseFloat(incomeForm.amount) <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+      if (!incomeForm.category.trim()) {
+        alert('Please select a category');
+        return;
+      }
+      if (!incomeForm.date) {
+        alert('Please select a transaction date');
+        return;
+      }
+
+      const amount = parseFloat(incomeForm.amount);
+
+      // Prepare income data for database
+      const incomeData = {
+        category: incomeForm.category.trim(),
+        description: incomeForm.description.trim(),
+        amount: amount,
+        transaction_date: incomeForm.date,
+        payment_method: incomeForm.paymentMethod,
+        reference_number: incomeForm.reference.trim() || null,
+        company_id: incomeForm.companyId && incomeForm.companyId.trim() !== '' ? incomeForm.companyId : null,
+        status: 'completed',
+        created_by: user?.email || 'System',
+        notes: incomeForm.notes.trim() || null
+      };
+
+      console.log('Creating income with data:', incomeData);
+      const result = await dbHelpers.createIncomeTransaction(incomeData);
+      console.log('Income created successfully:', result);
+
+      // Reset form and close modal
+      resetIncomeForm();
+      setShowAddIncome(false);
+      alert('✅ Income recorded successfully!');
+
+      // Reload income transactions
+      loadIncomeTransactions();
+
+    } catch (error) {
+      console.error('Error creating income:', error);
+
+      // Provide more specific error messages
+      let errorMessage = 'Error recording income. ';
+      if (error instanceof Error) {
+        if (error.message.includes('foreign key')) {
+          errorMessage += 'Invalid company selected.';
+        } else if (error.message.includes('not null')) {
+          errorMessage += 'Please fill in all required fields.';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'Please try again.';
+      }
+
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+
+  const resetIncomeForm = () => {
+    setIncomeForm({
+      category: 'Service Income',
+      description: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'cash',
+      reference: '',
+      companyId: '',
+      notes: ''
+    });
+  };
+
+  const handleViewIncome = (income: IncomeTransaction) => {
+    setSelectedIncome(income);
+    setShowIncomeDetails(true);
+  };
+
+  const handleEditIncome = (income: IncomeTransaction) => {
+    setSelectedIncome(income);
+    // Populate form with existing income data
+    setIncomeForm({
+      category: income.category,
+      description: income.description,
+      amount: income.amount.toString(),
+      date: income.date,
+      paymentMethod: income.paymentMethod,
+      reference: income.referenceNumber || '',
+      companyId: '', // We'll need to get this from the income data
+      notes: income.notes || ''
+    });
+    setShowEditIncome(true);
+  };
+
+  const handleUpdateIncome = async () => {
+    if (!selectedIncome) return;
+
+    try {
+      // Validate required fields
+      if (!incomeForm.description.trim()) {
+        alert('Please enter an income description');
+        return;
+      }
+      if (!incomeForm.amount || parseFloat(incomeForm.amount) <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+      if (!incomeForm.date) {
+        alert('Please select a transaction date');
+        return;
+      }
+
+      const amount = parseFloat(incomeForm.amount);
+
+      // Prepare income data for database
+      const incomeData = {
+        category: incomeForm.category.trim(),
+        description: incomeForm.description.trim(),
+        amount: amount,
+        transaction_date: incomeForm.date,
+        payment_method: incomeForm.paymentMethod,
+        reference_number: incomeForm.reference.trim() || null,
+        company_id: incomeForm.companyId && incomeForm.companyId.trim() !== '' ? incomeForm.companyId : null,
+        status: 'completed',
+        notes: incomeForm.notes.trim() || null
+      };
+
+      console.log('Updating income with data:', incomeData);
+      const result = await dbHelpers.updateIncomeTransaction(selectedIncome.id, incomeData);
+      console.log('Income updated successfully:', result);
+
+      // Reset form and close modal
+      setShowEditIncome(false);
+      setSelectedIncome(null);
+      alert('✅ Income updated successfully!');
+
+      // Reload income transactions
+      loadIncomeTransactions();
+
+    } catch (error) {
+      console.error('Error updating income:', error);
+      alert('❌ Error updating income. Please try again.');
+    }
+  };
+
+  const handleDeleteIncome = (incomeId: string) => {
+    setIncomeToDelete(incomeId);
+    setShowDeleteIncomeConfirm(true);
+  };
+
+  const confirmDeleteIncome = async () => {
+    if (incomeToDelete) {
+      try {
+        await dbHelpers.deleteIncomeTransaction(incomeToDelete);
+        setIncomeTransactions(prev => prev.filter(income => income.id !== incomeToDelete));
+        setIncomeToDelete(null);
+        setShowDeleteIncomeConfirm(false);
+        alert('✅ Income deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting income:', error);
+        alert('❌ Error deleting income. Please try again.');
+      }
+    }
+  };
+
   const handleExportReport = () => {
     try {
       // Calculate financial summary
@@ -554,14 +790,16 @@ const AccountManagement: React.FC = () => {
                                 .reduce((sum, a) => sum + a.amount, 0);
   const governmentFees = accounts.filter(a => a.type === 'government_fee' && a.status === 'completed')
                                 .reduce((sum, a) => sum + a.amount, 0);
-  const totalRevenue = serviceCharges + governmentFees;
+  const totalIncome = incomeTransactions.filter(i => i.status === 'completed')
+                                       .reduce((sum, i) => sum + i.amount, 0);
+  const totalRevenue = serviceCharges + governmentFees + totalIncome;
   const totalExpenses = accounts.filter(a => a.type === 'expense' && a.status === 'completed')
                                .reduce((sum, a) => sum + a.amount, 0);
   const vendorPayments = accounts.filter(a => a.type === 'vendor_payment' && a.status === 'completed')
                                 .reduce((sum, a) => sum + a.amount, 0);
   const totalGST = accounts.filter(a => a.status === 'completed')
                           .reduce((sum, a) => sum + (a.gstAmount || 0), 0);
-  const totalProfit = serviceCharges; // Only service charges are profit, government fees are pass-through
+  const totalProfit = serviceCharges + totalIncome; // Service charges and income are profit, government fees are pass-through
   const netProfit = totalProfit - totalExpenses - vendorPayments; // Profit minus all expenses
 
   console.log('Account calculations:', {
@@ -590,6 +828,13 @@ const AccountManagement: React.FC = () => {
       color: 'blue'
     },
     {
+      title: 'Total Income',
+      value: `AED ${totalIncome.toLocaleString()}`,
+      change: `${incomeTransactions.filter(i => i.status === 'completed').length} income entries`,
+      icon: TrendingUp,
+      color: 'green'
+    },
+    {
       title: 'Government Fees',
       value: `AED ${governmentFees.toLocaleString()}`,
       change: `${accounts.filter(a => a.type === 'government_fee' && a.status === 'completed').length} payments`,
@@ -616,8 +861,8 @@ const AccountManagement: React.FC = () => {
     <div className="space-y-6">
       {/* Stats Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          {[1, 2, 3, 4, 5].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="animate-pulse">
                 <div className="flex items-center justify-between">
@@ -633,7 +878,7 @@ const AccountManagement: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -779,11 +1024,337 @@ const AccountManagement: React.FC = () => {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'income', label: 'Income Management', icon: TrendingUp },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'government', label: 'Government Access', icon: FileText },
     { id: 'vendors', label: 'Vendor Expenses', icon: Building },
-    { id: 'reports', label: 'Reports', icon: TrendingUp }
+    { id: 'reports', label: 'Reports', icon: PieChart }
   ];
+
+  const renderIncomeManagement = () => {
+    // Filter and search income transactions
+    const filteredIncomeTransactions = incomeTransactions.filter(income => {
+      const matchesSearch = income.description.toLowerCase().includes(incomeSearchTerm.toLowerCase()) ||
+                           income.category.toLowerCase().includes(incomeSearchTerm.toLowerCase()) ||
+                           (income.referenceNumber && income.referenceNumber.toLowerCase().includes(incomeSearchTerm.toLowerCase()));
+
+      const matchesCategory = incomeFilterCategory === 'all' || income.category === incomeFilterCategory;
+      const matchesStatus = incomeFilterStatus === 'all' || income.status === incomeFilterStatus;
+      const matchesPaymentMethod = incomeFilterPaymentMethod === 'all' || income.paymentMethod === incomeFilterPaymentMethod;
+
+      // Date range filtering
+      let matchesDateRange = true;
+      if (incomeDateRange.startDate || incomeDateRange.endDate) {
+        const transactionDate = new Date(income.date);
+
+        if (incomeDateRange.startDate) {
+          const startDate = new Date(incomeDateRange.startDate);
+          matchesDateRange = matchesDateRange && transactionDate >= startDate;
+        }
+
+        if (incomeDateRange.endDate) {
+          const endDate = new Date(incomeDateRange.endDate);
+          endDate.setHours(23, 59, 59, 999);
+          matchesDateRange = matchesDateRange && transactionDate <= endDate;
+        }
+      }
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesPaymentMethod && matchesDateRange;
+    });
+
+    // Calculate income summary
+    const totalIncomeAmount = incomeTransactions.filter(i => i.status === 'completed').reduce((sum, i) => sum + i.amount, 0);
+    const incomeTransactionCount = incomeTransactions.length;
+    const averageIncome = incomeTransactionCount > 0 ? totalIncomeAmount / incomeTransactionCount : 0;
+    const largestIncome = Math.max(...incomeTransactions.map(i => i.amount), 0);
+
+    // Group by category
+    const incomeByCategory = incomeTransactions.reduce((acc, income) => {
+      if (!acc[income.category]) {
+        acc[income.category] = { count: 0, total: 0 };
+      }
+      acc[income.category].count++;
+      acc[income.category].total += income.amount;
+      return acc;
+    }, {} as Record<string, { count: number; total: number }>);
+
+    return (
+      <div className="space-y-6">
+        {/* Income Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Income</p>
+                <p className="text-2xl font-bold text-green-600 mt-2">AED {totalIncomeAmount.toLocaleString()}</p>
+                <p className="text-sm text-green-600 mt-1">All completed transactions</p>
+              </div>
+              <div className="p-3 bg-green-100 rounded-xl">
+                <TrendingUp className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Transaction Count</p>
+                <p className="text-2xl font-bold text-blue-600 mt-2">{incomeTransactionCount}</p>
+                <p className="text-sm text-blue-600 mt-1">Income entries</p>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-xl">
+                <Receipt className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Average Income</p>
+                <p className="text-2xl font-bold text-purple-600 mt-2">AED {averageIncome.toLocaleString()}</p>
+                <p className="text-sm text-purple-600 mt-1">Per transaction</p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-xl">
+                <BarChart3 className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Largest Income</p>
+                <p className="text-2xl font-bold text-orange-600 mt-2">AED {largestIncome.toLocaleString()}</p>
+                <p className="text-sm text-orange-600 mt-1">Single transaction</p>
+              </div>
+              <div className="p-3 bg-orange-100 rounded-xl">
+                <DollarSign className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Income by Category */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Income by Category</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(incomeByCategory).map(([category, data]) => (
+              <div key={category} className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{category}</p>
+                    <p className="text-sm text-gray-600">{data.count} transactions</p>
+                  </div>
+                  <p className="text-lg font-bold text-green-600">AED {data.total.toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Search and Filter Bar */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search income transactions..."
+                  value={incomeSearchTerm}
+                  onChange={(e) => setIncomeSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent w-64"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={incomeFilterCategory}
+                onChange={(e) => setIncomeFilterCategory(e.target.value)}
+                className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="all">All Categories</option>
+                <option value="Service Income">Service Income</option>
+                <option value="Interest Income">Interest Income</option>
+                <option value="Other Income">Other Income</option>
+                <option value="Commission Income">Commission Income</option>
+                <option value="Rental Income">Rental Income</option>
+              </select>
+
+              <select
+                value={incomeFilterStatus}
+                onChange={(e) => setIncomeFilterStatus(e.target.value)}
+                className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="all">All Status</option>
+                <option value="completed">Completed</option>
+                <option value="pending">Pending</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+
+              <select
+                value={incomeFilterPaymentMethod}
+                onChange={(e) => setIncomeFilterPaymentMethod(e.target.value)}
+                className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="all">All Payment Methods</option>
+                <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="credit_card">Credit Card</option>
+                <option value="cheque">Cheque</option>
+                <option value="online">Online</option>
+              </select>
+
+              {/* Date Range Filters */}
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">From:</label>
+                <input
+                  type="date"
+                  value={incomeDateRange.startDate}
+                  onChange={(e) => setIncomeDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                  className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">To:</label>
+                <input
+                  type="date"
+                  value={incomeDateRange.endDate}
+                  onChange={(e) => setIncomeDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                  className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Clear Filters Button */}
+              {(incomeDateRange.startDate || incomeDateRange.endDate || incomeSearchTerm || incomeFilterCategory !== 'all' || incomeFilterStatus !== 'all') && (
+                <button
+                  onClick={() => {
+                    setIncomeDateRange({ startDate: '', endDate: '' });
+                    setIncomeSearchTerm('');
+                    setIncomeFilterCategory('all');
+                    setIncomeFilterStatus('all');
+                    setIncomeFilterPaymentMethod('all');
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Clear Filters</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Income Count Display */}
+          <div className="mt-4 text-sm text-gray-600">
+            Showing {filteredIncomeTransactions.length} of {incomeTransactions.length} income transactions
+            {(incomeDateRange.startDate || incomeDateRange.endDate) && (
+              <span className="ml-2 text-green-600">
+                (filtered by date: {incomeDateRange.startDate || 'start'} to {incomeDateRange.endDate || 'end'})
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Income Transactions List */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Income Details</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {incomeLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                        <span className="ml-2 text-gray-600">Loading income transactions...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredIncomeTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <TrendingUp className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No income transactions found</h3>
+                      <p className="text-gray-600">Start by adding your first income entry.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredIncomeTransactions.map((income) => {
+                    const PaymentIcon = getPaymentMethodIcon(income.paymentMethod);
+                    return (
+                      <tr key={income.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{income.description}</p>
+                            <p className="text-sm text-gray-500">{income.companyName} • {income.date}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                            {income.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <p className="text-sm font-semibold text-green-600">+AED {income.amount.toLocaleString()}</p>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <PaymentIcon className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-900 capitalize">{income.paymentMethod.replace('_', ' ')}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(income.status)}`}>
+                            {income.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleViewIncome(income)}
+                              className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleEditIncome(income)}
+                              className="text-green-600 hover:text-green-900 p-1 rounded"
+                              title="Edit Income"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteIncome(income.id)}
+                              className="text-red-600 hover:text-red-900 p-1 rounded"
+                              title="Delete Income"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -805,6 +1376,13 @@ const AccountManagement: React.FC = () => {
             <button className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <Settings className="w-4 h-4" />
               <span>Settings</span>
+            </button>
+            <button
+              onClick={() => setShowAddIncome(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-lg"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Income</span>
             </button>
             <button
               onClick={() => setShowAddTransaction(true)}
@@ -842,10 +1420,195 @@ const AccountManagement: React.FC = () => {
 
       {/* Main Content */}
       {activeTab === 'overview' && renderOverview()}
+      {activeTab === 'income' && renderIncomeManagement()}
       {activeTab === 'transactions' && renderTransactions()}
       {activeTab === 'government' && renderGovernmentAccess()}
       {activeTab === 'vendors' && renderVendors()}
       {activeTab === 'reports' && renderReports()}
+
+      {/* Add Income Modal */}
+      {showAddIncome && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-white bg-opacity-20 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Add Income</h2>
+                    <p className="text-green-100">Record a new income transaction</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAddIncome(false);
+                    resetIncomeForm();
+                  }}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Income Category */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Income Category <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={incomeForm.category}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="Service Income">Service Income</option>
+                    <option value="Interest Income">Interest Income</option>
+                    <option value="Commission Income">Commission Income</option>
+                    <option value="Rental Income">Rental Income</option>
+                    <option value="Other Income">Other Income</option>
+                  </select>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Amount (AED) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={incomeForm.amount}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={incomeForm.description}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter income description"
+                    required
+                  />
+                </div>
+
+                {/* Transaction Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Transaction Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={incomeForm.date}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                {/* Payment Method */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Method <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={incomeForm.paymentMethod}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="credit_card">Credit Card</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
+                  </select>
+                </div>
+
+                {/* Reference Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    value={incomeForm.reference}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, reference: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Optional reference number"
+                  />
+                </div>
+
+                {/* Company Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company (Optional)
+                  </label>
+                  <select
+                    value={incomeForm.companyId}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, companyId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value="">Select Company (Optional)</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.company_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Notes */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={incomeForm.notes}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                    placeholder="Optional notes about this income"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowAddIncome(false);
+                    resetIncomeForm();
+                  }}
+                  className="px-6 py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateIncome}
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 font-medium shadow-lg"
+                >
+                  Create Income
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Transaction Modal */}
       {showAddTransaction && (
@@ -1359,6 +2122,327 @@ const AccountManagement: React.FC = () => {
                 </button>
                 <button
                   onClick={confirmDeleteTransaction}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Income Details Modal */}
+      {showIncomeDetails && selectedIncome && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-white bg-opacity-20 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Income Details</h2>
+                    <p className="text-green-100">View income transaction information</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowIncomeDetails(false)}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <p className="text-lg font-semibold text-gray-900">{selectedIncome.category}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                  <p className="text-lg font-semibold text-green-600">+AED {selectedIncome.amount.toLocaleString()}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <p className="text-gray-900">{selectedIncome.description}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Date</label>
+                  <p className="text-gray-900">{selectedIncome.date}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                  <p className="text-gray-900 capitalize">{selectedIncome.paymentMethod.replace('_', ' ')}</p>
+                </div>
+                {selectedIncome.referenceNumber && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reference Number</label>
+                    <p className="text-gray-900">{selectedIncome.referenceNumber}</p>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedIncome.status)}`}>
+                    {selectedIncome.status}
+                  </span>
+                </div>
+                {selectedIncome.companyName && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                    <p className="text-gray-900">{selectedIncome.companyName}</p>
+                  </div>
+                )}
+                {selectedIncome.notes && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <p className="text-gray-900">{selectedIncome.notes}</p>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Created At</label>
+                  <p className="text-gray-900">{new Date(selectedIncome.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowIncomeDetails(false)}
+                  className="px-6 py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowIncomeDetails(false);
+                    handleEditIncome(selectedIncome);
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 font-medium shadow-lg"
+                >
+                  Edit Income
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Income Modal */}
+      {showEditIncome && selectedIncome && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-white bg-opacity-20 rounded-lg">
+                    <Edit className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Edit Income</h2>
+                    <p className="text-green-100">Update income transaction details</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowEditIncome(false);
+                    setSelectedIncome(null);
+                  }}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Income Category */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Income Category <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={incomeForm.category}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="Service Income">Service Income</option>
+                    <option value="Interest Income">Interest Income</option>
+                    <option value="Commission Income">Commission Income</option>
+                    <option value="Rental Income">Rental Income</option>
+                    <option value="Other Income">Other Income</option>
+                  </select>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Amount (AED) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={incomeForm.amount}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={incomeForm.description}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter income description"
+                    required
+                  />
+                </div>
+
+                {/* Transaction Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Transaction Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={incomeForm.date}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                {/* Payment Method */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Method <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={incomeForm.paymentMethod}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="credit_card">Credit Card</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
+                  </select>
+                </div>
+
+                {/* Reference Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    value={incomeForm.reference}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, reference: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Optional reference number"
+                  />
+                </div>
+
+                {/* Company Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company (Optional)
+                  </label>
+                  <select
+                    value={incomeForm.companyId}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, companyId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value="">Select Company (Optional)</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.company_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Notes */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={incomeForm.notes}
+                    onChange={(e) => setIncomeForm(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                    placeholder="Optional notes about this income"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowEditIncome(false);
+                    setSelectedIncome(null);
+                  }}
+                  className="px-6 py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateIncome}
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 font-medium shadow-lg"
+                >
+                  Update Income
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Income Confirmation Modal */}
+      {showDeleteIncomeConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Income</h3>
+                  <p className="text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-6">
+                Are you sure you want to delete this income transaction? This will permanently remove the record from your system.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteIncomeConfirm(false);
+                    setIncomeToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteIncome}
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
                   Delete

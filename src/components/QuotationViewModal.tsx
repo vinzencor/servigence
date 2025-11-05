@@ -110,19 +110,27 @@ const QuotationViewModal: React.FC<QuotationViewModalProps> = ({
             </div>
             
             <div class="section">
-              <h3>Quotation Details</h3>
+              <h3>Service Items</h3>
               <table>
                 <tr>
                   <th>Service</th>
-                  <th>Amount (AED)</th>
+                  <th>Quantity</th>
+                  <th>Service Charge</th>
+                  <th>Govt. Charge</th>
+                  <th>Line Total</th>
                 </tr>
+                ${quotation.items && quotation.items.length > 0 ? quotation.items.map((item: any) => `
                 <tr>
-                  <td>${quotation.service_name}</td>
-                  <td>${quotation.total_amount.toLocaleString()}</td>
+                  <td>${item.service_name}</td>
+                  <td>${item.quantity}</td>
+                  <td>AED ${item.service_charge.toLocaleString()}</td>
+                  <td>AED ${item.government_charge.toLocaleString()}</td>
+                  <td>AED ${item.line_total.toLocaleString()}</td>
                 </tr>
-                <tr>
-                  <td><strong>Total</strong></td>
-                  <td><strong>AED ${quotation.total_amount.toLocaleString()}</strong></td>
+                `).join('') : '<tr><td colspan="5">No service items</td></tr>'}
+                <tr style="background-color: #f9fafb; font-weight: bold;">
+                  <td colspan="4" style="text-align: right;">Total Amount:</td>
+                  <td>AED ${quotation.total_amount.toLocaleString()}</td>
                 </tr>
               </table>
             </div>
@@ -287,25 +295,59 @@ const QuotationViewModal: React.FC<QuotationViewModalProps> = ({
               </div>
             </div>
 
-            {/* Service Information */}
+            {/* Service Items */}
             <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Details</h3>
-              
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{quotation.service_name}</p>
-                    {quotation.service?.category && (
-                      <p className="text-sm text-gray-600">{quotation.service.category}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-amber-600">
-                      AED {quotation.total_amount.toLocaleString()}
-                    </p>
-                  </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Items</h3>
+
+              {quotation.items && quotation.items.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Service</th>
+                        <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">Quantity</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Service Charge</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Govt. Charge</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quotation.items.map((item: any, index: number) => (
+                        <tr key={item.id || index} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <p className="font-medium text-gray-900">{item.service_name}</p>
+                            {item.service_category && (
+                              <p className="text-sm text-gray-600">{item.service_category}</p>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center text-gray-900">{item.quantity}</td>
+                          <td className="py-3 px-4 text-right text-gray-900">
+                            AED {item.service_charge.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-900">
+                            AED {item.government_charge.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-right font-medium text-gray-900">
+                            AED {item.line_total.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-amber-50 border-t-2 border-amber-200">
+                        <td colSpan={4} className="py-3 px-4 text-right font-bold text-gray-900">
+                          Total Amount:
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-amber-600 text-lg">
+                          AED {quotation.total_amount.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-gray-600 text-center">No service items found</p>
+                </div>
+              )}
             </div>
 
             {/* Quotation Details */}

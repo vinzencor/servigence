@@ -802,7 +802,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
             notes: advancePaymentForm.notes || null,
             description: `Advance payment for ${registrationType} registration: ${customerName}`,
             created_by: user?.name || 'System',
-            status: 'confirmed'
+            status: 'completed' // Changed from 'confirmed' to 'completed' to match database constraint
           };
 
           console.log('💾 Saving advance payment:', paymentData);

@@ -545,7 +545,21 @@ export const dbHelpers = {
     }
 
     console.log('Loaded service billings:', data);
-    return data;
+
+    // Calculate payment amounts and outstanding balances for each billing
+    const billingsWithPayments = await this.calculateOutstandingAmounts(data || []);
+
+    // Add paid_amount field for compatibility with UI
+    const billingsWithPaidAmount = billingsWithPayments.map(billing => ({
+      ...billing,
+      paid_amount: billing.totalPaid || 0,
+      // Update status based on payment status (using service_billings constraint values)
+      // Constraint allows: 'pending', 'in_progress', 'completed', 'cancelled'
+      status: billing.isFullyPaid ? 'completed' : (billing.totalPaid > 0 ? 'in_progress' : billing.status || 'pending')
+    }));
+
+    console.log('Service billings with payment calculations:', billingsWithPaidAmount);
+    return billingsWithPaidAmount;
   },
 
   async createServiceBilling(billing: any) {
@@ -2055,20 +2069,18 @@ export const dbHelpers = {
 
       if (billingError) throw billingError;
 
-      // Get payment history
+      // Use calculateOutstandingAmounts to get accurate payment calculations
+      // This includes temp payments, DB payments, and applied advance payments
+      const billingsWithPayments = await this.calculateOutstandingAmounts([billing]);
+      const billingWithPayments = billingsWithPayments[0];
+
+      // Get payment history (temp payments only for now)
       const payments = await this.getPaymentHistory(billingId);
 
-      const totalAmount = parseFloat(billing.total_amount || 0);
-      // Calculate paid amount from temporary payment history
-      const paidAmount = payments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amount || 0), 0);
-      const outstandingAmount = totalAmount - paidAmount;
-
       return {
-        ...billing,
+        ...billingWithPayments,
         payments,
-        totalAmount,
-        paidAmount,
-        outstandingAmount,
+        paidAmount: billingWithPayments.totalPaid,
         clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
         serviceName: billing.service_type?.name || 'Unknown Service'
       };
@@ -2163,34 +2175,61 @@ export const dbHelpers = {
     }
   },
 
-  // Calculate outstanding amounts by summing payments from advance_payments table
+  // Calculate outstanding amounts by summing payments from both localStorage and database
   async calculateOutstandingAmounts(billings: any[]) {
     try {
       const billingsWithOutstanding = [];
+
+      // Get all billing IDs to fetch applications in bulk
+      const billingIds = billings.map(b => b.id);
+
+      // Get all advance payment applications for these billings
+      let allApplications: any[] = [];
+      if (billingIds.length > 0) {
+        const { data: applications } = await supabase
+          .from('advance_payment_applications')
+          .select('billing_id, applied_amount')
+          .in('billing_id', billingIds);
+
+        allApplications = applications || [];
+      }
+
+      console.log('🔍 Advance payment applications found:', allApplications?.length || 0);
 
       for (const billing of billings) {
         const totalAmount = parseFloat(billing.total_amount || 0);
         let totalPaid = 0;
 
-        // Use only temporary localStorage tracking (avoids all database column errors)
+        // 1. Get temporary payments from localStorage
         const tempPayments = this.getTempPayments(billing.id);
-        totalPaid = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
+        const tempPaid = tempPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
+        // 2. Get applied advance payments for this billing from advance_payment_applications table
+        // This is the ONLY source of truth for which payments have been applied to which billings
+        const appliedPayments = allApplications.filter(app => app.billing_id === billing.id);
+        const appliedAmount = appliedPayments.reduce((sum, app) => sum + parseFloat(app.applied_amount || 0), 0);
+
+        // Total paid = temp payments + applied advance payments
+        totalPaid = tempPaid + appliedAmount;
         const outstandingAmount = Math.max(0, totalAmount - totalPaid);
+
+        console.log(`💰 Billing ${billing.invoice_number}: Total=${totalAmount}, TempPaid=${tempPaid}, AppliedAdvance=${appliedAmount}, TotalPaid=${totalPaid}, Outstanding=${outstandingAmount}`);
 
         billingsWithOutstanding.push({
           ...billing,
           totalAmount,
           totalPaid,
+          appliedAdvanceAmount: appliedAmount,
           outstandingAmount,
-          isFullyPaid: outstandingAmount === 0
+          isFullyPaid: outstandingAmount === 0,
+          payments: appliedPayments
         });
       }
 
       return billingsWithOutstanding;
     } catch (error) {
       console.error('Error calculating outstanding amounts:', error);
-      // Return original billings with basic calculations (no paid_amount column)
+      // Return original billings with basic calculations
       return billings.map(billing => ({
         ...billing,
         totalAmount: parseFloat(billing.total_amount || 0),
@@ -2498,42 +2537,248 @@ export const dbHelpers = {
   // Customer Advance Payments Management
   async createCustomerAdvancePayment(paymentData: any) {
     // Generate unique receipt number
-    const receiptNumber = `ADV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-    const invoiceNumber = `INV-ADV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const receiptNumber = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
-    const dataWithReceipt = {
-      ...paymentData,
-      receipt_number: receiptNumber,
-      invoice_number: invoiceNumber,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+    // Ensure payment_method is one of the allowed values
+    let paymentMethod = paymentData.payment_method || 'cash';
+    // Normalize payment method to match database constraints
+    if (paymentMethod === 'card') {
+      paymentMethod = 'credit_card';
+    }
+
+    // Create transaction in account_transactions table (NEW SYSTEM)
+    // This ensures advance payments are visible across all components
+    const transactionData = {
+      transaction_type: 'advance_payment',
+      category: 'Advance Payment',
+      description: paymentData.description || `Advance payment from ${paymentData.company_id ? 'company' : 'individual'} registration`,
+      amount: parseFloat(paymentData.amount),
+      transaction_date: paymentData.payment_date || new Date().toISOString().split('T')[0],
+      payment_method: paymentMethod,
+      reference_number: receiptNumber, // Store receipt number in reference_number field
+      status: 'completed', // Always completed for advance payments
+      created_by: paymentData.created_by || 'System',
+      notes: paymentData.notes || '',
+      company_id: paymentData.company_id || null,
+      individual_id: paymentData.individual_id || null
     };
 
+    console.log('💾 Creating advance payment in account_transactions:', transactionData);
+
     const { data, error } = await supabase
-      .from('customer_advance_payments')
-      .insert([dataWithReceipt])
+      .from('account_transactions')
+      .insert([transactionData])
       .select()
       .single();
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('❌ Error creating advance payment:', error);
+      console.error('❌ Transaction data that failed:', transactionData);
+      throw error;
+    }
+
+    console.log('✅ Advance payment created in account_transactions:', data);
+
+    // Return data in format expected by calling components
+    return {
+      ...data,
+      receipt_number: receiptNumber,
+      payment_reference: paymentData.payment_reference || null
+    };
   },
 
   async getCustomerAdvancePayments(customerId: string, customerType: 'company' | 'individual') {
     const column = customerType === 'company' ? 'company_id' : 'individual_id';
 
+    // Query from account_transactions table (NEW SYSTEM)
     const { data, error } = await supabase
-      .from('customer_advance_payments')
+      .from('account_transactions')
       .select(`
         *,
         company:companies(id, company_name),
         individual:individuals(id, individual_name)
       `)
       .eq(column, customerId)
-      .order('payment_date', { ascending: false });
+      .eq('transaction_type', 'advance_payment')
+      .order('transaction_date', { ascending: false });
 
     if (error) throw error;
-    return data;
+
+    // Transform data to match expected format
+    return data?.map(transaction => ({
+      id: transaction.id,
+      company_id: transaction.company_id,
+      individual_id: transaction.individual_id,
+      amount: transaction.amount,
+      payment_method: transaction.payment_method,
+      payment_date: transaction.transaction_date,
+      payment_reference: transaction.notes?.includes('Payment Ref:')
+        ? transaction.notes.split('Payment Ref:')[1]?.trim()
+        : null,
+      receipt_number: transaction.reference_number,
+      notes: transaction.notes,
+      description: transaction.description,
+      status: transaction.status,
+      created_at: transaction.created_at,
+      updated_at: transaction.updated_at,
+      created_by: transaction.created_by,
+      company: transaction.company,
+      individual: transaction.individual
+    })) || [];
+  },
+
+  async updateAdvancePayment(paymentId: string, updateData: any) {
+    try {
+      // Normalize payment method
+      let paymentMethod = updateData.payment_method || 'cash';
+      if (paymentMethod === 'card') {
+        paymentMethod = 'credit_card';
+      }
+
+      const newAmount = parseFloat(updateData.amount);
+
+      console.log('💾 Updating advance payment:', paymentId, 'New amount:', newAmount);
+
+      // Step 1: Get the current advance payment amount
+      const { data: currentPayment, error: fetchError } = await supabase
+        .from('account_transactions')
+        .select('amount')
+        .eq('id', paymentId)
+        .eq('transaction_type', 'advance_payment')
+        .single();
+
+      if (fetchError) {
+        console.error('❌ Error fetching current payment:', fetchError);
+        throw fetchError;
+      }
+
+      const oldAmount = parseFloat(currentPayment.amount);
+      console.log('📊 Old amount:', oldAmount, 'New amount:', newAmount);
+
+      // Step 2: Get all applications of this advance payment
+      const { data: applications, error: applicationsError } = await supabase
+        .from('advance_payment_applications')
+        .select('id, applied_amount, billing_id')
+        .eq('receipt_transaction_id', paymentId);
+
+      if (applicationsError) {
+        console.error('❌ Error fetching applications:', applicationsError);
+        throw applicationsError;
+      }
+
+      const totalApplied = applications?.reduce((sum, app) => sum + parseFloat(app.applied_amount), 0) || 0;
+      console.log('📊 Total applied amount:', totalApplied, 'Applications count:', applications?.length || 0);
+
+      // Step 3: Validate that new amount is sufficient for existing applications
+      if (newAmount < totalApplied) {
+        // Check if there's a data inconsistency (applied > original amount)
+        const hasDataInconsistency = totalApplied > oldAmount;
+
+        if (hasDataInconsistency) {
+          console.warn('⚠️ Data inconsistency detected: Applied amount exceeds original receipt amount');
+          console.warn(`  Original receipt: AED ${oldAmount}`);
+          console.warn(`  Total applied: AED ${totalApplied}`);
+          console.warn(`  This indicates the receipt was over-applied (applied multiple times)`);
+
+          throw new Error(
+            `⚠️ Data Inconsistency Detected!\n\n` +
+            `This advance payment has a data integrity issue:\n` +
+            `• Original amount: AED ${oldAmount.toLocaleString()}\n` +
+            `• Total applied: AED ${totalApplied.toLocaleString()}\n` +
+            `• You're trying to set: AED ${newAmount.toLocaleString()}\n\n` +
+            `The receipt was over-applied (likely applied multiple times to different billings).\n\n` +
+            `To fix this:\n` +
+            `1. Set the amount to at least AED ${totalApplied.toLocaleString()} to match what's been applied, OR\n` +
+            `2. Go to the service billings and manually unapply some of these payments first\n\n` +
+            `Affected billings: ${applications?.length || 0} billing(s)`
+          );
+        }
+
+        throw new Error(
+          `Cannot reduce advance payment to AED ${newAmount.toLocaleString()}. ` +
+          `AED ${totalApplied.toLocaleString()} has already been applied to service billings. ` +
+          `Please unapply some payments first or increase the amount to at least AED ${totalApplied.toLocaleString()}.`
+        );
+      }
+
+      // Step 4: Update the advance payment amount in account_transactions
+      const transactionData = {
+        amount: newAmount,
+        transaction_date: updateData.payment_date,
+        payment_method: paymentMethod,
+        notes: updateData.notes || '',
+        description: updateData.description || '',
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('account_transactions')
+        .update(transactionData)
+        .eq('id', paymentId)
+        .eq('transaction_type', 'advance_payment')
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error updating advance payment:', error);
+        throw error;
+      }
+
+      // Step 5: If amount changed and there are applications, proportionally update them
+      if (oldAmount !== newAmount && applications && applications.length > 0) {
+        console.log('🔄 Proportionally updating applied amounts...');
+
+        const ratio = newAmount / oldAmount;
+        console.log('📊 Update ratio:', ratio);
+
+        // Check if this is fixing a data inconsistency
+        const wasOverApplied = totalApplied > oldAmount;
+        if (wasOverApplied) {
+          console.warn('⚠️ This update is fixing a data inconsistency where the receipt was over-applied');
+        }
+
+        for (const app of applications) {
+          const oldAppliedAmount = parseFloat(app.applied_amount);
+          const newAppliedAmount = oldAppliedAmount * ratio;
+
+          console.log(`  📝 Updating application ${app.id}: ${oldAppliedAmount} → ${newAppliedAmount}`);
+
+          const { error: updateAppError } = await supabase
+            .from('advance_payment_applications')
+            .update({
+              applied_amount: newAppliedAmount,
+              notes: wasOverApplied
+                ? `Fixed data inconsistency: Updated from AED ${oldAppliedAmount.toFixed(2)} (receipt was over-applied)`
+                : `Updated proportionally from AED ${oldAppliedAmount.toFixed(2)} due to advance payment amount change`
+            })
+            .eq('id', app.id);
+
+          if (updateAppError) {
+            console.error('❌ Error updating application:', updateAppError);
+            // Continue with other applications even if one fails
+          }
+        }
+
+        console.log('✅ All applications updated proportionally');
+
+        if (wasOverApplied) {
+          console.log('✅ Data inconsistency has been corrected');
+        }
+      }
+
+      console.log('✅ Advance payment updated successfully:', data);
+
+      // Return additional info about data inconsistency if it was fixed
+      return {
+        ...data,
+        _wasOverApplied: totalApplied > oldAmount,
+        _oldAmount: oldAmount,
+        _totalApplied: totalApplied
+      };
+    } catch (error) {
+      console.error('❌ Error in updateAdvancePayment:', error);
+      throw error;
+    }
   },
 
   async getAdvancePaymentByReceiptNumber(receiptNumber: string) {
@@ -2592,21 +2837,53 @@ export const dbHelpers = {
     // Generate unique quotation number
     const quotationNumber = `QUO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
+    // Extract service_items from quotationData
+    const { service_items, ...quotationFields } = quotationData;
+
     const dataWithNumber = {
-      ...quotationData,
+      ...quotationFields,
       quotation_number: quotationNumber,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
+    // Create the quotation
+    const { data: quotation, error: quotationError } = await supabase
       .from('quotations')
       .insert([dataWithNumber])
       .select('*')
       .single();
 
-    if (error) throw error;
-    return data;
+    if (quotationError) throw quotationError;
+
+    // Create quotation items if provided
+    if (service_items && service_items.length > 0) {
+      const itemsToInsert = service_items.map((item: any, index: number) => ({
+        quotation_id: quotation.id,
+        service_id: item.service_id,
+        service_name: item.service_name,
+        service_category: item.service_category || '',
+        quantity: item.quantity,
+        service_charge: item.service_charge,
+        government_charge: item.government_charge,
+        line_total: item.line_total,
+        display_order: index,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('quotation_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) {
+        // Rollback: delete the quotation if items insertion fails
+        await supabase.from('quotations').delete().eq('id', quotation.id);
+        throw itemsError;
+      }
+    }
+
+    return quotation;
   },
 
   async getQuotations(filters?: {
@@ -2636,24 +2913,81 @@ export const dbHelpers = {
       query = query.lte('quotation_date', filters.dateTo);
     }
 
-    const { data, error } = await query;
+    const { data: quotations, error } = await query;
     if (error) throw error;
-    return data;
+
+    // Load quotation items for each quotation
+    if (quotations && quotations.length > 0) {
+      const quotationsWithItems = await Promise.all(
+        quotations.map(async (quotation) => {
+          const { data: items } = await supabase
+            .from('quotation_items')
+            .select('*')
+            .eq('quotation_id', quotation.id)
+            .order('display_order', { ascending: true });
+
+          return {
+            ...quotation,
+            items: items || []
+          };
+        })
+      );
+      return quotationsWithItems;
+    }
+
+    return quotations;
   },
 
   async updateQuotation(id: string, updates: any) {
-    const { data, error } = await supabase
+    // Extract service_items from updates
+    const { service_items, ...quotationFields } = updates;
+
+    // Update the quotation
+    const { data: quotation, error: quotationError } = await supabase
       .from('quotations')
       .update({
-        ...updates,
+        ...quotationFields,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select('*')
       .single();
 
-    if (error) throw error;
-    return data;
+    if (quotationError) throw quotationError;
+
+    // Update quotation items if provided
+    if (service_items) {
+      // Delete existing items
+      await supabase
+        .from('quotation_items')
+        .delete()
+        .eq('quotation_id', id);
+
+      // Insert new items
+      if (service_items.length > 0) {
+        const itemsToInsert = service_items.map((item: any, index: number) => ({
+          quotation_id: id,
+          service_id: item.service_id,
+          service_name: item.service_name,
+          service_category: item.service_category || '',
+          quantity: item.quantity,
+          service_charge: item.service_charge,
+          government_charge: item.government_charge,
+          line_total: item.line_total,
+          display_order: index,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('quotation_items')
+          .insert(itemsToInsert);
+
+        if (itemsError) throw itemsError;
+      }
+    }
+
+    return quotation;
   },
 
   async deleteQuotation(id: string) {
@@ -2762,37 +3096,63 @@ export const dbHelpers = {
 
   async getCompanyFinancialSummary(companyId: string, startDate?: string, endDate?: string) {
     try {
-      // Get service billings
-      const billings = await this.getCompanyServiceBillings(companyId, startDate, endDate);
+      // For outstanding calculations, we need ALL billings and payments (not filtered by date)
+      // This matches the Outstanding Report logic
 
-      // Get account transactions
-      const transactions = await this.getCompanyAccountTransactions(companyId, startDate, endDate);
+      // Get ALL service billings for this company (excluding cancelled)
+      const { data: allBillings, error: allBillingsError } = await supabase
+        .from('service_billings')
+        .select('id, total_amount, service_date, status')
+        .eq('company_id', companyId)
+        .neq('status', 'cancelled');
 
-      // Get advance payments from localStorage (temporary storage)
-      const storedPayments = localStorage.getItem('advancePayments');
-      const allPayments = storedPayments ? JSON.parse(storedPayments) : [];
-      const companyPayments = allPayments.filter((payment: any) =>
-        payment.companyId === companyId &&
-        (!startDate || payment.payment_date >= startDate) &&
-        (!endDate || payment.payment_date <= endDate)
-      );
+      if (allBillingsError) {
+        console.error('Error loading all billings:', allBillingsError);
+        throw allBillingsError;
+      }
 
-      // Calculate totals
-      const totalBilled = billings.reduce((sum, billing) =>
-        sum + (parseFloat(billing.total_amount_with_vat?.toString() || '0')), 0);
+      // Get ALL advance payments for this company
+      const { data: allPayments, error: allPaymentsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount, transaction_date')
+        .eq('company_id', companyId)
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed');
 
-      const totalPaid = companyPayments.reduce((sum, payment) =>
+      if (allPaymentsError) {
+        console.error('Error loading all payments:', allPaymentsError);
+        throw allPaymentsError;
+      }
+
+      // Get ALL account transactions for credits/debits (not filtered by date)
+      const { data: allTransactions, error: allTransactionsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount, transaction_type')
+        .eq('company_id', companyId)
+        .in('transaction_type', ['credit', 'debit']);
+
+      if (allTransactionsError) {
+        console.error('Error loading all transactions:', allTransactionsError);
+        throw allTransactionsError;
+      }
+
+      // Calculate totals from ALL billings and payments (not filtered by date)
+      const totalBilled = (allBillings || []).reduce((sum, billing) =>
+        sum + (parseFloat(billing.total_amount?.toString() || '0')), 0);
+
+      const totalPaid = (allPayments || []).reduce((sum, payment) =>
         sum + (parseFloat(payment.amount?.toString() || '0')), 0);
 
-      const totalCredits = transactions
+      const totalCredits = (allTransactions || [])
         .filter(t => t.transaction_type === 'credit' || parseFloat(t.amount?.toString() || '0') > 0)
         .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
 
-      const totalDebits = transactions
+      const totalDebits = (allTransactions || [])
         .filter(t => t.transaction_type === 'debit' || parseFloat(t.amount?.toString() || '0') < 0)
         .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
 
-      const totalOutstanding = totalBilled - totalPaid;
+      // Outstanding amount should never be negative (matches Outstanding Report)
+      const totalOutstanding = Math.max(0, totalBilled - totalPaid);
 
       return {
         totalBilled,
@@ -2800,12 +3160,909 @@ export const dbHelpers = {
         totalOutstanding,
         totalCredits,
         totalDebits,
-        billingCount: billings.length,
-        paymentCount: companyPayments.length,
-        transactionCount: transactions.length
+        billingCount: (allBillings || []).length,
+        paymentCount: (allPayments || []).length,
+        transactionCount: (allTransactions || []).length
       };
     } catch (error) {
       console.error('Error calculating financial summary:', error);
+      throw error;
+    }
+  },
+
+  // Expense Management Functions
+  async getExpenses() {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select('*')
+      .eq('transaction_type', 'expense')
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    // Transform data to match Expense interface
+    return data?.map(transaction => ({
+      id: transaction.id,
+      category: transaction.category,
+      description: transaction.description,
+      amount: parseFloat(transaction.amount || 0),
+      transactionDate: transaction.transaction_date,
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      createdBy: transaction.created_by,
+      notes: transaction.notes,
+      createdAt: transaction.created_at,
+      updatedAt: transaction.updated_at
+    })) || [];
+  },
+
+  async createExpense(expenseData: any) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .insert([expenseData])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateExpense(expenseId: string, expenseData: any) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .update(expenseData)
+      .eq('id', expenseId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteExpense(expenseId: string) {
+    const { error } = await supabase
+      .from('account_transactions')
+      .delete()
+      .eq('id', expenseId);
+
+    if (error) throw error;
+    return true;
+  },
+
+  async getExpensesByDateRange(startDate: string, endDate: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select('*')
+      .eq('transaction_type', 'expense')
+      .gte('transaction_date', startDate)
+      .lte('transaction_date', endDate)
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data?.map(transaction => ({
+      id: transaction.id,
+      category: transaction.category,
+      description: transaction.description,
+      amount: parseFloat(transaction.amount || 0),
+      transactionDate: transaction.transaction_date,
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      createdBy: transaction.created_by,
+      notes: transaction.notes,
+      createdAt: transaction.created_at,
+      updatedAt: transaction.updated_at
+    })) || [];
+  },
+
+  async getExpensesByCategory(category: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select('*')
+      .eq('transaction_type', 'expense')
+      .eq('category', category)
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data?.map(transaction => ({
+      id: transaction.id,
+      category: transaction.category,
+      description: transaction.description,
+      amount: parseFloat(transaction.amount || 0),
+      transactionDate: transaction.transaction_date,
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      createdBy: transaction.created_by,
+      notes: transaction.notes,
+      createdAt: transaction.created_at,
+      updatedAt: transaction.updated_at
+    })) || [];
+  },
+
+  async getExpenseSummaryByCategory(startDate?: string, endDate?: string) {
+    let query = supabase
+      .from('account_transactions')
+      .select('category, amount')
+      .eq('transaction_type', 'expense');
+
+    if (startDate) {
+      query = query.gte('transaction_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('transaction_date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Group by category and sum amounts
+    const summary = data?.reduce((acc, transaction) => {
+      const category = transaction.category || 'Uncategorized';
+      const amount = parseFloat(transaction.amount || 0);
+
+      if (!acc[category]) {
+        acc[category] = 0;
+      }
+      acc[category] += amount;
+
+      return acc;
+    }, {} as Record<string, number>) || {};
+
+    return Object.entries(summary).map(([category, total]) => ({
+      category,
+      total,
+      count: data?.filter(t => (t.category || 'Uncategorized') === category).length || 0
+    }));
+  },
+
+  // Credit Report Functions
+  async getCreditTransactions() {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'credit')
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data?.map(transaction => ({
+      id: transaction.id,
+      date: transaction.transaction_date,
+      description: transaction.description,
+      companyName: transaction.company?.company_name || transaction.individual?.individual_name || 'N/A',
+      amount: parseFloat(transaction.amount || 0),
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      category: transaction.category,
+      notes: transaction.notes,
+      createdAt: transaction.created_at
+    })) || [];
+  },
+
+  async getCreditTransactionsByDateRange(startDate: string, endDate: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'credit')
+      .gte('transaction_date', startDate)
+      .lte('transaction_date', endDate)
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Debit Report Functions
+  async getDebitTransactions() {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'debit')
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data?.map(transaction => ({
+      id: transaction.id,
+      date: transaction.transaction_date,
+      description: transaction.description,
+      companyName: transaction.company?.company_name || transaction.individual?.individual_name || 'N/A',
+      amount: parseFloat(transaction.amount || 0),
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      category: transaction.category,
+      notes: transaction.notes,
+      createdAt: transaction.created_at
+    })) || [];
+  },
+
+  async getDebitTransactionsByDateRange(startDate: string, endDate: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'debit')
+      .gte('transaction_date', startDate)
+      .lte('transaction_date', endDate)
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Advance Payment Report Functions
+  async getAdvancePaymentTransactions() {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'advance_payment')
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data?.map(transaction => ({
+      id: transaction.id,
+      date: transaction.transaction_date,
+      description: transaction.description,
+      companyName: transaction.company?.company_name || transaction.individual?.individual_name || 'N/A',
+      amount: parseFloat(transaction.amount || 0),
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      category: transaction.category,
+      notes: transaction.notes,
+      createdAt: transaction.created_at
+    })) || [];
+  },
+
+  async getAdvancePaymentTransactionsByDateRange(startDate: string, endDate: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'advance_payment')
+      .gte('transaction_date', startDate)
+      .lte('transaction_date', endDate)
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Income Management Functions
+  async getIncomeTransactions() {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'income')
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data?.map(transaction => ({
+      id: transaction.id,
+      date: transaction.transaction_date,
+      description: transaction.description,
+      companyName: transaction.company?.company_name || transaction.individual?.individual_name || 'N/A',
+      amount: parseFloat(transaction.amount || 0),
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+      status: transaction.status,
+      category: transaction.category,
+      notes: transaction.notes,
+      createdAt: transaction.created_at
+    })) || [];
+  },
+
+  async getIncomeTransactionsByDateRange(startDate: string, endDate: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .select(`
+        *,
+        company:companies(company_name),
+        individual:individuals(individual_name)
+      `)
+      .eq('transaction_type', 'income')
+      .gte('transaction_date', startDate)
+      .lte('transaction_date', endDate)
+      .order('transaction_date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  async createIncomeTransaction(incomeData: any) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .insert([{
+        transaction_type: 'income',
+        category: incomeData.category,
+        description: incomeData.description,
+        amount: incomeData.amount,
+        transaction_date: incomeData.transaction_date,
+        payment_method: incomeData.payment_method,
+        reference_number: incomeData.reference_number,
+        status: incomeData.status || 'completed',
+        created_by: incomeData.created_by || 'System',
+        notes: incomeData.notes,
+        company_id: incomeData.company_id,
+        individual_id: incomeData.individual_id
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateIncomeTransaction(id: string, incomeData: any) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .update({
+        category: incomeData.category,
+        description: incomeData.description,
+        amount: incomeData.amount,
+        transaction_date: incomeData.transaction_date,
+        payment_method: incomeData.payment_method,
+        reference_number: incomeData.reference_number,
+        status: incomeData.status,
+        notes: incomeData.notes,
+        company_id: incomeData.company_id,
+        individual_id: incomeData.individual_id
+      })
+      .eq('id', id)
+      .eq('transaction_type', 'income')
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteIncomeTransaction(id: string) {
+    const { data, error } = await supabase
+      .from('account_transactions')
+      .delete()
+      .eq('id', id)
+      .eq('transaction_type', 'income')
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Customer Payment Methods
+  async getCustomerPaymentMethods(customerId: string, customerType: 'company' | 'individual') {
+    const filterColumn = customerType === 'company' ? 'company_id' : 'individual_id';
+
+    const { data, error } = await supabase
+      .from('customer_payment_methods')
+      .select('*')
+      .eq(filterColumn, customerId)
+      .eq('is_active', true)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async createCustomerPaymentMethod(paymentMethod: {
+    customerId: string;
+    customerType: 'company' | 'individual';
+    paymentType: 'cash' | 'bank_transfer' | 'credit_card' | 'cheque' | 'online';
+    methodName: string;
+    cardNumberLastFour?: string;
+    cardHolderName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    iban?: string;
+    swiftCode?: string;
+    chequeDetails?: string;
+    onlinePaymentId?: string;
+    isDefault?: boolean;
+    notes?: string;
+  }) {
+    const { customerId, customerType, ...rest } = paymentMethod;
+
+    const data = {
+      ...rest,
+      company_id: customerType === 'company' ? customerId : null,
+      individual_id: customerType === 'individual' ? customerId : null,
+      method_name: rest.methodName,
+      payment_type: rest.paymentType,
+      card_number_last_four: rest.cardNumberLastFour,
+      card_holder_name: rest.cardHolderName,
+      bank_name: rest.bankName,
+      account_number: rest.accountNumber,
+      swift_code: rest.swiftCode,
+      cheque_details: rest.chequeDetails,
+      online_payment_id: rest.onlinePaymentId,
+      is_default: rest.isDefault || false,
+      is_active: true,
+      created_by: 'system'
+    };
+
+    // If this is set as default, remove default from other methods
+    if (data.is_default) {
+      const filterColumn = customerType === 'company' ? 'company_id' : 'individual_id';
+      await supabase
+        .from('customer_payment_methods')
+        .update({ is_default: false })
+        .eq(filterColumn, customerId);
+    }
+
+    const { data: created, error } = await supabase
+      .from('customer_payment_methods')
+      .insert([data])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return created;
+  },
+
+  async updateCustomerPaymentMethod(id: string, updates: {
+    methodName?: string;
+    cardNumberLastFour?: string;
+    cardHolderName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    iban?: string;
+    swiftCode?: string;
+    chequeDetails?: string;
+    onlinePaymentId?: string;
+    isDefault?: boolean;
+    isActive?: boolean;
+    notes?: string;
+  }) {
+    const data: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (updates.methodName !== undefined) data.method_name = updates.methodName;
+    if (updates.cardNumberLastFour !== undefined) data.card_number_last_four = updates.cardNumberLastFour;
+    if (updates.cardHolderName !== undefined) data.card_holder_name = updates.cardHolderName;
+    if (updates.bankName !== undefined) data.bank_name = updates.bankName;
+    if (updates.accountNumber !== undefined) data.account_number = updates.accountNumber;
+    if (updates.iban !== undefined) data.iban = updates.iban;
+    if (updates.swiftCode !== undefined) data.swift_code = updates.swiftCode;
+    if (updates.chequeDetails !== undefined) data.cheque_details = updates.chequeDetails;
+    if (updates.onlinePaymentId !== undefined) data.online_payment_id = updates.onlinePaymentId;
+    if (updates.isDefault !== undefined) data.is_default = updates.isDefault;
+    if (updates.isActive !== undefined) data.is_active = updates.isActive;
+    if (updates.notes !== undefined) data.notes = updates.notes;
+
+    const { data: updated, error } = await supabase
+      .from('customer_payment_methods')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return updated;
+  },
+
+  async deleteCustomerPaymentMethod(id: string) {
+    const { error } = await supabase
+      .from('customer_payment_methods')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+
+  async setDefaultCustomerPaymentMethod(id: string, customerId: string, customerType: 'company' | 'individual') {
+    const filterColumn = customerType === 'company' ? 'company_id' : 'individual_id';
+
+    // First, remove default status from all methods for this customer
+    await supabase
+      .from('customer_payment_methods')
+      .update({ is_default: false })
+      .eq(filterColumn, customerId);
+
+    // Then set the specified method as default
+    const { data, error } = await supabase
+      .from('customer_payment_methods')
+      .update({ is_default: true })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // ============================================================================
+  // ADVANCE PAYMENT APPLICATION FUNCTIONS
+  // ============================================================================
+  // These functions manage the application of advance payments (receipts) to service billings
+
+  /**
+   * Get available advance payment balance for a customer
+   * Calculates: Total Advance Payments - Total Applied Amounts
+   */
+  async getAvailableAdvanceBalance(customerId: string, customerType: 'company' | 'individual') {
+    try {
+      // Get all advance payment receipts for this customer
+      const { data: receipts, error: receiptsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount')
+        .eq(customerType === 'company' ? 'company_id' : 'individual_id', customerId)
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed');
+
+      if (receiptsError) throw receiptsError;
+
+      const totalAdvancePayments = receipts?.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0) || 0;
+
+      // Get all applications of these receipts
+      const receiptIds = receipts?.map(r => r.id) || [];
+
+      let totalApplied = 0;
+      if (receiptIds.length > 0) {
+        const { data: applications, error: applicationsError } = await supabase
+          .from('advance_payment_applications')
+          .select('applied_amount')
+          .in('receipt_transaction_id', receiptIds);
+
+        if (applicationsError) throw applicationsError;
+
+        totalApplied = applications?.reduce((sum, a) => sum + parseFloat(a.applied_amount || 0), 0) || 0;
+      }
+
+      const availableBalance = totalAdvancePayments - totalApplied;
+
+      return {
+        totalAdvancePayments,
+        totalApplied,
+        availableBalance,
+        receipts: receipts || []
+      };
+    } catch (error) {
+      console.error('Error getting available advance balance:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get available balance for a specific receipt
+   */
+  async getReceiptAvailableBalance(receiptTransactionId: string) {
+    try {
+      // Get the receipt amount
+      const { data: receipt, error: receiptError } = await supabase
+        .from('account_transactions')
+        .select('amount')
+        .eq('id', receiptTransactionId)
+        .single();
+
+      if (receiptError) throw receiptError;
+
+      const receiptAmount = parseFloat(receipt.amount || 0);
+
+      // Get total applied from this receipt
+      const { data: applications, error: applicationsError } = await supabase
+        .from('advance_payment_applications')
+        .select('applied_amount')
+        .eq('receipt_transaction_id', receiptTransactionId);
+
+      if (applicationsError) throw applicationsError;
+
+      const totalApplied = applications?.reduce((sum, a) => sum + parseFloat(a.applied_amount || 0), 0) || 0;
+      const availableBalance = receiptAmount - totalApplied;
+
+      return {
+        receiptAmount,
+        totalApplied,
+        availableBalance,
+        isFullyUtilized: availableBalance <= 0
+      };
+    } catch (error) {
+      console.error('Error getting receipt available balance:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Apply an advance payment (receipt) to a service billing
+   */
+  async applyAdvancePaymentToBilling(
+    receiptTransactionId: string,
+    billingId: string,
+    appliedAmount: number,
+    userId?: string
+  ) {
+    try {
+      // Validate that receipt has enough available balance
+      const receiptBalance = await this.getReceiptAvailableBalance(receiptTransactionId);
+
+      if (appliedAmount > receiptBalance.availableBalance) {
+        throw new Error(`Cannot apply AED ${appliedAmount}. Only AED ${receiptBalance.availableBalance} available in this receipt.`);
+      }
+
+      // Get billing outstanding amount
+      const { data: billing, error: billingError } = await supabase
+        .from('service_billings')
+        .select('total_amount, id')
+        .eq('id', billingId)
+        .single();
+
+      if (billingError) throw billingError;
+
+      // Calculate current outstanding for this billing
+      const billingWithPayments = await this.calculateOutstandingAmounts([billing]);
+      const outstandingAmount = billingWithPayments[0]?.outstandingAmount || 0;
+
+      if (appliedAmount > outstandingAmount) {
+        throw new Error(`Cannot apply AED ${appliedAmount}. Only AED ${outstandingAmount} outstanding on this billing.`);
+      }
+
+      // Create the application record
+      const { data: application, error: applicationError } = await supabase
+        .from('advance_payment_applications')
+        .insert([{
+          receipt_transaction_id: receiptTransactionId,
+          billing_id: billingId,
+          applied_amount: appliedAmount,
+          application_date: new Date().toISOString().split('T')[0],
+          created_by: userId || 'system',
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (applicationError) throw applicationError;
+
+      console.log('✅ Advance payment applied successfully:', application);
+
+      return application;
+    } catch (error) {
+      console.error('Error applying advance payment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all applications for a specific billing
+   */
+  async getBillingPaymentApplications(billingId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('advance_payment_applications')
+        .select(`
+          *,
+          receipt:account_transactions!receipt_transaction_id(
+            id,
+            amount,
+            reference_number,
+            transaction_date,
+            payment_method
+          )
+        `)
+        .eq('billing_id', billingId)
+        .order('application_date', { ascending: false });
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error getting billing payment applications:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all applications for a specific receipt
+   */
+  async getReceiptApplications(receiptTransactionId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('advance_payment_applications')
+        .select(`
+          *,
+          billing:service_billings(
+            id,
+            invoice_number,
+            total_amount,
+            service_date,
+            company:companies(company_name),
+            individual:individuals(individual_name)
+          )
+        `)
+        .eq('receipt_transaction_id', receiptTransactionId)
+        .order('application_date', { ascending: false });
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error getting receipt applications:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Remove/unapply an advance payment application
+   */
+  async removeAdvancePaymentApplication(applicationId: string) {
+    try {
+      const { error } = await supabase
+        .from('advance_payment_applications')
+        .delete()
+        .eq('id', applicationId);
+
+      if (error) throw error;
+
+      console.log('✅ Advance payment application removed successfully');
+      return true;
+    } catch (error) {
+      console.error('Error removing advance payment application:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get customer's advance payment receipts with utilization status
+   */
+  async getCustomerAdvanceReceipts(customerId: string, customerType: 'company' | 'individual') {
+    try {
+      // Get all advance payment receipts
+      const { data: receipts, error: receiptsError } = await supabase
+        .from('account_transactions')
+        .select('*')
+        .eq(customerType === 'company' ? 'company_id' : 'individual_id', customerId)
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed')
+        .order('transaction_date', { ascending: false });
+
+      if (receiptsError) throw receiptsError;
+
+      // For each receipt, calculate utilization
+      const receiptsWithUtilization = await Promise.all(
+        (receipts || []).map(async (receipt) => {
+          const balance = await this.getReceiptAvailableBalance(receipt.id);
+          const applications = await this.getReceiptApplications(receipt.id);
+
+          return {
+            ...receipt,
+            receiptAmount: balance.receiptAmount,
+            totalApplied: balance.totalApplied,
+            availableBalance: balance.availableBalance,
+            isFullyUtilized: balance.isFullyUtilized,
+            utilizationPercentage: (balance.totalApplied / balance.receiptAmount) * 100,
+            applications: applications
+          };
+        })
+      );
+
+      return receiptsWithUtilization;
+    } catch (error) {
+      console.error('Error getting customer advance receipts:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Automatically apply advance payment to customer's unpaid billings
+   * Applies to oldest billings first until the advance payment is fully utilized
+   */
+  async autoApplyAdvancePayment(
+    receiptTransactionId: string,
+    customerId: string,
+    customerType: 'company' | 'individual',
+    userId?: string
+  ) {
+    try {
+      console.log('🤖 Auto-applying advance payment:', { receiptTransactionId, customerId, customerType });
+
+      // Get the receipt balance
+      const receiptBalance = await this.getReceiptAvailableBalance(receiptTransactionId);
+      let remainingAmount = receiptBalance.availableBalance;
+
+      if (remainingAmount <= 0) {
+        console.log('⚠️ No available balance to apply');
+        return { applied: false, message: 'No available balance to apply', applications: [] };
+      }
+
+      // Get all unpaid billings for this customer (oldest first)
+      const { data: billings, error: billingsError } = await supabase
+        .from('service_billings')
+        .select('*')
+        .eq(customerType === 'company' ? 'company_id' : 'individual_id', customerId)
+        .order('service_date', { ascending: true }); // Oldest first
+
+      if (billingsError) throw billingsError;
+
+      if (!billings || billings.length === 0) {
+        console.log('ℹ️ No billings found for this customer');
+        return { applied: false, message: 'No billings to apply to', applications: [] };
+      }
+
+      // Calculate outstanding amounts for all billings
+      const billingsWithOutstanding = await this.calculateOutstandingAmounts(billings);
+
+      // Filter to only unpaid billings
+      const unpaidBillings = billingsWithOutstanding.filter(b => b.outstandingAmount > 0);
+
+      if (unpaidBillings.length === 0) {
+        console.log('ℹ️ No unpaid billings found for this customer');
+        return { applied: false, message: 'No unpaid billings to apply to', applications: [] };
+      }
+
+      console.log(`📋 Found ${unpaidBillings.length} unpaid billings`);
+
+      // Apply to each billing until advance payment is exhausted
+      const applications = [];
+      for (const billing of unpaidBillings) {
+        if (remainingAmount <= 0) break;
+
+        const amountToApply = Math.min(remainingAmount, billing.outstandingAmount);
+
+        console.log(`💰 Applying AED ${amountToApply} to billing ${billing.invoice_number}`);
+
+        // Create application
+        const application = await this.applyAdvancePaymentToBilling(
+          receiptTransactionId,
+          billing.id,
+          amountToApply,
+          userId
+        );
+
+        applications.push({
+          ...application,
+          billingInvoiceNumber: billing.invoice_number,
+          appliedAmount: amountToApply
+        });
+
+        remainingAmount -= amountToApply;
+      }
+
+      console.log(`✅ Auto-applied advance payment to ${applications.length} billings`);
+
+      return {
+        applied: true,
+        message: `Applied to ${applications.length} billing${applications.length > 1 ? 's' : ''}`,
+        applications,
+        totalApplied: receiptBalance.availableBalance - remainingAmount,
+        remainingBalance: remainingAmount
+      };
+    } catch (error) {
+      console.error('Error auto-applying advance payment:', error);
       throw error;
     }
   }

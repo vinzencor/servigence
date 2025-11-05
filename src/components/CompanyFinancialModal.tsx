@@ -19,7 +19,7 @@ import {
   Printer
 } from 'lucide-react';
 import { Company } from '../types';
-import { dbHelpers } from '../lib/supabase';
+import { dbHelpers, supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 
 interface CompanyFinancialModalProps {
@@ -145,18 +145,37 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
 
   const loadAdvancePayments = async () => {
     try {
-      // Get advance payments from localStorage (temporary storage)
-      const storedPayments = localStorage.getItem('advancePayments');
-      const allPayments = storedPayments ? JSON.parse(storedPayments) : [];
-      
-      // Filter payments for this company
-      const companyPayments = allPayments.filter((payment: any) => 
-        payment.companyId === company.id &&
-        payment.payment_date >= dateRange.startDate &&
-        payment.payment_date <= dateRange.endDate
-      );
-      
-      setAdvancePayments(companyPayments);
+      // Query advance payments from account_transactions table
+      // This matches the Outstanding Report logic for consistency
+      const { data, error } = await supabase
+        .from('account_transactions')
+        .select('*')
+        .eq('company_id', company.id)
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed')
+        .gte('transaction_date', dateRange.startDate)
+        .lte('transaction_date', dateRange.endDate)
+        .order('transaction_date', { ascending: false });
+
+      if (error) {
+        console.error('Error loading advance payments from account_transactions:', error);
+        setAdvancePayments([]);
+        return;
+      }
+
+      // Transform account_transactions data to match AdvancePayment interface
+      const transformedPayments = (data || []).map((transaction: any) => ({
+        id: transaction.id,
+        companyId: transaction.company_id,
+        amount: parseFloat(transaction.amount || 0),
+        payment_date: transaction.transaction_date,
+        payment_method: transaction.payment_method,
+        payment_reference: transaction.reference_number,
+        status: transaction.status,
+        notes: transaction.notes
+      }));
+
+      setAdvancePayments(transformedPayments);
     } catch (error) {
       console.error('Error loading advance payments:', error);
       setAdvancePayments([]);
@@ -180,36 +199,95 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
 
   const loadFinancialSummary = async () => {
     try {
-      // Calculate summary from loaded data
-      const totalBilled = serviceBillings.reduce((sum, billing) => 
-        sum + (parseFloat(billing.total_amount_with_vat?.toString() || '0')), 0);
-      
-      const totalPaid = advancePayments.reduce((sum, payment) => 
+      // For outstanding calculations, we need ALL billings and payments (not filtered by date)
+      // This matches the Outstanding Report logic
+
+      // Load ALL service billings for this company (excluding cancelled)
+      const { data: allBillings, error: billingsError } = await supabase
+        .from('service_billings')
+        .select('id, total_amount, service_date, status')
+        .eq('company_id', company.id)
+        .neq('status', 'cancelled');
+
+      if (billingsError) {
+        console.error('Error loading all billings:', billingsError);
+        throw billingsError;
+      }
+
+      console.log('📊 All billings loaded:', allBillings?.length, allBillings);
+
+      // Load ALL advance payments for this company
+      const { data: allPayments, error: paymentsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount, transaction_date')
+        .eq('company_id', company.id)
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed');
+
+      if (paymentsError) {
+        console.error('Error loading all payments:', paymentsError);
+        throw paymentsError;
+      }
+
+      console.log('💰 All payments loaded:', allPayments?.length, allPayments);
+
+      // Load ALL account transactions for credits/debits (not filtered by date)
+      const { data: allTransactions, error: transactionsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount, transaction_type')
+        .eq('company_id', company.id)
+        .in('transaction_type', ['credit', 'debit']);
+
+      if (transactionsError) {
+        console.error('Error loading all transactions:', transactionsError);
+        throw transactionsError;
+      }
+
+      console.log('📈 All transactions loaded:', allTransactions?.length, allTransactions);
+
+      // Calculate total billed from ALL billings (not filtered by date)
+      const totalBilled = (allBillings || []).reduce((sum, billing) =>
+        sum + (parseFloat(billing.total_amount?.toString() || '0')), 0);
+
+      // Calculate total paid from ALL advance payments (not filtered by date)
+      const totalPaid = (allPayments || []).reduce((sum, payment) =>
         sum + (parseFloat(payment.amount?.toString() || '0')), 0);
-      
-      const totalCredits = accountTransactions
-        .filter(t => t.transaction_type === 'credit' || t.amount > 0)
-        .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
-      
-      const totalDebits = accountTransactions
-        .filter(t => t.transaction_type === 'debit' || t.amount < 0)
+
+      // Calculate credits and debits from ALL account transactions (not filtered by date)
+      const totalCredits = (allTransactions || [])
+        .filter(t => t.transaction_type === 'credit' || parseFloat(t.amount?.toString() || '0') > 0)
         .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
 
-      const totalOutstanding = totalBilled - totalPaid;
+      const totalDebits = (allTransactions || [])
+        .filter(t => t.transaction_type === 'debit' || parseFloat(t.amount?.toString() || '0') < 0)
+        .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
+
+      // Outstanding amount should never be negative (matches Outstanding Report)
+      const totalOutstanding = Math.max(0, totalBilled - totalPaid);
       const availableCredit = Math.max(0, (company.creditLimit || 0) - totalOutstanding);
-      
-      // Calculate overdue amount (bills older than credit limit days)
+
+      // Calculate overdue amount from ALL bills (not filtered by date)
       const creditLimitDays = company.creditLimitDays || 30;
       const overdueDate = new Date();
       overdueDate.setDate(overdueDate.getDate() - creditLimitDays);
-      
-      const overdueAmount = serviceBillings
-        .filter(billing => 
-          new Date(billing.service_date) < overdueDate && 
+
+      const overdueAmount = (allBillings || [])
+        .filter(billing =>
+          new Date(billing.service_date) < overdueDate &&
           billing.status !== 'paid'
         )
-        .reduce((sum, billing) => 
-          sum + (parseFloat(billing.total_amount_with_vat?.toString() || '0')), 0);
+        .reduce((sum, billing) =>
+          sum + (parseFloat(billing.total_amount?.toString() || '0')), 0);
+
+      console.log('💵 Financial Summary Calculated:', {
+        totalBilled,
+        totalPaid,
+        totalOutstanding,
+        totalCredits,
+        totalDebits,
+        availableCredit,
+        overdueAmount
+      });
 
       setFinancialSummary({
         totalBilled,
@@ -304,7 +382,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
       parseFloat(billing.typing_charges?.toString() || '0').toFixed(2),
       parseFloat(billing.government_charges?.toString() || '0').toFixed(2),
       parseFloat(billing.vat_amount?.toString() || '0').toFixed(2),
-      parseFloat(billing.total_amount_with_vat?.toString() || '0').toFixed(2),
+      parseFloat(billing.total_amount?.toString() || '0').toFixed(2),
       billing.status,
       billing.cash_type,
       new Date(billing.created_at).toLocaleDateString()
@@ -475,7 +553,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                 <td>AED ${parseFloat(billing.typing_charges?.toString() || '0').toFixed(2)}</td>
                 <td>AED ${parseFloat(billing.government_charges?.toString() || '0').toFixed(2)}</td>
                 <td>AED ${parseFloat(billing.vat_amount?.toString() || '0').toFixed(2)}</td>
-                <td>AED ${parseFloat(billing.total_amount_with_vat?.toString() || '0').toFixed(2)}</td>
+                <td>AED ${parseFloat(billing.total_amount?.toString() || '0').toFixed(2)}</td>
                 <td>${billing.status}</td>
               </tr>
             `).join('')}
@@ -645,6 +723,20 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
               <>
                 {activeTab === 'summary' && (
                   <div className="space-y-6">
+                    {/* Info Note */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-blue-900 font-medium">Outstanding Amount Calculation</p>
+                          <p className="text-sm text-blue-700 mt-1">
+                            Total Billed, Total Paid, and Outstanding amounts are calculated from all-time data (not filtered by date range) to match the Outstanding Report.
+                            The date range filter only affects the transaction tables below.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Financial Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -841,7 +933,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <span className="text-sm font-bold text-gray-900">
-                                    AED {parseFloat(billing.total_amount_with_vat?.toString() || '0').toFixed(2)}
+                                    AED {parseFloat(billing.total_amount?.toString() || '0').toFixed(2)}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">

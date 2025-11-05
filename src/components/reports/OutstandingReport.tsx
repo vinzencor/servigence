@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Download, Filter, Search, DollarSign, TrendingUp, TrendingDown, Users, Building2, AlertCircle, FileText, CreditCard } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Calendar, Download, Filter, Search, DollarSign, TrendingUp, TrendingDown, Users, Building2, AlertCircle, FileText, CreditCard, Receipt, Printer } from 'lucide-react';
+import { supabase, dbHelpers } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { generateOutstandingStatement, OutstandingReceiptData } from '../../utils/receiptGenerator';
+import PaymentMethodSelector from '../PaymentMethodSelector';
 
 interface OutstandingCustomer {
   id: string;
@@ -36,6 +38,16 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
     totalAdvancePayments: 0,
     totalDues: 0,
     netBalance: 0
+  });
+
+  // Payment modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedCustomerForPayment, setSelectedCustomerForPayment] = useState<OutstandingCustomer | null>(null);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'credit_card' | 'cheque' | 'online',
+    paymentReference: '',
+    notes: ''
   });
 
   useEffect(() => {
@@ -75,48 +87,87 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
 
       if (individualsError) throw individualsError;
 
-      // Load dues data
-      const { data: dues, error: duesError } = await supabase
-        .from('dues')
+      // Load service billings data (the actual dues/invoices)
+      // For Outstanding Report, we need ALL service billings regardless of date
+      // because outstanding amounts are cumulative across all time periods
+      const { data: serviceBillings, error: billingsError } = await supabase
+        .from('service_billings')
         .select(`
           *,
           company:companies(company_name),
-          individual:individuals(individual_name)
+          individual:individuals(individual_name),
+          service_type:service_types(name)
         `)
-        .gte('created_at', dateFrom)
-        .lte('created_at', dateTo + 'T23:59:59');
+        .neq('status', 'cancelled'); // Exclude cancelled billings only
 
-      if (duesError) {
-        console.error('Error loading dues:', duesError);
-        // Continue without dues data for now
+      if (billingsError) {
+        console.error('Error loading service billings:', billingsError);
+        throw billingsError;
       }
 
-      // Load advance payments data
+      // Load advance payments data from account_transactions
+      // For Outstanding Report, we need ALL advance payments regardless of date
+      // because they affect outstanding balances across all time periods
       const { data: advancePayments, error: advanceError } = await supabase
-        .from('customer_advance_payments')
+        .from('account_transactions')
         .select(`
           *,
           company:companies(company_name),
           individual:individuals(individual_name)
         `)
-        .gte('payment_date', dateFrom)
-        .lte('payment_date', dateTo);
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed'); // Only include completed payments
 
       if (advanceError) {
         console.error('Error loading advance payments:', advanceError);
-        // Continue without advance payments data for now
+        throw advanceError;
       }
 
-      console.log('📊 Data loaded:', { companies: companies?.length, individuals: individuals?.length, dues: dues?.length, advancePayments: advancePayments?.length });
+      console.log('📊 Data loaded:', {
+        companies: companies?.length,
+        individuals: individuals?.length,
+        serviceBillings: serviceBillings?.length,
+        advancePayments: advancePayments?.length
+      });
+
+      console.log('💰 Sample advance payments:', advancePayments?.slice(0, 3).map(p => ({
+        amount: p.amount,
+        company_id: p.company_id,
+        notes: p.notes?.substring(0, 30)
+      })));
+
+      // Use the same calculation method as Service Billing component
+      const billingsWithPayments = await dbHelpers.calculateOutstandingAmounts(serviceBillings || []);
+
+      console.log('💰 Billings with payment calculations:', billingsWithPayments.length);
+      console.log('💰 Sample billing with payments:', billingsWithPayments[0]);
 
       // Process companies
       const companyCustomers: OutstandingCustomer[] = (companies || []).map(company => {
-        const companyDues = (dues || []).filter(due => due.company_id === company.id);
-        const companyAdvances = (advancePayments || []).filter(payment => payment.company_id === company.id);
+        // Get all service billings for this company
+        const companyBillings = billingsWithPayments.filter(billing => billing.company_id === company.id);
 
-        const totalDues = companyDues.reduce((sum, due) => sum + (due.due_amount || 0), 0);
-        const totalAdvancePayments = companyAdvances.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-        const netOutstanding = totalDues - totalAdvancePayments;
+        // Calculate total dues (sum of all invoice amounts)
+        const totalDues = companyBillings.reduce((sum, billing) => sum + (billing.totalAmount || 0), 0);
+
+        // Calculate total advance payments for this company from ALL advance payment transactions
+        const companyAdvancePayments = (advancePayments || []).filter(payment => payment.company_id === company.id);
+        const totalAdvancePayments = companyAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+
+        // Calculate net outstanding (Total Dues - Total Advance Payments)
+        const netOutstanding = Math.max(0, totalDues - totalAdvancePayments);
+
+        if (company.company_name === '24234324234') {
+          console.log(`🏢 Company ${company.company_name}:`, {
+            billings: companyBillings.length,
+            totalDues,
+            advancePaymentsCount: companyAdvancePayments.length,
+            advancePayments: companyAdvancePayments.map(p => ({ amount: p.amount, notes: p.notes?.substring(0, 30) })),
+            totalAdvancePayments,
+            netOutstanding,
+            sampleBilling: companyBillings[0]
+          });
+        }
 
         return {
           id: company.id,
@@ -134,12 +185,18 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
 
       // Process individuals
       const individualCustomers: OutstandingCustomer[] = (individuals || []).map(individual => {
-        const individualDues = (dues || []).filter(due => due.individual_id === individual.id);
-        const individualAdvances = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
+        // Get all service billings for this individual
+        const individualBillings = billingsWithPayments.filter(billing => billing.individual_id === individual.id);
 
-        const totalDues = individualDues.reduce((sum, due) => sum + (due.due_amount || 0), 0);
-        const totalAdvancePayments = individualAdvances.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-        const netOutstanding = totalDues - totalAdvancePayments;
+        // Calculate total dues (sum of all invoice amounts)
+        const totalDues = individualBillings.reduce((sum, billing) => sum + (billing.totalAmount || 0), 0);
+
+        // Calculate total advance payments for this individual from ALL advance payment transactions
+        const individualAdvancePayments = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
+        const totalAdvancePayments = individualAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+
+        // Calculate net outstanding (Total Dues - Total Advance Payments)
+        const netOutstanding = Math.max(0, totalDues - totalAdvancePayments);
 
         return {
           id: individual.id,
@@ -248,6 +305,138 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
     if (netOutstanding > 0) return 'Outstanding';
     if (netOutstanding < 0) return 'Advance';
     return 'Balanced';
+  };
+
+  // Generate outstanding statement receipt for a customer
+  const handleGenerateReceipt = (customer: OutstandingCustomer) => {
+    const receiptData: OutstandingReceiptData = {
+      customerName: customer.name,
+      customerType: customer.type,
+      customerId: customer.id,
+      totalDues: customer.totalDues,
+      totalAdvancePayments: customer.totalAdvancePayments,
+      netOutstanding: customer.netOutstanding,
+      creditLimit: customer.creditLimit,
+      phone: customer.phone,
+      email: customer.email
+    };
+
+    generateOutstandingStatement(receiptData);
+  };
+
+  // Handle payment recording
+  const handleRecordPayment = (customer: OutstandingCustomer) => {
+    console.log('🎯 Recording payment for customer:', customer);
+    console.log('🎯 Customer netOutstanding:', customer.netOutstanding, 'Type:', typeof customer.netOutstanding);
+
+    const amountString = customer.netOutstanding > 0 ? customer.netOutstanding.toString() : '';
+    console.log('🎯 Amount string for form:', amountString);
+
+    setSelectedCustomerForPayment(customer);
+    setPaymentForm({
+      amount: amountString,
+      paymentMethod: 'cash',
+      paymentReference: '',
+      notes: ''
+    });
+    setShowPaymentModal(true);
+  };
+
+  const submitPayment = async () => {
+    if (!selectedCustomerForPayment) return;
+
+    console.log('Payment form data:', paymentForm);
+    const amount = parseFloat(paymentForm.amount);
+    console.log('Parsed amount:', amount, 'Original amount string:', paymentForm.amount);
+
+    if (!paymentForm.amount || paymentForm.amount.trim() === '') {
+      console.error('Empty amount field');
+      toast.error('Please enter a payment amount');
+      return;
+    }
+
+    if (isNaN(amount)) {
+      console.error('Invalid amount - not a number:', paymentForm.amount);
+      toast.error('Please enter a valid numeric amount');
+      return;
+    }
+
+    if (amount <= 0) {
+      console.error('Invalid amount - must be positive:', amount);
+      toast.error('Payment amount must be greater than 0');
+      return;
+    }
+
+    console.log('✅ Amount validation passed:', amount);
+
+    try {
+      // Generate receipt number first
+      const receiptNumber = `RCP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      console.log('💳 Generated receipt number:', receiptNumber);
+
+      // Create account transaction for the payment with receipt number in reference_number field
+      const transactionData = {
+        transaction_type: 'advance_payment',
+        category: 'Advance Payment',
+        description: `Payment from Outstanding Report - Customer: ${selectedCustomerForPayment.name}`,
+        amount: amount,
+        transaction_date: new Date().toISOString().split('T')[0],
+        payment_method: paymentForm.paymentMethod,
+        reference_number: receiptNumber, // Store receipt number here for Receipt Management integration
+        status: 'completed',
+        notes: `${paymentForm.notes || 'Payment recorded from Outstanding Report'}${paymentForm.paymentReference ? ` | Payment Ref: ${paymentForm.paymentReference}` : ''}`,
+        company_id: selectedCustomerForPayment.type === 'company' ? selectedCustomerForPayment.id : null,
+        individual_id: selectedCustomerForPayment.type === 'individual' ? selectedCustomerForPayment.id : null,
+        created_by: 'system' // In a real app, this would be the current user ID
+      };
+
+      console.log('Transaction data to be created:', transactionData);
+      const createdTransaction = await dbHelpers.createAccountTransaction(transactionData);
+      console.log('Transaction created successfully:', createdTransaction);
+
+      // Generate payment receipt
+      const receiptData = {
+        receiptNumber: receiptNumber,
+        date: new Date().toLocaleDateString(),
+        customerName: selectedCustomerForPayment.name,
+        customerType: selectedCustomerForPayment.type,
+        customerId: selectedCustomerForPayment.id,
+        amount: amount,
+        description: 'Payment from Outstanding Report',
+        paymentMethod: paymentForm.paymentMethod,
+        status: 'paid' as const,
+        transactionId: paymentForm.paymentReference,
+        notes: paymentForm.notes
+      };
+
+      console.log('Receipt data:', receiptData);
+
+      // Import and use the payment receipt generator
+      const { generatePaymentReceipt } = await import('../../utils/receiptGenerator');
+      generatePaymentReceipt(receiptData);
+
+      console.log('Reloading outstanding data...');
+      // Small delay to ensure database transaction is committed
+      await new Promise(resolve => setTimeout(resolve, 500));
+      // Reload data to reflect the payment
+      await loadOutstandingData();
+
+      setShowPaymentModal(false);
+      setSelectedCustomerForPayment(null);
+      toast.success(`Payment recorded successfully!\nReceipt ${receiptNumber} created and available in Receipt Management.`);
+      console.log('Payment process completed successfully with receipt:', receiptNumber);
+
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        paymentForm,
+        selectedCustomer: selectedCustomerForPayment,
+        parsedAmount: amount
+      });
+      toast.error(`Failed to record payment: ${error.message || 'Unknown error'}`);
+    }
   };
 
   return (
@@ -463,6 +652,9 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Contact
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -515,6 +707,71 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
                         <div className="text-gray-500">{customer.email}</div>
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center space-x-1">
+                        <button
+                          onClick={() => handleGenerateReceipt(customer)}
+                          className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                          title="Generate Outstanding Statement"
+                        >
+                          <Receipt className="w-3 h-3 mr-1" />
+                          Statement
+                        </button>
+                        {customer.netOutstanding > 0 && (
+                          <button
+                            onClick={() => handleRecordPayment(customer)}
+                            className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-green-600 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 hover:border-green-300 transition-colors"
+                            title="Record Payment"
+                          >
+                            <CreditCard className="w-3 h-3 mr-1" />
+                            Pay
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            // Print functionality - could open a print dialog with formatted statement
+                            const printContent = `
+Outstanding Statement - ${customer.name}
+=====================================
+
+Customer: ${customer.name}
+Type: ${customer.type === 'company' ? 'Company' : 'Individual'}
+Total Dues: AED ${customer.totalDues.toLocaleString()}
+Advance Payments: AED ${customer.totalAdvancePayments.toLocaleString()}
+Net Outstanding: AED ${Math.abs(customer.netOutstanding).toLocaleString()}
+Status: ${getStatusText(customer.netOutstanding)}
+
+Generated: ${new Date().toLocaleString()}
+                            `.trim();
+
+                            const printWindow = window.open('', '_blank');
+                            if (printWindow) {
+                              printWindow.document.write(`
+                                <html>
+                                  <head>
+                                    <title>Outstanding Statement - ${customer.name}</title>
+                                    <style>
+                                      body { font-family: monospace; padding: 20px; }
+                                      pre { white-space: pre-wrap; }
+                                    </style>
+                                  </head>
+                                  <body>
+                                    <pre>${printContent}</pre>
+                                  </body>
+                                </html>
+                              `);
+                              printWindow.document.close();
+                              printWindow.print();
+                            }
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 hover:border-green-300 transition-colors"
+                          title="Print Statement"
+                        >
+                          <Printer className="w-3 h-3 mr-1" />
+                          Print
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -522,6 +779,133 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedCustomerForPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-green-600 to-green-700">
+              <h2 className="text-xl font-semibold text-white">Record Payment</h2>
+              <p className="text-green-100 text-sm mt-1">
+                Customer: {selectedCustomerForPayment.name}
+              </p>
+              <p className="text-green-100 text-xs mt-1">
+                Outstanding Amount: AED {selectedCustomerForPayment.netOutstanding.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Amount (AED) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentForm.amount}
+                  onChange={(e) => {
+                    console.log('💰 Amount input changed:', e.target.value);
+                    setPaymentForm(prev => ({ ...prev, amount: e.target.value }));
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Method *
+                </label>
+                <select
+                  value={paymentForm.paymentMethod}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="credit_card">Credit Card</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="online">Online Payment</option>
+                </select>
+              </div>
+
+              {/* Payment Method Selector - Shows saved payment methods */}
+              {selectedCustomerForPayment && (
+                <PaymentMethodSelector
+                  customerId={selectedCustomerForPayment.id}
+                  customerType={selectedCustomerForPayment.type}
+                  selectedPaymentType={paymentForm.paymentMethod}
+                  onPaymentDetailsChange={(details) => {
+                    console.log('Payment details selected:', details);
+                    // Auto-populate payment reference if available
+                    if (details.cardNumberLastFour) {
+                      setPaymentForm(prev => ({
+                        ...prev,
+                        paymentReference: `Card ending in ${details.cardNumberLastFour}`
+                      }));
+                    } else if (details.accountNumber) {
+                      setPaymentForm(prev => ({
+                        ...prev,
+                        paymentReference: `Account ${details.accountNumber}`
+                      }));
+                    }
+                  }}
+                />
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Reference
+                </label>
+                <input
+                  type="text"
+                  value={paymentForm.paymentReference}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentReference: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Transaction ID, Cheque number, etc."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes
+                </label>
+                <textarea
+                  value={paymentForm.notes}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  rows={3}
+                  placeholder="Additional notes about this payment..."
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setSelectedCustomerForPayment(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const amount = parseFloat(paymentForm.amount);
+                  if (confirm(`Record payment of AED ${amount.toLocaleString()} for ${selectedCustomerForPayment.name}?`)) {
+                    submitPayment();
+                  }
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                disabled={!paymentForm.amount || parseFloat(paymentForm.amount) <= 0}
+              >
+                Record Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
