@@ -29,6 +29,8 @@ interface QuotationItem {
   service_charge: number;
   government_charge: number;
   line_total: number;
+  default_service_charge?: number;
+  default_government_charge?: number;
 }
 
 interface QuotationFormProps {
@@ -143,12 +145,17 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
 
-        // If service is selected, populate charges
+        // If service is selected, populate charges with default values
         if (field === 'service_id') {
           const service = services.find(s => s.id === value);
           if (service) {
             updatedItem.service_name = service.name;
             updatedItem.service_category = service.category;
+            // Only set default charges if not already customized
+            // Store the default values for reference
+            updatedItem.default_service_charge = service.typing_charges;
+            updatedItem.default_government_charge = service.government_charges;
+            // Set actual charges to defaults (user can override)
             updatedItem.service_charge = service.typing_charges;
             updatedItem.government_charge = service.government_charges;
           }
@@ -156,7 +163,10 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
 
         // Recalculate line total
         if (field === 'quantity' || field === 'service_charge' || field === 'government_charge' || field === 'service_id') {
-          updatedItem.line_total = (updatedItem.service_charge + updatedItem.government_charge) * updatedItem.quantity;
+          const serviceCharge = parseFloat(updatedItem.service_charge) || 0;
+          const governmentCharge = parseFloat(updatedItem.government_charge) || 0;
+          const quantity = parseInt(updatedItem.quantity) || 1;
+          updatedItem.line_total = (serviceCharge + governmentCharge) * quantity;
         }
 
         return updatedItem;
@@ -501,8 +511,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
               <div className="space-y-3">
                 {serviceItems.map((item, index) => (
                   <div key={item.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                      <div className="md:col-span-2">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                      <div className="lg:col-span-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Service *
                         </label>
@@ -520,7 +530,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
                         </select>
                       </div>
 
-                      <div>
+                      <div className="lg:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Quantity *
                         </label>
@@ -533,25 +543,43 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
                         />
                       </div>
 
-                      <div>
+                      <div className="lg:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Service Charge
                         </label>
-                        <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700">
-                          AED {item.service_charge.toFixed(2)}
-                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.service_charge}
+                          onChange={(e) => updateServiceItem(item.id, 'service_charge', parseFloat(e.target.value) || 0)}
+                          placeholder={item.default_service_charge ? `Default: ${item.default_service_charge.toFixed(2)}` : '0.00'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                        {item.default_service_charge && (
+                          <p className="text-xs text-gray-500 mt-1">Default: AED {item.default_service_charge.toFixed(2)}</p>
+                        )}
                       </div>
 
-                      <div>
+                      <div className="lg:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Govt. Charge
                         </label>
-                        <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700">
-                          AED {item.government_charge.toFixed(2)}
-                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.government_charge}
+                          onChange={(e) => updateServiceItem(item.id, 'government_charge', parseFloat(e.target.value) || 0)}
+                          placeholder={item.default_government_charge ? `Default: ${item.default_government_charge.toFixed(2)}` : '0.00'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                        {item.default_government_charge && (
+                          <p className="text-xs text-gray-500 mt-1">Default: AED {item.default_government_charge.toFixed(2)}</p>
+                        )}
                       </div>
 
-                      <div className="flex items-end space-x-2">
+                      <div className="lg:col-span-2 flex items-end space-x-2">
                         <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Line Total
@@ -563,7 +591,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({ quotation, onSubmit, onCl
                         <button
                           type="button"
                           onClick={() => removeServiceItem(item.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors mb-0.5"
                           title="Remove service"
                         >
                           <Trash2 className="w-5 h-5" />
