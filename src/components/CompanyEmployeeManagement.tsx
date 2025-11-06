@@ -318,10 +318,13 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
     if (!employeeForm.employeeId.trim()) newErrors.employeeId = 'Employee ID is required';
     if (!employeeForm.name.trim()) newErrors.name = 'Name is required';
-    if (!employeeForm.position.trim()) newErrors.position = 'Position is required';
-    if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
+    // Position is now optional
+    // if (!employeeForm.position.trim()) newErrors.position = 'Position is required';
+    // Email is now optional
+    // if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
     if (!employeeForm.phone.trim()) newErrors.phone = 'Phone is required';
-    if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
+    // Nationality is now optional
+    // if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
     // Document fields are now optional - removed passport validation
     if (!employeeForm.joinDate) newErrors.joinDate = 'Join date is required';
     if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
@@ -352,10 +355,13 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
     if (!employeeForm.employeeId.trim()) newErrors.employeeId = 'Employee ID is required';
     if (!employeeForm.name.trim()) newErrors.name = 'Name is required';
-    if (!employeeForm.position.trim()) newErrors.position = 'Position is required';
-    if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
+    // Position is now optional
+    // if (!employeeForm.position.trim()) newErrors.position = 'Position is required';
+    // Email is now optional
+    // if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
     if (!employeeForm.phone.trim()) newErrors.phone = 'Phone is required';
-    if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
+    // Nationality is now optional
+    // if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
     if (!employeeForm.joinDate) newErrors.joinDate = 'Join date is required';
 
     // Email validation
@@ -1790,7 +1796,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Position <span className="text-red-500">*</span>
+                    Position
                   </label>
                   <input
                     type="text"
@@ -1811,7 +1817,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email <span className="text-red-500">*</span>
+                    Email
                   </label>
                   <input
                     type="email"
@@ -1853,7 +1859,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nationality <span className="text-red-500">*</span>
+                    Nationality
                   </label>
                   <input
                     type="text"
@@ -3269,7 +3275,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Position *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
                     <input
                       type="text"
                       name="position"
@@ -3282,7 +3288,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                     <input
                       type="email"
                       name="email"
@@ -3308,7 +3314,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Nationality *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nationality</label>
                     <input
                       type="text"
                       name="nationality"

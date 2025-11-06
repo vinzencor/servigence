@@ -54,14 +54,15 @@ const ServiceEmployeeManagement: React.FC = () => {
     const newErrors: Record<string, string> = {};
 
     if (!employeeForm.name.trim()) newErrors.name = 'Name is required';
-    if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
+    // Email is now optional
+    // if (!employeeForm.email.trim()) newErrors.email = 'Email is required';
     if (!employeeForm.phone.trim()) newErrors.phone = 'Phone is required';
     // Department is optional in the database, so we don't require it
     // if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
 
-    // Email validation
+    // Email validation (only if email is provided)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (employeeForm.email && !emailRegex.test(employeeForm.email)) {
+    if (employeeForm.email && employeeForm.email.trim() && !emailRegex.test(employeeForm.email)) {
       newErrors.email = 'Invalid email format';
     }
 
@@ -390,7 +391,7 @@ const ServiceEmployeeManagement: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email <span className="text-red-500">*</span>
+                    Email
                   </label>
                   <input
                     type="email"
@@ -434,7 +435,7 @@ const ServiceEmployeeManagement: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Department <span className="text-red-500">*</span>
+                    Department
                   </label>
                   <select
                     name="department"
