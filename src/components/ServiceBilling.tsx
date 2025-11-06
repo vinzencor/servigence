@@ -55,6 +55,8 @@ const ServiceBilling: React.FC = () => {
     notes: '',
     assignedVendorId: '',
     vendorCost: '0',
+    vatPercentage: '0',
+    vatAppliesTo: 'service_charge' as 'service_charge' | 'total_amount',
     discount: '0',
     cardId: '',
     customServiceCharges: '',
@@ -110,6 +112,7 @@ const ServiceBilling: React.FC = () => {
     assignedVendorId: '',
     vendorCost: '0',
     vatPercentage: '0',
+    vatAppliesTo: 'service_charge' as 'service_charge' | 'total_amount',
     discount: '0',
     cardId: '',
     customServiceCharges: '',
@@ -438,6 +441,7 @@ const ServiceBilling: React.FC = () => {
       assignedVendorId: billing.assigned_vendor_id || '',
       vendorCost: billing.vendor_cost?.toString() || '0',
       vatPercentage: billing.vat_percentage?.toString() || '0',
+      vatAppliesTo: billing.vat_applies_to || 'service_charge',
       discount: billing.discount?.toString() || '0',
       cardId: billing.card_id || '',
       customServiceCharges: billing.typing_charges?.toString() || '',
@@ -478,11 +482,18 @@ const ServiceBilling: React.FC = () => {
       const totalAmount = Math.max(0, subtotal - discount);
       const profit = typingCharges - vendorCost;
 
-      // Calculate VAT (only on typing charges, not on government charges)
+      // Calculate VAT based on selected option
       const vatPercentage = parseFloat(editBillingForm.vatPercentage) || 0;
-      const discountOnTyping = Math.min(discount, typingCharges); // Apply discount to typing charges first
-      const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
-      const vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+      let vatAmount = 0;
+      if (editBillingForm.vatAppliesTo === 'service_charge') {
+        // VAT on service charges only (after discount)
+        const discountOnTyping = Math.min(discount, typingCharges);
+        const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
+        vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+      } else {
+        // VAT on total amount (after discount)
+        vatAmount = (totalAmount * vatPercentage) / 100;
+      }
       const totalAmountWithVat = totalAmount + vatAmount;
 
       const updatedBillingData = {
@@ -501,6 +512,7 @@ const ServiceBilling: React.FC = () => {
         // profit: profit, // Temporarily removed until profit column is added to database
         vat_percentage: vatPercentage,
         vat_amount: vatAmount,
+        vat_applies_to: editBillingForm.vatAppliesTo,
         total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         notes: editBillingForm.notes || null,
@@ -833,7 +845,7 @@ const ServiceBilling: React.FC = () => {
           <div class="total-row">Subtotal: AED ${subtotal.toFixed(2)}</div>
           ${discount > 0 ? `<div class="total-row" style="color: #dc2626;">Discount: -AED ${discount.toFixed(2)}</div>` : ''}
           <div class="total-row">Net Amount: AED ${totalAmount.toFixed(2)}</div>
-          ${vatPercentage > 0 ? `<div class="total-row">VAT (${vatPercentage}%) on Service Charges: AED ${vatAmount.toFixed(2)}</div>` : ''}
+          ${vatPercentage > 0 ? `<div class="total-row">VAT (${vatPercentage}%) on ${billing.vat_applies_to === 'total_amount' ? 'Total Amount' : 'Service Charges'}: AED ${vatAmount.toFixed(2)}</div>` : ''}
           <div class="total-final">Total Amount: AED ${totalAmountWithVat.toFixed(2)}</div>
         </div>
 
@@ -913,11 +925,18 @@ const ServiceBilling: React.FC = () => {
       const totalAmount = Math.max(0, subtotal - discount);
       const profit = typingCharges - vendorCost;
 
-      // Calculate VAT (only on typing charges, not on government charges)
+      // Calculate VAT based on selected option
       const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
-      const discountOnTyping = Math.min(discount, typingCharges); // Apply discount to typing charges first
-      const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
-      const vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+      let vatAmount = 0;
+      if (billingForm.vatAppliesTo === 'service_charge') {
+        // VAT on service charges only (after discount)
+        const discountOnTyping = Math.min(discount, typingCharges);
+        const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
+        vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+      } else {
+        // VAT on total amount (after discount)
+        vatAmount = (totalAmount * vatPercentage) / 100;
+      }
       const totalAmountWithVat = totalAmount + vatAmount;
 
       // Generate invoice number
@@ -939,6 +958,7 @@ const ServiceBilling: React.FC = () => {
         // profit: profit, // Temporarily removed until profit column is added to database
         vat_percentage: vatPercentage,
         vat_amount: vatAmount,
+        vat_applies_to: billingForm.vatAppliesTo,
         total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         status: 'pending',
@@ -1159,6 +1179,8 @@ const ServiceBilling: React.FC = () => {
       notes: '',
       assignedVendorId: '',
       vendorCost: '0',
+      vatPercentage: '0',
+      vatAppliesTo: 'service_charge',
       discount: '0',
       cardId: '',
       customServiceCharges: '',
@@ -1251,10 +1273,19 @@ const ServiceBilling: React.FC = () => {
     const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
     const subtotal = typing + government;
     const total = Math.max(0, subtotal - discount); // Ensure total doesn't go negative
-    // Calculate VAT only on typing charges (service charges), not on government charges
-    const discountOnTyping = Math.min(discount, typing); // Apply discount to typing charges first
-    const typingAfterDiscount = Math.max(0, typing - discountOnTyping);
-    const vatAmount = (typingAfterDiscount * vatPercentage) / 100;
+
+    // Calculate VAT based on selected option
+    let vatAmount = 0;
+    if (billingForm.vatAppliesTo === 'service_charge') {
+      // VAT on service charges only (after discount)
+      const discountOnTyping = Math.min(discount, typing); // Apply discount to typing charges first
+      const typingAfterDiscount = Math.max(0, typing - discountOnTyping);
+      vatAmount = (typingAfterDiscount * vatPercentage) / 100;
+    } else {
+      // VAT on total amount (service charges + government charges, after discount)
+      vatAmount = (total * vatPercentage) / 100;
+    }
+
     const totalWithVat = total + vatAmount;
     const profit = typing - vendorCost; // Profit = Service Charges - Vendor Cost
 
@@ -2217,6 +2248,45 @@ Servigence Business Services
                   <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%)</p>
                 </div>
 
+                {/* VAT Applies To */}
+                {parseFloat(billingForm.vatPercentage) > 0 && (
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      VAT Calculation Method
+                    </label>
+                    <div className="space-y-3">
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="radio"
+                          name="vatAppliesTo"
+                          value="service_charge"
+                          checked={billingForm.vatAppliesTo === 'service_charge'}
+                          onChange={handleInputChange}
+                          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <div className="ml-3">
+                          <span className="text-sm font-medium text-gray-900">VAT on Service Charges Only</span>
+                          <p className="text-sm text-gray-500">VAT will be calculated only on service charges (excluding government charges)</p>
+                        </div>
+                      </label>
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="radio"
+                          name="vatAppliesTo"
+                          value="total_amount"
+                          checked={billingForm.vatAppliesTo === 'total_amount'}
+                          onChange={handleInputChange}
+                          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <div className="ml-3">
+                          <span className="text-sm font-medium text-gray-900">VAT on Total Amount</span>
+                          <p className="text-sm text-gray-500">VAT will be calculated on total amount (service charges + government charges)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
                 {/* Real-time Billing Calculation */}
                 {billingForm.serviceTypeId && billingForm.quantity && (
                   <div className="lg:col-span-2">
@@ -2247,7 +2317,9 @@ Servigence Business Services
                         </div>
                         {parseFloat(billingForm.vatPercentage) > 0 && (
                           <div className="flex justify-between text-green-600">
-                            <span>VAT ({calculateTotal().vatPercentage}%) on Service Charges:</span>
+                            <span>
+                              VAT ({calculateTotal().vatPercentage}%) on {billingForm.vatAppliesTo === 'service_charge' ? 'Service Charges' : 'Total Amount'}:
+                            </span>
                             <span className="font-medium">AED {calculateTotal().vatAmount.toFixed(2)}</span>
                           </div>
                         )}
@@ -2480,7 +2552,9 @@ Servigence Business Services
                     </div>
                     {parseFloat(selectedBilling.vat_percentage || 0) > 0 && (
                       <div className="flex justify-between items-center w-64">
-                        <span>VAT ({parseFloat(selectedBilling.vat_percentage || 0)}%) on Service Charges:</span>
+                        <span>
+                          VAT ({parseFloat(selectedBilling.vat_percentage || 0)}%) on {selectedBilling.vat_applies_to === 'total_amount' ? 'Total Amount' : 'Service Charges'}:
+                        </span>
                         <span>AED {parseFloat(selectedBilling.vat_amount || 0).toFixed(2)}</span>
                       </div>
                     )}
@@ -2832,6 +2906,45 @@ Servigence Business Services
                   />
                   <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%)</p>
                 </div>
+
+                {/* VAT Applies To */}
+                {parseFloat(editBillingForm.vatPercentage) > 0 && (
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      VAT Calculation Method
+                    </label>
+                    <div className="space-y-3">
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="radio"
+                          name="vatAppliesTo"
+                          value="service_charge"
+                          checked={editBillingForm.vatAppliesTo === 'service_charge'}
+                          onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatAppliesTo: e.target.value as 'service_charge' | 'total_amount' }))}
+                          className="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                        />
+                        <div className="ml-3">
+                          <span className="text-sm font-medium text-gray-900">VAT on Service Charges Only</span>
+                          <p className="text-sm text-gray-500">VAT will be calculated only on service charges (excluding government charges)</p>
+                        </div>
+                      </label>
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="radio"
+                          name="vatAppliesTo"
+                          value="total_amount"
+                          checked={editBillingForm.vatAppliesTo === 'total_amount'}
+                          onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatAppliesTo: e.target.value as 'service_charge' | 'total_amount' }))}
+                          className="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                        />
+                        <div className="ml-3">
+                          <span className="text-sm font-medium text-gray-900">VAT on Total Amount</span>
+                          <p className="text-sm text-gray-500">VAT will be calculated on total amount (service charges + government charges)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 {/* Notes */}
                 <div className="lg:col-span-2">
