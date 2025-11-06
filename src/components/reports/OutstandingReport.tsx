@@ -54,6 +54,44 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
     loadOutstandingData();
   }, [dateFrom, dateTo, customerType]);
 
+  // Listen for service billing updates to refresh outstanding data
+  useEffect(() => {
+    const handleServiceBillingUpdated = (e: CustomEvent) => {
+      console.log('🔔 RECEIVED CustomEvent "serviceBillingUpdated"');
+      console.log('📦 Event detail:', e.detail);
+      console.log('🔄 Refreshing outstanding data...');
+      loadOutstandingData();
+    };
+
+    const handleReceiptChanged = (e: CustomEvent) => {
+      console.log('🔔 RECEIVED CustomEvent "receiptUpdated" or "receiptDeleted"');
+      console.log('📦 Event detail:', e.detail);
+      console.log('🔄 Refreshing outstanding data...');
+      loadOutstandingData();
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'service_billing_updated' || e.key === 'receipt_updated' || e.key === 'receipt_deleted') {
+        console.log('🔄 Service billing/receipt updated (storage event), refreshing outstanding data...');
+        loadOutstandingData();
+      }
+    };
+
+    console.log('🎧 OutstandingReport: Registering event listeners');
+    window.addEventListener('serviceBillingUpdated', handleServiceBillingUpdated as EventListener);
+    window.addEventListener('receiptUpdated', handleReceiptChanged as EventListener);
+    window.addEventListener('receiptDeleted', handleReceiptChanged as EventListener);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      console.log('🔌 OutstandingReport: Removing event listeners');
+      window.removeEventListener('serviceBillingUpdated', handleServiceBillingUpdated as EventListener);
+      window.removeEventListener('receiptUpdated', handleReceiptChanged as EventListener);
+      window.removeEventListener('receiptDeleted', handleReceiptChanged as EventListener);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   const loadOutstandingData = async () => {
     setLoading(true);
     try {
@@ -394,6 +432,34 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
       const createdTransaction = await dbHelpers.createAccountTransaction(transactionData);
       console.log('Transaction created successfully:', createdTransaction);
 
+      // Auto-apply the advance payment to customer's unpaid billings
+      try {
+        console.log('🤖 Auto-applying advance payment to unpaid billings...');
+        const autoApplyResult = await dbHelpers.autoApplyAdvancePayment(
+          createdTransaction.id,
+          selectedCustomerForPayment.id,
+          selectedCustomerForPayment.type,
+          'system'
+        );
+
+        if (autoApplyResult.applied) {
+          console.log('✅ Auto-application successful:', autoApplyResult);
+          toast.success(
+            `💰 Payment recorded and applied!\n` +
+            `Applied AED ${autoApplyResult.totalApplied.toLocaleString()} to ${autoApplyResult.applications.length} billing(s)`,
+            { duration: 5000 }
+          );
+        } else {
+          console.log('ℹ️ No unpaid billings to apply to:', autoApplyResult.message);
+          toast.success(`Payment of AED ${amount.toLocaleString()} recorded successfully!`);
+        }
+      } catch (autoApplyError) {
+        console.error('Error auto-applying payment:', autoApplyError);
+        // Don't fail the payment if auto-apply fails
+        toast.success(`Payment of AED ${amount.toLocaleString()} recorded successfully!`);
+        toast.error('Failed to auto-apply to billings. You can apply manually.');
+      }
+
       // Generate payment receipt
       const receiptData = {
         receiptNumber: receiptNumber,
@@ -423,7 +489,6 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
 
       setShowPaymentModal(false);
       setSelectedCustomerForPayment(null);
-      toast.success(`Payment recorded successfully!\nReceipt ${receiptNumber} created and available in Receipt Management.`);
       console.log('Payment process completed successfully with receipt:', receiptNumber);
 
     } catch (error) {

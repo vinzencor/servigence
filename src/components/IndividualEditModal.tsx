@@ -273,7 +273,18 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
         toast.success('Advance payment updated successfully!');
       }
 
-      // Trigger storage event to notify other components (e.g., Service Billing)
+      // Trigger custom event to notify other components (e.g., Service Billing)
+      // Using CustomEvent instead of storage event for same-window communication
+      window.dispatchEvent(new CustomEvent('advancePaymentUpdated', {
+        detail: {
+          customerId: individual.id,
+          customerType: 'individual',
+          action: 'updated',
+          payment: result
+        }
+      }));
+
+      // Also trigger storage event for cross-tab communication
       localStorage.setItem('advance_payment_updated', Date.now().toString());
       localStorage.removeItem('advance_payment_updated');
 
@@ -360,7 +371,46 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
 
           console.log('✅ Advance payment created:', createdPayment);
 
-          // Trigger storage event to notify other components (e.g., Service Billing)
+          // Auto-apply the advance payment to existing unpaid billings
+          try {
+            console.log('🤖 Auto-applying advance payment to existing unpaid billings...');
+            const autoApplyResult = await dbHelpers.autoApplyAdvancePayment(
+              createdPayment.id,
+              individual.id,
+              'individual',
+              user?.id
+            );
+
+            if (autoApplyResult.applied) {
+              console.log('✅ Auto-application successful:', autoApplyResult);
+              toast.success(
+                `💰 Advance payment created and applied!\n` +
+                `Applied AED ${autoApplyResult.totalApplied.toLocaleString()} to ${autoApplyResult.applications.length} billing(s)`,
+                { duration: 5000 }
+              );
+            } else {
+              console.log('ℹ️ No unpaid billings to apply to:', autoApplyResult.message);
+              toast.success('Advance payment created successfully!');
+            }
+          } catch (autoApplyError) {
+            console.error('Error auto-applying advance payment:', autoApplyError);
+            // Don't fail the payment creation if auto-apply fails
+            toast.success('Advance payment created successfully!');
+            toast.error('Failed to auto-apply to billings. You can apply manually.');
+          }
+
+          // Trigger custom event to notify other components (e.g., Service Billing)
+          // Using CustomEvent instead of storage event for same-window communication
+          window.dispatchEvent(new CustomEvent('advancePaymentUpdated', {
+            detail: {
+              customerId: individual.id,
+              customerType: 'individual',
+              action: 'created',
+              payment: createdPayment
+            }
+          }));
+
+          // Also trigger storage event for cross-tab communication
           localStorage.setItem('advance_payment_updated', Date.now().toString());
           localStorage.removeItem('advance_payment_updated');
 
@@ -725,17 +775,22 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Advance Payments</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  View and manage advance payments for this individual.
+                  {existingAdvancePayments.length > 0
+                    ? 'View and edit existing advance payments for this individual.'
+                    : 'Add an advance payment for this individual.'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowAdvancePayment(!showAdvancePayment)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 shrink-0"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>{showAdvancePayment ? 'Hide' : 'Add New'} Advance Payment</span>
-              </button>
+              {/* Only show "Add New" button if no existing advance payments */}
+              {existingAdvancePayments.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancePayment(!showAdvancePayment)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 shrink-0"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>{showAdvancePayment ? 'Hide' : 'Add New'} Advance Payment</span>
+                </button>
+              )}
             </div>
 
             {/* Existing Advance Payments List */}
@@ -892,13 +947,13 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
                   ))}
                 </div>
               </div>
-            ) : (
+            ) : !showAdvancePayment ? (
               <div className="mb-6 text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
                 <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                 <p className="text-sm text-gray-600">No advance payments recorded yet</p>
-                <p className="text-xs text-gray-500 mt-1">Click "Add New Advance Payment" to record one</p>
+                <p className="text-xs text-gray-500 mt-1">Click "Add New Advance Payment" to create one</p>
               </div>
-            )}
+            ) : null}
 
             {showAdvancePayment && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-green-50 border border-green-200 rounded-lg">

@@ -14,7 +14,6 @@ import {
   Building2,
   User,
   Printer,
-  Mail,
   CheckCircle,
   Clock,
   AlertTriangle
@@ -156,6 +155,8 @@ const ReceiptManagement: React.FC = () => {
         const totalApplied = applications.reduce((sum, app) => sum + parseFloat(app.applied_amount || 0), 0);
         const availableBalance = receiptAmount - totalApplied;
         const utilizationPercentage = receiptAmount > 0 ? (totalApplied / receiptAmount) * 100 : 0;
+
+        console.log(`📊 Receipt ${txn.reference_number}: Amount=${receiptAmount}, Applied=${totalApplied}, Available=${availableBalance}, Apps=${applications.length}`);
 
         return {
           id: txn.id,
@@ -338,10 +339,44 @@ const ReceiptManagement: React.FC = () => {
         newReceipt.transactionId = transactionResult[0].id;
       }
 
-      setReceipts(prev => [newReceipt, ...prev]);
+      // Auto-apply the advance payment to customer's unpaid billings
+      if (transactionResult && transactionResult[0] && receiptForm.status !== 'cancelled') {
+        try {
+          console.log('🤖 Auto-applying advance payment to unpaid billings...');
+          const autoApplyResult = await dbHelpers.autoApplyAdvancePayment(
+            transactionResult[0].id,
+            receiptForm.customerId,
+            receiptForm.customerType,
+            'current-user'
+          );
+
+          if (autoApplyResult.applied) {
+            console.log('✅ Auto-application successful:', autoApplyResult);
+            toast.success(
+              `💰 Receipt created and applied!\n` +
+              `Receipt Number: ${receiptNumber}\n` +
+              `Applied AED ${autoApplyResult.totalApplied.toLocaleString()} to ${autoApplyResult.applications.length} billing(s)`,
+              { duration: 5000 }
+            );
+          } else {
+            console.log('ℹ️ No unpaid billings to apply to:', autoApplyResult.message);
+            toast.success(`Receipt created successfully!\nReceipt Number: ${receiptNumber}\nAdvance payment recorded for Outstanding Report.`);
+          }
+        } catch (autoApplyError) {
+          console.error('Error auto-applying advance payment:', autoApplyError);
+          // Don't fail the receipt creation if auto-apply fails
+          toast.success(`Receipt created successfully!\nReceipt Number: ${receiptNumber}`);
+          toast.error('Failed to auto-apply to billings. You can apply manually.');
+        }
+      } else {
+        toast.success(`Receipt created successfully!\nReceipt Number: ${receiptNumber}\nAdvance payment recorded for Outstanding Report.`);
+      }
+
       setShowAddReceipt(false);
       resetReceiptForm();
-      toast.success(`Receipt created successfully!\nReceipt Number: ${receiptNumber}\nAdvance payment recorded for Outstanding Report.`);
+
+      // Reload receipts to show updated utilization (don't add newReceipt to state, just reload)
+      await loadReceipts();
     } catch (error) {
       console.error('Error creating receipt:', error);
       toast.error(`Error creating receipt: ${error instanceof Error ? error.message : 'Please try again.'}`);
@@ -423,57 +458,126 @@ const ReceiptManagement: React.FC = () => {
     if (!selectedReceipt) return;
 
     try {
-      const updatedReceipt: ReceiptData = {
-        ...selectedReceipt,
-        customerName: receiptForm.customerName,
-        customerType: receiptForm.customerType,
-        customerId: receiptForm.customerId,
-        amount: parseFloat(receiptForm.amount),
-        description: receiptForm.description,
-        paymentMethod: receiptForm.paymentMethod,
-        status: receiptForm.status,
-        transactionId: receiptForm.transactionId,
-        notes: receiptForm.notes
-      };
+      const newAmount = parseFloat(receiptForm.amount);
+      const oldAmount = selectedReceipt.amount;
+
+      console.log('💰 Updating receipt:', selectedReceipt.receiptNumber);
+      console.log('📊 Old amount:', oldAmount, 'New amount:', newAmount);
 
       // Update corresponding account transaction if it exists
       if (selectedReceipt.transactionId) {
-        console.log('💰 Updating account transaction for receipt:', selectedReceipt.receiptNumber);
+        // Step 1: Delete all existing applications
+        console.log('🗑️ Deleting all existing applications...');
+        const { data: existingApplications, error: fetchAppsError } = await supabase
+          .from('advance_payment_applications')
+          .select('id, applied_amount')
+          .eq('receipt_transaction_id', selectedReceipt.transactionId);
 
+        if (fetchAppsError) {
+          console.error('❌ Error fetching applications:', fetchAppsError);
+          throw fetchAppsError;
+        }
+
+        const totalPreviouslyApplied = existingApplications?.reduce((sum, app) => sum + parseFloat(app.applied_amount), 0) || 0;
+        const applicationsCount = existingApplications?.length || 0;
+
+        if (applicationsCount > 0) {
+          console.log(`📊 Found ${applicationsCount} existing applications totaling AED ${totalPreviouslyApplied}`);
+
+          const { error: deleteAppsError } = await supabase
+            .from('advance_payment_applications')
+            .delete()
+            .eq('receipt_transaction_id', selectedReceipt.transactionId);
+
+          if (deleteAppsError) {
+            console.error('❌ Error deleting applications:', deleteAppsError);
+            throw deleteAppsError;
+          }
+
+          console.log('✅ All existing applications deleted');
+        }
+
+        // Step 2: Update the receipt amount in account_transactions
+        console.log('💾 Updating account transaction...');
         const transactionUpdateData = {
-          description: receiptForm.description || `Payment via Receipt ${selectedReceipt.receiptNumber}`,
-          amount: parseFloat(receiptForm.amount),
+          amount: newAmount,
           payment_method: receiptForm.paymentMethod,
-          status: receiptForm.status === 'cancelled' ? 'cancelled' : 'completed',
-          notes: `Receipt Number: ${selectedReceipt.receiptNumber}${receiptForm.notes ? ` | ${receiptForm.notes}` : ''}`,
-          // Update customer ID based on customer type
-          ...(receiptForm.customerType === 'company'
-            ? { company_id: receiptForm.customerId, individual_id: null }
-            : { individual_id: receiptForm.customerId, company_id: null }
-          )
+          notes: receiptForm.notes || '',
+          description: receiptForm.description || `Payment via Receipt ${selectedReceipt.receiptNumber}`,
+          updated_at: new Date().toISOString()
         };
 
-        const { error: transactionError } = await supabase
+        const { error: updateError } = await supabase
           .from('account_transactions')
           .update(transactionUpdateData)
           .eq('id', selectedReceipt.transactionId);
 
-        if (transactionError) {
-          console.error('❌ Error updating account transaction:', transactionError);
-          // Don't throw error, just log it - receipt update should still proceed
-        } else {
-          console.log('✅ Account transaction updated successfully');
+        if (updateError) {
+          console.error('❌ Error updating account transaction:', updateError);
+          throw updateError;
         }
+
+        console.log('✅ Account transaction updated successfully');
+
+        // Step 3: Re-apply the advance payment with the new amount
+        if (receiptForm.status !== 'cancelled') {
+          console.log('🤖 Re-applying advance payment with new amount...');
+          const autoApplyResult = await dbHelpers.autoApplyAdvancePayment(
+            selectedReceipt.transactionId,
+            receiptForm.customerId,
+            receiptForm.customerType,
+            'current-user'
+          );
+
+          console.log('✅ Auto-apply result:', autoApplyResult);
+
+          if (autoApplyResult.applied && autoApplyResult.applications && autoApplyResult.applications.length > 0) {
+            const newTotalApplied = autoApplyResult.applications.reduce((sum: number, app: any) => sum + app.appliedAmount, 0);
+            toast.success(
+              `✅ Receipt updated successfully!\n` +
+              `Amount: AED ${oldAmount.toLocaleString()} → AED ${newAmount.toLocaleString()}\n` +
+              `Applied: AED ${newTotalApplied.toLocaleString()} to ${autoApplyResult.applications.length} billing(s)`,
+              { duration: 5000 }
+            );
+          } else {
+            toast.success(
+              `✅ Receipt updated successfully!\n` +
+              `Amount: AED ${oldAmount.toLocaleString()} → AED ${newAmount.toLocaleString()}\n` +
+              `No unpaid billings to apply to.`,
+              { duration: 4000 }
+            );
+          }
+        } else {
+          toast.success('Receipt updated successfully!');
+        }
+
+        // Dispatch event to notify other components
+        const eventDetail = {
+          receiptId: selectedReceipt.transactionId,
+          customerId: receiptForm.customerId,
+          customerType: receiptForm.customerType,
+          action: 'updated',
+          oldAmount,
+          newAmount
+        };
+        console.log('🔔 DISPATCHING CustomEvent "receiptUpdated" with detail:', eventDetail);
+        window.dispatchEvent(new CustomEvent('receiptUpdated', { detail: eventDetail }));
+
+        // Also trigger storage event for cross-tab communication
+        localStorage.setItem('receipt_updated', Date.now().toString());
+        localStorage.removeItem('receipt_updated');
       }
 
-      setReceipts(prev => prev.map(r => r.id === selectedReceipt.id ? updatedReceipt : r));
       setShowEditReceipt(false);
       setSelectedReceipt(null);
       resetReceiptForm();
-      toast.success('Receipt updated successfully!\nOutstanding Report will reflect the updated payment.');
+
+      // Reload receipts to show updated utilization
+      await loadReceipts();
     } catch (error) {
       console.error('Error updating receipt:', error);
-      toast.error('Error updating receipt. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Please try again.';
+      toast.error(`Error updating receipt: ${errorMessage}`);
     }
   };
 
@@ -486,24 +590,128 @@ const ReceiptManagement: React.FC = () => {
     if (!receiptToDelete) return;
 
     try {
-      setReceipts(prev => prev.filter(r => r.id !== receiptToDelete));
+      // Find the receipt to get its details
+      const receiptToDeleteData = receipts.find(r => r.id === receiptToDelete);
+      if (!receiptToDeleteData) {
+        toast.error('Receipt not found');
+        return;
+      }
+
+      console.log('🗑️ Deleting receipt:', receiptToDeleteData.receiptNumber);
+
+      // Step 1: Get all applications of this receipt to show user what will be unapplied
+      const { data: applications, error: applicationsError } = await supabase
+        .from('advance_payment_applications')
+        .select('id, applied_amount, billing_id')
+        .eq('receipt_transaction_id', receiptToDelete);
+
+      if (applicationsError) {
+        console.error('❌ Error fetching applications:', applicationsError);
+        throw applicationsError;
+      }
+
+      const totalApplied = applications?.reduce((sum, app) => sum + parseFloat(app.applied_amount), 0) || 0;
+      const applicationsCount = applications?.length || 0;
+
+      console.log(`📊 Receipt has ${applicationsCount} applications totaling AED ${totalApplied}`);
+
+      // Step 2: Delete all applications (this will restore outstanding amounts in billings)
+      if (applicationsCount > 0) {
+        console.log('🗑️ Deleting advance payment applications...');
+        const { error: deleteAppsError } = await supabase
+          .from('advance_payment_applications')
+          .delete()
+          .eq('receipt_transaction_id', receiptToDelete);
+
+        if (deleteAppsError) {
+          console.error('❌ Error deleting applications:', deleteAppsError);
+          throw deleteAppsError;
+        }
+
+        console.log('✅ Applications deleted successfully');
+      }
+
+      // Step 3: Delete the account transaction (receipt)
+      console.log('🗑️ Deleting account transaction...');
+      const { error: deleteTransactionError } = await supabase
+        .from('account_transactions')
+        .delete()
+        .eq('id', receiptToDelete);
+
+      if (deleteTransactionError) {
+        console.error('❌ Error deleting account transaction:', deleteTransactionError);
+        throw deleteTransactionError;
+      }
+
+      console.log('✅ Account transaction deleted successfully');
+
+      // Show success message with details
+      if (applicationsCount > 0) {
+        toast.success(
+          `✅ Receipt deleted successfully!\n` +
+          `Receipt: ${receiptToDeleteData.receiptNumber}\n` +
+          `Unapplied AED ${totalApplied.toLocaleString()} from ${applicationsCount} billing(s).\n` +
+          `Outstanding amounts have been restored.`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success(`✅ Receipt ${receiptToDeleteData.receiptNumber} deleted successfully!`);
+      }
+
+      // Dispatch event to notify other components
+      const eventDetail = {
+        receiptId: receiptToDelete,
+        receiptNumber: receiptToDeleteData.receiptNumber,
+        customerId: receiptToDeleteData.customerId,
+        customerType: receiptToDeleteData.customerType,
+        action: 'deleted',
+        amount: receiptToDeleteData.amount,
+        applicationsCount
+      };
+      console.log('🔔 DISPATCHING CustomEvent "receiptDeleted" with detail:', eventDetail);
+      window.dispatchEvent(new CustomEvent('receiptDeleted', { detail: eventDetail }));
+
+      // Also trigger storage event for cross-tab communication
+      localStorage.setItem('receipt_deleted', Date.now().toString());
+      localStorage.removeItem('receipt_deleted');
+
       setShowDeleteConfirm(false);
       setReceiptToDelete(null);
-      alert('Receipt deleted successfully!');
+
+      // Reload receipts to refresh the list
+      await loadReceipts();
     } catch (error) {
       console.error('Error deleting receipt:', error);
-      alert('Error deleting receipt. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Please try again.';
+      toast.error(`Error deleting receipt: ${errorMessage}`);
     }
   };
 
-  const handlePrintReceipt = (receipt: ReceiptData) => {
-    // In a real implementation, this would generate and print a PDF receipt
-    alert(`Printing receipt ${receipt.receiptNumber}...`);
-  };
+  const handlePrintReceipt = async (receipt: ReceiptData) => {
+    try {
+      // Generate and download the receipt
+      const { generatePaymentReceipt } = await import('../utils/receiptGenerator');
 
-  const handleEmailReceipt = (receipt: ReceiptData) => {
-    // In a real implementation, this would send the receipt via email
-    alert(`Emailing receipt ${receipt.receiptNumber} to customer...`);
+      const receiptData = {
+        receiptNumber: receipt.receiptNumber,
+        date: new Date(receipt.date).toLocaleDateString(),
+        customerName: receipt.customerName,
+        customerType: receipt.customerType,
+        customerId: receipt.customerId,
+        amount: receipt.amount,
+        description: receipt.description,
+        paymentMethod: receipt.paymentMethod,
+        status: receipt.status,
+        transactionId: receipt.transactionId,
+        notes: receipt.notes
+      };
+
+      generatePaymentReceipt(receiptData);
+      toast.success(`Receipt ${receipt.receiptNumber} downloaded successfully!`);
+    } catch (error) {
+      console.error('Error printing receipt:', error);
+      toast.error('Failed to print receipt. Please try again.');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -807,7 +1015,7 @@ const ReceiptManagement: React.FC = () => {
                               Applied: AED {(receipt.totalApplied || 0).toLocaleString()}
                             </div>
                             <div className="text-xs font-medium text-green-600">
-                              Available: AED {(receipt.availableBalance || receipt.amount).toLocaleString()}
+                              Available: AED {(receipt.availableBalance !== undefined ? receipt.availableBalance : receipt.amount).toLocaleString()}
                             </div>
                             {receipt.applicationsCount && receipt.applicationsCount > 0 && (
                               <div className="text-xs text-gray-500">
@@ -848,13 +1056,6 @@ const ReceiptManagement: React.FC = () => {
                             title="Print Receipt"
                           >
                             <Printer className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleEmailReceipt(receipt)}
-                            className="text-purple-600 hover:text-purple-700 p-1 rounded"
-                            title="Email Receipt"
-                          >
-                            <Mail className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteReceipt(receipt.id)}
@@ -1105,6 +1306,36 @@ const ReceiptManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Utilization Information */}
+              {selectedReceipt.status !== 'cancelled' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Utilization Details</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Total Amount</label>
+                      <p className="text-lg font-semibold text-gray-900">AED {selectedReceipt.amount.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Applied</label>
+                      <p className="text-lg font-semibold text-red-600">AED {(selectedReceipt.totalApplied || 0).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Available</label>
+                      <p className="text-lg font-semibold text-green-600">
+                        AED {(selectedReceipt.availableBalance !== undefined ? selectedReceipt.availableBalance : selectedReceipt.amount).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedReceipt.applicationsCount && selectedReceipt.applicationsCount > 0 && (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <p className="text-xs text-gray-600">
+                        Applied to {selectedReceipt.applicationsCount} billing{selectedReceipt.applicationsCount > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-between text-sm text-gray-500">
                   <span>Created: {new Date(selectedReceipt.createdAt).toLocaleString()}</span>
@@ -1113,22 +1344,13 @@ const ReceiptManagement: React.FC = () => {
               </div>
             </div>
             <div className="p-6 border-t border-gray-200 flex justify-between">
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handlePrintReceipt(selectedReceipt)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print</span>
-                </button>
-                <button
-                  onClick={() => handleEmailReceipt(selectedReceipt)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Mail className="w-4 h-4" />
-                  <span>Email</span>
-                </button>
-              </div>
+              <button
+                onClick={() => handlePrintReceipt(selectedReceipt)}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Receipt</span>
+              </button>
               <button
                 onClick={() => {
                   setShowReceiptDetails(false);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save, CreditCard, X, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mockServices, mockInvoices } from '../data/mockData';
@@ -70,6 +70,32 @@ const ServiceBilling: React.FC = () => {
   } | null>(null);
   const [selectedCustomerAdvanceBalance, setSelectedCustomerAdvanceBalance] = useState<number>(0);
 
+  // Debug: Monitor balance changes
+  useEffect(() => {
+    console.log('💵 selectedCustomerAdvanceBalance STATE CHANGED:', selectedCustomerAdvanceBalance);
+  }, [selectedCustomerAdvanceBalance]);
+
+  // Helper function to refresh advance payment balance (defined early to avoid closure issues)
+  const refreshAdvancePaymentBalance = useCallback(async (customerId: string, customerType: 'company' | 'individual') => {
+    console.log('💰 refreshAdvancePaymentBalance() called with:', { customerId, customerType });
+
+    try {
+      console.log('📡 Fetching balance from database...');
+      const balanceData = await dbHelpers.getAvailableAdvanceBalance(customerId, customerType);
+
+      console.log('✅ Balance data received:', balanceData);
+      console.log('💵 New available balance:', balanceData.availableBalance);
+      console.log('📝 Setting state: selectedCustomerAdvanceBalance =', balanceData.availableBalance);
+
+      setSelectedCustomerAdvanceBalance(balanceData.availableBalance);
+
+      console.log('✅ State updated successfully');
+    } catch (error) {
+      console.error('❌ Error refreshing advance balance:', error);
+      setSelectedCustomerAdvanceBalance(0);
+    }
+  }, []);
+
   // Edit billing form state
   const [editBillingForm, setEditBillingForm] = useState({
     clientType: 'company' as 'company' | 'individual',
@@ -120,8 +146,8 @@ const ServiceBilling: React.FC = () => {
       if (e.key === 'company_updated') {
         loadData(); // Refresh companies when a company is updated
       }
-      if (e.key === 'advance_payment_updated') {
-        console.log('🔄 Advance payment updated, refreshing data...');
+      if (e.key === 'advance_payment_updated' || e.key === 'receipt_updated' || e.key === 'receipt_deleted') {
+        console.log('🔄 Advance payment/receipt updated (storage event), refreshing data...');
 
         // Refresh advance payment balance for the currently selected customer
         const currentCustomerId = billingForm.clientType === 'company' ? billingForm.companyId : billingForm.individualId;
@@ -138,21 +164,75 @@ const ServiceBilling: React.FC = () => {
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [billingForm.companyId, billingForm.individualId, billingForm.clientType]);
+    // Handle custom event for same-window communication
+    const handleAdvancePaymentUpdated = (e: CustomEvent) => {
+      console.log('🔔 RECEIVED CustomEvent "advancePaymentUpdated"');
+      console.log('📦 Event detail:', e.detail);
 
-  // Helper function to refresh advance payment balance
-  const refreshAdvancePaymentBalance = async (customerId: string, customerType: 'company' | 'individual') => {
-    try {
-      const balanceData = await dbHelpers.getAvailableAdvanceBalance(customerId, customerType);
-      setSelectedCustomerAdvanceBalance(balanceData.availableBalance);
-      console.log('💰 Refreshed advance payment balance:', balanceData);
-    } catch (error) {
-      console.error('Error refreshing advance balance:', error);
-      setSelectedCustomerAdvanceBalance(0);
-    }
-  };
+      // Refresh advance payment balance for the currently selected customer
+      const currentCustomerId = billingForm.clientType === 'company' ? billingForm.companyId : billingForm.individualId;
+      const currentCustomerType = billingForm.clientType;
+
+      console.log('📊 Current billing form state:', {
+        clientType: billingForm.clientType,
+        companyId: billingForm.companyId,
+        individualId: billingForm.individualId,
+        currentCustomerId,
+        currentCustomerType
+      });
+
+      if (currentCustomerId) {
+        console.log('🔄 Refreshing balance for customer:', currentCustomerId, 'type:', currentCustomerType);
+        refreshAdvancePaymentBalance(currentCustomerId, currentCustomerType);
+      } else {
+        console.warn('⚠️ No customer selected, skipping balance refresh');
+      }
+
+      // Also refresh the service billings list to update applied advance payment amounts
+      console.log('🔄 Refreshing service billings list...');
+      loadServiceBillings();
+    };
+
+    // Handle receipt updated/deleted events
+    const handleReceiptChanged = (e: CustomEvent) => {
+      console.log('🔔 RECEIVED CustomEvent "receiptUpdated" or "receiptDeleted"');
+      console.log('📦 Event detail:', e.detail);
+
+      // Refresh advance payment balance for the currently selected customer
+      const currentCustomerId = billingForm.clientType === 'company' ? billingForm.companyId : billingForm.individualId;
+      const currentCustomerType = billingForm.clientType;
+
+      if (currentCustomerId) {
+        console.log('🔄 Refreshing balance for customer:', currentCustomerId);
+        refreshAdvancePaymentBalance(currentCustomerId, currentCustomerType);
+      }
+
+      // Refresh the service billings list
+      console.log('🔄 Refreshing service billings list...');
+      loadServiceBillings();
+    };
+
+    console.log('🎧 ServiceBilling: Registering event listeners');
+    console.log('🎧 - storage event listener');
+    console.log('🎧 - advancePaymentUpdated custom event listener');
+    console.log('🎧 - receiptUpdated custom event listener');
+    console.log('🎧 - receiptDeleted custom event listener');
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('advancePaymentUpdated', handleAdvancePaymentUpdated as EventListener);
+    window.addEventListener('receiptUpdated', handleReceiptChanged as EventListener);
+    window.addEventListener('receiptDeleted', handleReceiptChanged as EventListener);
+
+    console.log('✅ Event listeners registered successfully');
+
+    return () => {
+      console.log('🔌 ServiceBilling: Removing event listeners');
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('advancePaymentUpdated', handleAdvancePaymentUpdated as EventListener);
+      window.removeEventListener('receiptUpdated', handleReceiptChanged as EventListener);
+      window.removeEventListener('receiptDeleted', handleReceiptChanged as EventListener);
+    };
+  }, [billingForm.companyId, billingForm.individualId, billingForm.clientType, refreshAdvancePaymentBalance]);
 
   const loadData = async () => {
     if (!user) {
@@ -432,7 +512,22 @@ const ServiceBilling: React.FC = () => {
       // Update billing in database
       await dbHelpers.updateServiceBilling(selectedBilling.id, updatedBillingData);
 
-      alert('✅ Service billing updated successfully!');
+      toast.success('✅ Service billing updated successfully!');
+
+      // Dispatch event to notify other components (e.g., Outstanding Report)
+      const eventDetail = {
+        billingId: selectedBilling.id,
+        customerId: editBillingForm.clientType === 'company' ? editBillingForm.companyId : editBillingForm.individualId,
+        customerType: editBillingForm.clientType,
+        action: 'updated',
+        totalAmount: totalAmountWithVat
+      };
+      console.log('🔔 DISPATCHING CustomEvent "serviceBillingUpdated" with detail:', eventDetail);
+      window.dispatchEvent(new CustomEvent('serviceBillingUpdated', { detail: eventDetail }));
+
+      // Also trigger storage event for cross-tab communication
+      localStorage.setItem('service_billing_updated', Date.now().toString());
+      localStorage.removeItem('service_billing_updated');
 
       setShowEditBilling(false);
       setSelectedBilling(null);
