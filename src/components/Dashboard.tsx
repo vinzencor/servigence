@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Users, Building2, FileText, DollarSign, AlertCircle, Clock, CheckCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, Users, Building2, FileText, DollarSign, AlertCircle, Clock, CheckCircle, ArrowUpRight, ArrowDownRight, Wallet, TrendingDown, BarChart3 } from 'lucide-react';
 import { mockCompanies, mockServices, mockInvoices, mockReminders } from '../data/mockData';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CardBalanceWidget from './CardBalanceWidget';
 import DailyCardSummary from './DailyCardSummary';
-import ImagePreviewTest from './ImagePreviewTest';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
@@ -15,7 +14,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const { user, isSuperAdmin } = useAuth();
   const [realReminders, setRealReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showImageTest, setShowImageTest] = useState(false);
+  const [totalAdvancePayment, setTotalAdvancePayment] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [dailyProfit, setDailyProfit] = useState(0);
 
   const totalCompanies = mockCompanies.length;
   const activeServices = mockServices.filter(s => s.status === 'in_progress').length;
@@ -24,6 +26,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   useEffect(() => {
     loadReminders();
+    loadFinancialMetrics();
   }, []);
 
   const loadReminders = async () => {
@@ -35,6 +38,82 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       console.error('Error loading reminders:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFinancialMetrics = async () => {
+    try {
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split('T')[0];
+
+      // Load all account transactions for advance payments and expenses (all time)
+      const { data: transactions, error } = await dbHelpers.supabase
+        .from('account_transactions')
+        .select('*')
+        .order('transaction_date', { ascending: false });
+
+      if (error) throw error;
+
+      // Calculate Total Advance Payment (all time)
+      const advancePayments = transactions?.filter(t => t.transaction_type === 'advance_payment') || [];
+      const totalAdvance = advancePayments.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+      setTotalAdvancePayment(totalAdvance);
+
+      // Calculate Total Expenses (all time)
+      const expenses = transactions?.filter(t => t.transaction_type === 'expense') || [];
+      const totalExp = expenses.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+      setTotalExpenses(totalExp);
+
+      // Load all service billings for total revenue calculation
+      const { data: allBillings, error: allBillingsError } = await dbHelpers.supabase
+        .from('service_billings')
+        .select('*');
+
+      if (allBillingsError) throw allBillingsError;
+
+      // Calculate Total Revenue (all time)
+      const totalRev = allBillings?.reduce((sum, b) => sum + parseFloat(b.total_amount_with_vat || b.total_amount || 0), 0) || 0;
+      setTotalRevenue(totalRev);
+
+      // Load TODAY's service billings for daily profit calculation
+      const { data: todayBillings, error: todayBillingsError } = await dbHelpers.supabase
+        .from('service_billings')
+        .select('*')
+        .eq('service_date', today);
+
+      if (todayBillingsError) throw todayBillingsError;
+
+      // Calculate today's revenue
+      const todayRevenue = todayBillings?.reduce((sum, b) => sum + parseFloat(b.total_amount_with_vat || b.total_amount || 0), 0) || 0;
+
+      // Load TODAY's expenses for daily profit calculation
+      const { data: todayExpenses, error: todayExpensesError } = await dbHelpers.supabase
+        .from('account_transactions')
+        .select('*')
+        .eq('transaction_type', 'expense')
+        .eq('transaction_date', today);
+
+      if (todayExpensesError) throw todayExpensesError;
+
+      // Calculate today's expenses
+      const todayExp = todayExpenses?.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0;
+
+      // Calculate Daily Profit (today's revenue - today's expenses)
+      const profit = todayRevenue - todayExp;
+      setDailyProfit(profit);
+
+      console.log('Financial Metrics Loaded:', {
+        today,
+        totalAdvancePayment: totalAdvance,
+        totalExpenses: totalExp,
+        totalRevenue: totalRev,
+        todayRevenue,
+        todayExpenses: todayExp,
+        dailyProfit: profit
+      });
+
+    } catch (error) {
+      console.error('Error loading financial metrics:', error);
     }
   };
 
@@ -82,6 +161,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       icon: AlertCircle,
       color: 'red',
       navigateTo: 'reminders'
+    },
+    {
+      title: 'Total Advance Payment',
+      value: `AED ${totalAdvancePayment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: '',
+      trend: 'up',
+      icon: Wallet,
+      color: 'purple',
+      navigateTo: 'receipt-management'
+    },
+    {
+      title: 'Total Expenses',
+      value: `AED ${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: '',
+      trend: 'down',
+      icon: TrendingDown,
+      color: 'red',
+      navigateTo: 'accounts'
+    },
+    {
+      title: 'Daily Profit',
+      value: `AED ${dailyProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: dailyProfit >= 0 ? '+' : '',
+      trend: dailyProfit >= 0 ? 'up' : 'down',
+      icon: BarChart3,
+      color: dailyProfit >= 0 ? 'green' : 'red',
+      navigateTo: 'accounts'
     }
   ];
 
@@ -224,25 +330,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Test Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowImageTest(!showImageTest)}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-        >
-          {showImageTest ? 'Hide' : 'Show'} Image Preview Test
-        </button>
-      </div>
-
-      {/* Image Preview Test Component */}
-      {showImageTest && (
-        <div className="bg-white rounded-lg shadow-lg">
-          <ImagePreviewTest />
-        </div>
-      )}
-
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           const TrendIcon = stat.trend === 'up' ? ArrowUpRight : ArrowDownRight;
@@ -257,10 +346,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getColorClasses(stat.color, 'bg')} group-hover:scale-110 transition-transform duration-200`}>
                   <Icon className={`w-6 h-6 ${getColorClasses(stat.color, 'text')}`} />
                 </div>
-                <div className={`flex items-center space-x-1 text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                  <TrendIcon className="w-4 h-4" />
-                  <span className="font-medium">{stat.change}</span>
-                </div>
+                {stat.change && (
+                  <div className={`flex items-center space-x-1 text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                    <TrendIcon className="w-4 h-4" />
+                    <span className="font-medium">{stat.change}</span>
+                  </div>
+                )}
               </div>
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors duration-200">{stat.value}</h3>
