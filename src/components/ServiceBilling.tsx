@@ -7,6 +7,7 @@ import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import DailyCardSummary from './DailyCardSummary';
 import PaymentMethodSelector from './PaymentMethodSelector';
+import { exportToPDF } from '../utils/pdfExport';
 
 const ServiceBilling: React.FC = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -673,10 +674,71 @@ const ServiceBilling: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
 
-      alert('✅ Billing list exported successfully!');
+      toast.success('CSV exported successfully!');
     } catch (error) {
       console.error('Error exporting billing list:', error);
-      alert('❌ Error exporting billing list. Please try again.');
+      toast.error('Error exporting billing list. Please try again.');
+    }
+  };
+
+  const exportBillingListPDF = () => {
+    try {
+      // Prepare data for PDF export
+      const pdfData = serviceBillings.map((billing: any) => ({
+        invoiceNumber: billing.invoice_number || 'N/A',
+        date: new Date(billing.service_date).toLocaleDateString(),
+        client: billing.company?.company_name || billing.individual?.individual_name || 'N/A',
+        service: billing.service_type?.name || 'N/A',
+        quantity: billing.quantity || 1,
+        serviceCharges: parseFloat(billing.typing_charges || 0),
+        governmentCharges: parseFloat(billing.government_charges || 0),
+        discount: parseFloat(billing.discount || 0),
+        totalAmount: parseFloat(billing.total_amount || 0),
+        profit: parseFloat(billing.profit || 0),
+        status: getStatusLabel(billing.status)
+      }));
+
+      // Calculate summary
+      const totalRevenue = serviceBillings.reduce((sum, b: any) => sum + parseFloat(b.total_amount || 0), 0);
+      const totalProfit = serviceBillings.reduce((sum, b: any) => sum + parseFloat(b.profit || 0), 0);
+      const totalServiceCharges = serviceBillings.reduce((sum, b: any) => sum + parseFloat(b.typing_charges || 0), 0);
+      const totalGovtCharges = serviceBillings.reduce((sum, b: any) => sum + parseFloat(b.government_charges || 0), 0);
+
+      const summaryData = [
+        { label: 'Total Billings', value: serviceBillings.length },
+        { label: 'Total Revenue', value: `AED ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Total Profit', value: `AED ${totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Total Service Charges', value: `AED ${totalServiceCharges.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Total Govt. Charges', value: `AED ${totalGovtCharges.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+      ];
+
+      exportToPDF({
+        title: 'Service Billing Report',
+        subtitle: 'Complete List of Service Billings',
+        dateRange: `Filter: ${dateFilter.replace('_', ' ').toUpperCase()}`,
+        columns: [
+          { header: 'Invoice #', dataKey: 'invoiceNumber' },
+          { header: 'Date', dataKey: 'date' },
+          { header: 'Client', dataKey: 'client' },
+          { header: 'Service', dataKey: 'service' },
+          { header: 'Qty', dataKey: 'quantity' },
+          { header: 'Service Charges (AED)', dataKey: 'serviceCharges' },
+          { header: 'Govt. Charges (AED)', dataKey: 'governmentCharges' },
+          { header: 'Discount (AED)', dataKey: 'discount' },
+          { header: 'Total (AED)', dataKey: 'totalAmount' },
+          { header: 'Profit (AED)', dataKey: 'profit' },
+          { header: 'Status', dataKey: 'status' }
+        ],
+        data: pdfData,
+        summaryData,
+        fileName: `Service_Billings_${new Date().toISOString().split('T')[0]}.pdf`,
+        orientation: 'landscape'
+      });
+
+      toast.success('PDF exported successfully!');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Failed to export PDF');
     }
   };
 
@@ -1535,13 +1597,22 @@ Servigence Business Services
                     <option value="this_quarter">This Quarter</option>
                     <option value="this_year">This Year</option>
                   </select>
-                  <button
-                    onClick={exportBillingList}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Export</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={exportBillingList}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export CSV</span>
+                    </button>
+                    <button
+                      onClick={exportBillingListPDF}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export PDF</span>
+                    </button>
+                  </div>
                   <button
                     onClick={testSupabaseConnection}
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"

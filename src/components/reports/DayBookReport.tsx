@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  Download, 
-  Filter, 
-  Search, 
-  DollarSign, 
-  TrendingUp, 
+import {
+  Calendar,
+  Download,
+  Filter,
+  Search,
+  DollarSign,
+  TrendingUp,
   TrendingDown,
   FileText,
   CreditCard,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers, supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface Transaction {
   id: string;
@@ -255,6 +256,61 @@ ${Object.entries(data.paymentMethodBreakdown).map(([method, amount]) =>
     return type === 'income' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />;
   };
 
+  const exportReportPDF = () => {
+    if (!data) return;
+
+    const filteredTransactions = data.transactions.filter(t => {
+      const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesType = filterType === 'all' || t.type === filterType;
+      const matchesPayment = filterPayment === 'all' || t.paymentMethod === filterPayment;
+      return matchesSearch && matchesType && matchesPayment;
+    });
+
+    const pdfData = filteredTransactions.map(t => ({
+      date: t.date,
+      type: t.type.toUpperCase(),
+      description: t.description,
+      client: t.clientName || '-',
+      invoice: t.invoiceNumber || '-',
+      paymentMethod: t.paymentMethod.replace('_', ' ').toUpperCase(),
+      amount: t.amount,
+      category: t.category
+    }));
+
+    const summaryData = [
+      { label: 'Total Transactions', value: data.summary.transactionCount },
+      { label: 'Total Income', value: `AED ${data.summary.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Expenses', value: `AED ${data.summary.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Net Amount', value: `AED ${data.summary.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Income Transactions', value: data.summary.incomeCount },
+      { label: 'Expense Transactions', value: data.summary.expenseCount }
+    ];
+
+    exportToPDF({
+      title: 'Day Book Report',
+      subtitle: 'All Transactions for Selected Date Range',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Type', dataKey: 'type' },
+        { header: 'Description', dataKey: 'description' },
+        { header: 'Client', dataKey: 'client' },
+        { header: 'Invoice #', dataKey: 'invoice' },
+        { header: 'Payment Method', dataKey: 'paymentMethod' },
+        { header: 'Amount (AED)', dataKey: 'amount' },
+        { header: 'Category', dataKey: 'category' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `DayBook_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -271,13 +327,22 @@ ${Object.entries(data.paymentMethodBreakdown).map(([method, amount]) =>
           <h1 className="text-2xl font-bold text-gray-900">Day Book Report</h1>
           <p className="text-gray-600">All transactions for the selected date range</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportReportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

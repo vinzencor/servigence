@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers, supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface Income {
   id: string;
@@ -311,6 +312,59 @@ ${sortedIncomes.map(income =>
     return colors[index];
   };
 
+  const exportReportPDF = () => {
+    if (!data) return;
+
+    const pdfData = sortedIncomes.map(income => ({
+      date: income.date,
+      serviceType: income.serviceType,
+      clientName: income.clientName,
+      clientType: income.clientType === 'company' ? 'Company' : 'Individual',
+      amount: income.amount,
+      profit: income.profit || 0,
+      vatAmount: income.vatAmount || 0,
+      discount: income.discount || 0,
+      paymentMethod: income.paymentMethod.replace('_', ' ').toUpperCase(),
+      invoiceNumber: income.invoiceNumber || '-',
+      status: income.status.toUpperCase()
+    }));
+
+    const summaryData = [
+      { label: 'Total Income', value: `AED ${data.summary.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Profit', value: `AED ${data.summary.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total VAT', value: `AED ${data.summary.totalVAT.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Discount', value: `AED ${data.summary.totalDiscount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Number of Transactions', value: data.summary.incomeCount },
+      { label: 'Average Income', value: `AED ${data.summary.averageIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Largest Transaction', value: `AED ${data.summary.largestIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+    ];
+
+    exportToPDF({
+      title: 'Income Report',
+      subtitle: 'Revenue Breakdown by Service Types and Sources',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Service Type', dataKey: 'serviceType' },
+        { header: 'Client', dataKey: 'clientName' },
+        { header: 'Type', dataKey: 'clientType' },
+        { header: 'Amount (AED)', dataKey: 'amount' },
+        { header: 'Profit (AED)', dataKey: 'profit' },
+        { header: 'VAT (AED)', dataKey: 'vatAmount' },
+        { header: 'Discount (AED)', dataKey: 'discount' },
+        { header: 'Payment Method', dataKey: 'paymentMethod' },
+        { header: 'Invoice #', dataKey: 'invoiceNumber' },
+        { header: 'Status', dataKey: 'status' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Income_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -327,13 +381,22 @@ ${sortedIncomes.map(income =>
           <h1 className="text-2xl font-bold text-gray-900">Income Report</h1>
           <p className="text-gray-600">Revenue breakdown by service types and sources</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportReportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

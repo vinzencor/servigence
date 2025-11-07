@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Banknote, Download, Calendar, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface CashTransaction {
   id: string;

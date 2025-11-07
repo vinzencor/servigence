@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Target, Download, Calendar, TrendingUp, Award, BarChart3 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface ServiceData {
   id: string;
@@ -138,6 +139,50 @@ ${service.name}
     toast.success('Service-wise report exported successfully');
   };
 
+  const exportReportPDF = () => {
+    const pdfData = services.map(service => ({
+      name: service.name,
+      totalRevenue: service.totalRevenue,
+      totalProfit: service.totalProfit,
+      profitMargin: service.profitMargin,
+      totalTransactions: service.totalTransactions,
+      averageTransactionValue: service.averageTransactionValue,
+      lastTransactionDate: service.lastTransactionDate || '-'
+    }));
+
+    const totalRevenue = services.reduce((sum, service) => sum + service.totalRevenue, 0);
+    const totalProfit = services.reduce((sum, service) => sum + service.totalProfit, 0);
+    const totalTransactions = services.reduce((sum, service) => sum + service.totalTransactions, 0);
+
+    const summaryData = [
+      { label: 'Total Services', value: services.length },
+      { label: 'Total Revenue', value: `AED ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Profit', value: `AED ${totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Transactions', value: totalTransactions }
+    ];
+
+    exportToPDF({
+      title: 'Service-Wise Report',
+      subtitle: 'Revenue Breakdown by Service Type',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Service Name', dataKey: 'name' },
+        { header: 'Revenue (AED)', dataKey: 'totalRevenue' },
+        { header: 'Profit (AED)', dataKey: 'totalProfit' },
+        { header: 'Profit %', dataKey: 'profitMargin' },
+        { header: 'Transactions', dataKey: 'totalTransactions' },
+        { header: 'Avg Transaction (AED)', dataKey: 'averageTransactionValue' },
+        { header: 'Last Transaction', dataKey: 'lastTransactionDate' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Service_Wise_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -158,13 +203,22 @@ ${service.name}
           <h1 className="text-2xl font-bold text-gray-900">Service-wise Report</h1>
           <p className="text-gray-600">Revenue and activity breakdown by service type</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportReportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

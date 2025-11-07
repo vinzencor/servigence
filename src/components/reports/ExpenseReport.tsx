@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  TrendingDown, 
-  Download, 
-  Filter, 
-  Search, 
-  DollarSign, 
+import {
+  TrendingDown,
+  Download,
+  Filter,
+  Search,
+  DollarSign,
   Calendar,
   PieChart,
   BarChart3,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers, supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface Expense {
   id: string;
@@ -268,7 +269,51 @@ ${sortedExpenses.map(expense =>
     toast.success('CSV report exported successfully');
   };
 
-  const exportPDF = () => {
+  const exportReportPDF = () => {
+    if (!data) return;
+
+    const pdfData = sortedExpenses.map(expense => ({
+      date: expense.date,
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod.replace('_', ' ').toUpperCase(),
+      referenceNumber: expense.referenceNumber || '-',
+      status: expense.status.toUpperCase(),
+      vendor: expense.companyName || expense.individualName || '-'
+    }));
+
+    const summaryData = [
+      { label: 'Total Expenses', value: `AED ${data.summary.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Number of Transactions', value: data.summary.expenseCount },
+      { label: 'Average Expense', value: `AED ${data.summary.averageExpense.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Largest Expense', value: `AED ${data.summary.largestExpense.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+    ];
+
+    exportToPDF({
+      title: 'Expense Report',
+      subtitle: 'Expenses Breakdown by Categories and Payment Methods',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Category', dataKey: 'category' },
+        { header: 'Description', dataKey: 'description' },
+        { header: 'Vendor', dataKey: 'vendor' },
+        { header: 'Amount (AED)', dataKey: 'amount' },
+        { header: 'Payment Method', dataKey: 'paymentMethod' },
+        { header: 'Reference #', dataKey: 'referenceNumber' },
+        { header: 'Status', dataKey: 'status' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Expense_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
+  };
+
+  const exportPDF_OLD = () => {
     if (!data) return;
 
     const printWindow = window.open('', '_blank');
@@ -440,7 +485,7 @@ ${sortedExpenses.map(expense =>
             <span>Export CSV</span>
           </button>
           <button
-            onClick={exportPDF}
+            onClick={exportReportPDF}
             className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
           >
             <FileText className="w-4 h-4" />

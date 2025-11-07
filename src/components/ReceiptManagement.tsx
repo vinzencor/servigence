@@ -21,6 +21,7 @@ import {
 import { dbHelpers, supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import PaymentMethodSelector from './PaymentMethodSelector';
+import { exportToPDF } from '../utils/pdfExport';
 
 interface ReceiptData {
   id: string;
@@ -744,6 +745,71 @@ const ReceiptManagement: React.FC = () => {
     return icons[method as keyof typeof icons] || DollarSign;
   };
 
+  const handleExportPDF = () => {
+    try {
+      let dateRangeText = '';
+      if (dateRange.startDate && dateRange.endDate) {
+        dateRangeText = `Period: ${new Date(dateRange.startDate).toLocaleDateString()} - ${new Date(dateRange.endDate).toLocaleDateString()}`;
+      } else if (dateRange.startDate) {
+        dateRangeText = `From: ${new Date(dateRange.startDate).toLocaleDateString()}`;
+      } else if (dateRange.endDate) {
+        dateRangeText = `Until: ${new Date(dateRange.endDate).toLocaleDateString()}`;
+      }
+
+      // Prepare data for PDF export
+      const pdfData = filteredReceipts.map(receipt => ({
+        receiptNumber: receipt.receiptNumber,
+        date: new Date(receipt.date).toLocaleDateString(),
+        customerName: receipt.customerName,
+        customerType: receipt.customerType === 'company' ? 'Company' : 'Individual',
+        amount: receipt.amount,
+        totalApplied: receipt.totalApplied || 0,
+        availableBalance: receipt.availableBalance || 0,
+        paymentMethod: receipt.paymentMethod.replace('_', ' ').toUpperCase(),
+        status: receipt.status.toUpperCase(),
+        description: receipt.description || '-'
+      }));
+
+      // Calculate summary
+      const totalAmount = filteredReceipts.reduce((sum, r) => sum + r.amount, 0);
+      const totalApplied = filteredReceipts.reduce((sum, r) => sum + (r.totalApplied || 0), 0);
+      const totalAvailable = filteredReceipts.reduce((sum, r) => sum + (r.availableBalance || 0), 0);
+
+      const summaryData = [
+        { label: 'Total Receipts', value: filteredReceipts.length },
+        { label: 'Total Amount', value: `AED ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Total Applied', value: `AED ${totalApplied.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Total Available', value: `AED ${totalAvailable.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+      ];
+
+      exportToPDF({
+        title: 'Receipt Management Report',
+        subtitle: 'Payment Receipts and Advance Payments',
+        dateRange: dateRangeText,
+        columns: [
+          { header: 'Receipt #', dataKey: 'receiptNumber' },
+          { header: 'Date', dataKey: 'date' },
+          { header: 'Customer', dataKey: 'customerName' },
+          { header: 'Type', dataKey: 'customerType' },
+          { header: 'Amount (AED)', dataKey: 'amount' },
+          { header: 'Applied (AED)', dataKey: 'totalApplied' },
+          { header: 'Available (AED)', dataKey: 'availableBalance' },
+          { header: 'Payment Method', dataKey: 'paymentMethod' },
+          { header: 'Status', dataKey: 'status' }
+        ],
+        data: pdfData,
+        summaryData,
+        fileName: `Receipt_Report_${new Date().toISOString().split('T')[0]}.pdf`,
+        orientation: 'landscape'
+      });
+
+      toast.success('PDF exported successfully!');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Failed to export PDF');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -924,7 +990,16 @@ const ReceiptManagement: React.FC = () => {
       {/* Receipts Table */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Receipts</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Receipts</h2>
+            <button
+              onClick={handleExportPDF}
+              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export to PDF
+            </button>
+          </div>
         </div>
 
         {loading ? (

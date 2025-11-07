@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportSummaryToPDF } from '../../utils/pdfExport';
 
 const ProfitLossReport: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -100,6 +101,25 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
     toast.success('P&L report exported successfully');
   };
 
+  const exportReportPDF = () => {
+    const summaryItems = [
+      { label: 'Total Revenue', value: `AED ${data.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: 'green' },
+      { label: 'Total Expenses', value: `AED ${data.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: 'red' },
+      { label: 'Net Profit/Loss', value: `AED ${data.netProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: data.netProfit >= 0 ? 'green' : 'red' },
+      { label: 'Profit Margin', value: `${data.profitMargin.toFixed(2)}%`, color: data.profitMargin >= 0 ? 'green' : 'red' }
+    ];
+
+    exportSummaryToPDF({
+      title: 'Profit & Loss Account',
+      subtitle: 'P&L Statement with Income vs Expenses',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      summaryItems,
+      fileName: `Profit_Loss_Report_${dateFrom}_to_${dateTo}.pdf`
+    });
+
+    toast.success('PDF exported successfully!');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -116,13 +136,22 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
           <h1 className="text-2xl font-bold text-gray-900">Profit & Loss Account</h1>
           <p className="text-gray-600">P&L statement with income vs expenses</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportReportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

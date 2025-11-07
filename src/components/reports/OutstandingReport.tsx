@@ -4,6 +4,7 @@ import { supabase, dbHelpers } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { generateOutstandingStatement, OutstandingReceiptData } from '../../utils/receiptGenerator';
 import PaymentMethodSelector from '../PaymentMethodSelector';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface OutstandingCustomer {
   id: string;
@@ -91,6 +92,58 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
+
+  const handleExportPDF = () => {
+    try {
+      const dateRangeText = `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`;
+
+      // Prepare data for PDF export
+      const pdfData = filteredCustomers.map(customer => ({
+        name: customer.name,
+        type: customer.type === 'company' ? 'Company' : 'Individual',
+        totalDues: customer.totalDues,
+        advancePayments: customer.totalAdvancePayments,
+        netOutstanding: customer.netOutstanding,
+        creditLimit: customer.creditLimit,
+        phone: customer.phone,
+        email: customer.email
+      }));
+
+      // Summary data
+      const summaryData = [
+        { label: 'Total Customers', value: summary.totalCustomers },
+        { label: 'Total Dues', value: `AED ${summary.totalDues.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Total Advance Payments', value: `AED ${summary.totalAdvancePayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Net Outstanding', value: `AED ${Math.abs(summary.netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Outstanding Customers', value: customers.filter(c => c.netOutstanding > 0).length }
+      ];
+
+      exportToPDF({
+        title: 'Outstanding Report',
+        subtitle: 'Customer Balances, Advance Payments, and Outstanding Amounts',
+        dateRange: dateRangeText,
+        columns: [
+          { header: 'Customer Name', dataKey: 'name' },
+          { header: 'Type', dataKey: 'type' },
+          { header: 'Total Dues (AED)', dataKey: 'totalDues' },
+          { header: 'Advance Payments (AED)', dataKey: 'advancePayments' },
+          { header: 'Net Outstanding (AED)', dataKey: 'netOutstanding' },
+          { header: 'Credit Limit (AED)', dataKey: 'creditLimit' },
+          { header: 'Phone', dataKey: 'phone' },
+          { header: 'Email', dataKey: 'email' }
+        ],
+        data: pdfData,
+        summaryData,
+        fileName: `Outstanding_Report_${new Date().toISOString().split('T')[0]}.pdf`,
+        orientation: 'landscape'
+      });
+
+      toast.success('PDF exported successfully!');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Failed to export PDF');
+    }
+  };
 
   const loadOutstandingData = async () => {
     setLoading(true);
@@ -671,8 +724,17 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">Customer Outstanding Details</h3>
-            <div className="text-sm text-gray-600">
-              Showing {filteredCustomers.length} of {customers.length} customers
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600">
+                Showing {filteredCustomers.length} of {customers.length} customers
+              </div>
+              <button
+                onClick={handleExportPDF}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export to PDF
+              </button>
             </div>
           </div>
         </div>

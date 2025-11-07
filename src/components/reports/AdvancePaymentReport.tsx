@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface AdvancePaymentTransaction {
   id: string;
@@ -186,8 +187,46 @@ const AdvancePaymentReport: React.FC = () => {
     toast.success('Advance payment report exported to CSV');
   };
 
-  const exportToPDF = () => {
-    toast.info('PDF export functionality will be implemented soon');
+  const exportReportPDF = () => {
+    if (!data) return;
+
+    const pdfData = (filteredTransactions || []).map(transaction => ({
+      date: transaction.date,
+      description: transaction.description,
+      companyName: transaction.companyName,
+      amount: transaction.amount,
+      paymentMethod: transaction.paymentMethod.replace('_', ' ').toUpperCase(),
+      referenceNumber: transaction.referenceNumber || '-',
+      status: transaction.status.toUpperCase()
+    }));
+
+    const summaryData = [
+      { label: 'Total Advance Payments', value: `AED ${data.summary.totalAdvancePayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Number of Transactions', value: data.summary.transactionCount },
+      { label: 'Average Advance Payment', value: `AED ${data.summary.averageAdvancePayment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Largest Advance Payment', value: `AED ${data.summary.largestAdvancePayment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+    ];
+
+    exportToPDF({
+      title: 'Advance Payment Report',
+      subtitle: 'Advance Payment Transactions Summary',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Description', dataKey: 'description' },
+        { header: 'Company/Individual', dataKey: 'companyName' },
+        { header: 'Amount (AED)', dataKey: 'amount' },
+        { header: 'Payment Method', dataKey: 'paymentMethod' },
+        { header: 'Reference', dataKey: 'referenceNumber' },
+        { header: 'Status', dataKey: 'status' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Advance_Payment_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
   };
 
   const getPaymentMethodColor = (method: string) => {
@@ -243,8 +282,8 @@ const AdvancePaymentReport: React.FC = () => {
                 <span>Export CSV</span>
               </button>
               <button
-                onClick={exportToPDF}
-                className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                onClick={exportReportPDF}
+                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <FileText className="w-4 h-4" />
                 <span>Export PDF</span>

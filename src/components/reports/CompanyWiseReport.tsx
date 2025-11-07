@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Building2, 
-  Download, 
-  Filter, 
-  Search, 
-  DollarSign, 
+import {
+  Building2,
+  Download,
+  Filter,
+  Search,
+  DollarSign,
   Calendar,
   TrendingUp,
   TrendingDown,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers, supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface CompanyData {
   id: string;
@@ -277,6 +278,55 @@ ${company.name}
     toast.success('Company-wise report exported successfully');
   };
 
+  const exportReportPDF = () => {
+    if (!data) return;
+
+    const pdfData = sortedCompanies.map(company => ({
+      name: company.name,
+      totalRevenue: company.totalRevenue,
+      totalProfit: company.totalProfit,
+      profitMargin: company.profitMargin,
+      totalTransactions: company.totalTransactions,
+      totalDue: company.totalDue,
+      totalPaid: company.totalPaid,
+      averageTransactionValue: company.averageTransactionValue,
+      services: company.services.join(', '),
+      lastTransactionDate: company.lastTransactionDate || '-'
+    }));
+
+    const summaryData = [
+      { label: 'Total Companies', value: data.summary.totalCompanies },
+      { label: 'Total Revenue', value: `AED ${data.summary.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Profit', value: `AED ${data.summary.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Outstanding', value: `AED ${data.summary.totalDue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Average Revenue/Company', value: `AED ${data.summary.averageRevenuePerCompany.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Top Company Revenue', value: `AED ${data.summary.topCompanyRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+    ];
+
+    exportToPDF({
+      title: 'Company-Wise Report',
+      subtitle: 'Financial Summary for Each Company',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Company Name', dataKey: 'name' },
+        { header: 'Revenue (AED)', dataKey: 'totalRevenue' },
+        { header: 'Profit (AED)', dataKey: 'totalProfit' },
+        { header: 'Profit %', dataKey: 'profitMargin' },
+        { header: 'Transactions', dataKey: 'totalTransactions' },
+        { header: 'Outstanding (AED)', dataKey: 'totalDue' },
+        { header: 'Paid (AED)', dataKey: 'totalPaid' },
+        { header: 'Avg Transaction (AED)', dataKey: 'averageTransactionValue' },
+        { header: 'Last Transaction', dataKey: 'lastTransactionDate' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Company_Wise_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -293,13 +343,22 @@ ${company.name}
           <h1 className="text-2xl font-bold text-gray-900">Company-wise Report</h1>
           <p className="text-gray-600">Financial summary for each company client</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportReportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

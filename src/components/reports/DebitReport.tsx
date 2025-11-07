@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../../utils/pdfExport';
 
 interface DebitTransaction {
   id: string;
@@ -186,8 +187,46 @@ const DebitReport: React.FC = () => {
     toast.success('Debit report exported to CSV');
   };
 
-  const exportToPDF = () => {
-    toast.info('PDF export functionality will be implemented soon');
+  const exportReportPDF = () => {
+    if (!data) return;
+
+    const pdfData = (filteredTransactions || []).map(transaction => ({
+      date: transaction.date,
+      description: transaction.description,
+      companyName: transaction.companyName,
+      amount: transaction.amount,
+      paymentMethod: transaction.paymentMethod.replace('_', ' ').toUpperCase(),
+      referenceNumber: transaction.referenceNumber || '-',
+      status: transaction.status.toUpperCase()
+    }));
+
+    const summaryData = [
+      { label: 'Total Debits', value: `AED ${data.summary.totalDebits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Number of Transactions', value: data.summary.transactionCount },
+      { label: 'Average Debit', value: `AED ${data.summary.averageDebit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Largest Debit', value: `AED ${data.summary.largestDebit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+    ];
+
+    exportToPDF({
+      title: 'Debit Report',
+      subtitle: 'Debit Transactions Summary',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Description', dataKey: 'description' },
+        { header: 'Company/Individual', dataKey: 'companyName' },
+        { header: 'Amount (AED)', dataKey: 'amount' },
+        { header: 'Payment Method', dataKey: 'paymentMethod' },
+        { header: 'Reference', dataKey: 'referenceNumber' },
+        { header: 'Status', dataKey: 'status' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Debit_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
   };
 
   const getPaymentMethodColor = (method: string) => {
@@ -243,8 +282,8 @@ const DebitReport: React.FC = () => {
                 <span>Export CSV</span>
               </button>
               <button
-                onClick={exportToPDF}
-                className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                onClick={exportReportPDF}
+                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <FileText className="w-4 h-4" />
                 <span>Export PDF</span>
