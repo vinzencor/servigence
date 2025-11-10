@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  TrendingUp, 
-  Download, 
-  Filter, 
-  Search, 
-  DollarSign, 
+import {
+  TrendingUp,
+  Download,
+  Filter,
+  Search,
+  DollarSign,
   Calendar,
   PieChart,
   BarChart3,
@@ -16,35 +16,30 @@ import {
   Plus,
   ArrowUpCircle
 } from 'lucide-react';
-import { dbHelpers } from '../../lib/supabase';
+import { dbHelpers, supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { exportToPDF } from '../../utils/pdfExport';
 
-interface CreditTransaction {
+interface CreditCustomer {
   id: string;
-  date: string;
-  description: string;
-  companyName: string;
-  amount: number;
-  paymentMethod: string;
-  referenceNumber?: string;
-  status: string;
-  category?: string;
-  notes?: string;
-  createdAt: string;
+  name: string;
+  type: 'company' | 'individual';
+  totalDues: number;
+  totalAdvancePayments: number;
+  creditBalance: number; // Positive value when customer has overpaid
+  phone: string;
+  email: string;
+  lastActivity: string;
 }
 
 interface CreditData {
-  transactions: CreditTransaction[];
+  customers: CreditCustomer[];
   summary: {
-    totalCredits: number;
-    transactionCount: number;
+    totalCreditBalance: number;
+    customerCount: number;
     averageCredit: number;
     largestCredit: number;
   };
-  paymentMethodBreakdown: Record<string, { amount: number; count: number }>;
-  statusBreakdown: Record<string, { amount: number; count: number }>;
-  monthlyTrend: Record<string, number>;
 }
 
 const CreditReport: React.FC = () => {
@@ -55,87 +50,153 @@ const CreditReport: React.FC = () => {
   );
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedCompany, setSelectedCompany] = useState('all');
-
-  const paymentMethods = ['all', 'cash', 'bank_transfer', 'credit_card', 'cheque', 'online'];
-  const statuses = ['all', 'completed', 'pending', 'cancelled', 'refunded'];
+  const [customerType, setCustomerType] = useState<'all' | 'company' | 'individual'>('all');
 
   useEffect(() => {
     loadCreditData();
   }, [dateFrom, dateTo]);
 
   const loadCreditData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const transactions = await dbHelpers.getCreditTransactionsByDateRange(dateFrom, dateTo);
-      
-      if (!transactions) {
-        setData({
-          transactions: [],
-          summary: { totalCredits: 0, transactionCount: 0, averageCredit: 0, largestCredit: 0 },
-          paymentMethodBreakdown: {},
-          statusBreakdown: {},
-          monthlyTrend: {}
-        });
-        return;
-      }
+      console.log('🔍 Loading credit data...');
 
-      // Transform data
-      const creditTransactions: CreditTransaction[] = transactions.map(t => ({
-        id: t.id,
-        date: t.transaction_date,
-        description: t.description,
-        companyName: t.company?.company_name || t.individual?.individual_name || 'N/A',
-        amount: parseFloat(t.amount || 0),
-        paymentMethod: t.payment_method,
-        referenceNumber: t.reference_number,
-        status: t.status,
-        category: t.category,
-        notes: t.notes,
-        createdAt: t.created_at
-      }));
+      // Load companies data
+      const { data: companies, error: companiesError } = await supabase
+        .from('companies')
+        .select(`
+          id,
+          company_name,
+          phone1,
+          email1,
+          credit_limit,
+          created_at
+        `);
+
+      if (companiesError) throw companiesError;
+
+      // Load individuals data
+      const { data: individuals, error: individualsError } = await supabase
+        .from('individuals')
+        .select(`
+          id,
+          individual_name,
+          phone1,
+          email1,
+          credit_limit,
+          created_at
+        `);
+
+      if (individualsError) throw individualsError;
+
+      // Load ALL service billings (no date filter for accurate balance calculation)
+      const { data: serviceBillings, error: billingsError } = await supabase
+        .from('service_billings')
+        .select('*');
+
+      if (billingsError) throw billingsError;
+
+      // Load ALL advance payment transactions (no date filter for accurate balance calculation)
+      const { data: advancePayments, error: paymentsError } = await supabase
+        .from('account_transactions')
+        .select('*')
+        .eq('transaction_type', 'advance_payment');
+
+      if (paymentsError) throw paymentsError;
+
+      console.log('📊 Loaded data:', {
+        companies: companies?.length || 0,
+        individuals: individuals?.length || 0,
+        serviceBillings: serviceBillings?.length || 0,
+        advancePayments: advancePayments?.length || 0
+      });
+
+      // Use the same calculation method as Outstanding Report
+      const billingsWithPayments = await dbHelpers.calculateOutstandingAmounts(serviceBillings || []);
+
+      console.log('💰 Billings with payment calculations:', billingsWithPayments.length);
+
+      // Process companies - find those with CREDIT BALANCE (overpaid)
+      const companyCustomers: CreditCustomer[] = (companies || [])
+        .map(company => {
+          // Get all service billings for this company
+          const companyBillings = billingsWithPayments.filter(billing => billing.company_id === company.id);
+
+          // Calculate total dues (sum of all invoice amounts)
+          const totalDues = companyBillings.reduce((sum, billing) => sum + (billing.totalAmount || 0), 0);
+
+          // Calculate total advance payments for this company from ALL advance payment transactions
+          const companyAdvancePayments = (advancePayments || []).filter(payment => payment.company_id === company.id);
+          const totalAdvancePayments = companyAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+
+          // Calculate credit balance (when payments exceed dues, this is positive)
+          const creditBalance = totalAdvancePayments - totalDues;
+
+          return {
+            id: company.id,
+            name: company.company_name,
+            type: 'company' as const,
+            totalDues,
+            totalAdvancePayments,
+            creditBalance,
+            phone: company.phone1 || '',
+            email: company.email1 || '',
+            lastActivity: company.created_at
+          };
+        })
+        .filter(customer => customer.creditBalance > 0); // Only include customers with credit balance
+
+      // Process individuals - find those with CREDIT BALANCE (overpaid)
+      const individualCustomers: CreditCustomer[] = (individuals || [])
+        .map(individual => {
+          // Get all service billings for this individual
+          const individualBillings = billingsWithPayments.filter(billing => billing.individual_id === individual.id);
+
+          // Calculate total dues (sum of all invoice amounts)
+          const totalDues = individualBillings.reduce((sum, billing) => sum + (billing.totalAmount || 0), 0);
+
+          // Calculate total advance payments for this individual from ALL advance payment transactions
+          const individualAdvancePayments = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
+          const totalAdvancePayments = individualAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+
+          // Calculate credit balance (when payments exceed dues, this is positive)
+          const creditBalance = totalAdvancePayments - totalDues;
+
+          return {
+            id: individual.id,
+            name: individual.individual_name,
+            type: 'individual' as const,
+            totalDues,
+            totalAdvancePayments,
+            creditBalance,
+            phone: individual.phone1 || '',
+            email: individual.email1 || '',
+            lastActivity: individual.created_at
+          };
+        })
+        .filter(customer => customer.creditBalance > 0); // Only include customers with credit balance
+
+      // Combine all customers with credit balances
+      const allCustomers = [...companyCustomers, ...individualCustomers];
+
+      console.log('💳 Credit customers found:', {
+        companies: companyCustomers.length,
+        individuals: individualCustomers.length,
+        total: allCustomers.length
+      });
 
       // Calculate summary
-      const totalCredits = creditTransactions.reduce((sum, t) => sum + t.amount, 0);
-      const transactionCount = creditTransactions.length;
-      const averageCredit = transactionCount > 0 ? totalCredits / transactionCount : 0;
-      const largestCredit = Math.max(...creditTransactions.map(t => t.amount), 0);
-
-      // Payment method breakdown
-      const paymentMethodBreakdown = creditTransactions.reduce((acc, t) => {
-        const method = t.paymentMethod || 'unknown';
-        if (!acc[method]) acc[method] = { amount: 0, count: 0 };
-        acc[method].amount += t.amount;
-        acc[method].count += 1;
-        return acc;
-      }, {} as Record<string, { amount: number; count: number }>);
-
-      // Status breakdown
-      const statusBreakdown = creditTransactions.reduce((acc, t) => {
-        const status = t.status || 'unknown';
-        if (!acc[status]) acc[status] = { amount: 0, count: 0 };
-        acc[status].amount += t.amount;
-        acc[status].count += 1;
-        return acc;
-      }, {} as Record<string, { amount: number; count: number }>);
-
-      // Monthly trend
-      const monthlyTrend = creditTransactions.reduce((acc, t) => {
-        const month = new Date(t.date).toISOString().slice(0, 7);
-        if (!acc[month]) acc[month] = 0;
-        acc[month] += t.amount;
-        return acc;
-      }, {} as Record<string, number>);
+      const totalCreditBalance = allCustomers.reduce((sum, c) => sum + c.creditBalance, 0);
+      const customerCount = allCustomers.length;
+      const averageCredit = customerCount > 0 ? totalCreditBalance / customerCount : 0;
+      const largestCredit = Math.max(...allCustomers.map(c => c.creditBalance), 0);
 
       setData({
-        transactions: creditTransactions,
-        summary: { totalCredits, transactionCount, averageCredit, largestCredit },
-        paymentMethodBreakdown,
-        statusBreakdown,
-        monthlyTrend
+        customers: allCustomers,
+        summary: { totalCreditBalance, customerCount, averageCredit, largestCredit }
       });
+
+      console.log('✅ Credit data loaded successfully');
     } catch (error) {
       console.error('Error loading credit data:', error);
       toast.error('Failed to load credit report data');
@@ -144,36 +205,34 @@ const CreditReport: React.FC = () => {
     }
   };
 
-  const filteredTransactions = data?.transactions.filter(transaction => {
-    const matchesSearch = 
-      transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (transaction.referenceNumber && transaction.referenceNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesPaymentMethod = selectedPaymentMethod === 'all' || transaction.paymentMethod === selectedPaymentMethod;
-    const matchesStatus = selectedStatus === 'all' || transaction.status === selectedStatus;
-    const matchesCompany = selectedCompany === 'all' || transaction.companyName === selectedCompany;
-    
-    return matchesSearch && matchesPaymentMethod && matchesStatus && matchesCompany;
+  const filteredCustomers = data?.customers.filter(customer => {
+    const matchesSearch =
+      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.email.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesType = customerType === 'all' || customer.type === customerType;
+
+    return matchesSearch && matchesType;
   }) || [];
 
   const exportToCSV = () => {
-    if (!filteredTransactions.length) {
+    if (!filteredCustomers.length) {
       toast.error('No data to export');
       return;
     }
 
-    const headers = ['Date', 'Description', 'Company/Customer', 'Amount (AED)', 'Payment Method', 'Reference', 'Status'];
+    const headers = ['Customer Name', 'Type', 'Total Dues', 'Total Payments', 'Credit Balance', 'Phone', 'Email'];
     const csvContent = [
       headers.join(','),
-      ...filteredTransactions.map(t => [
-        t.date,
-        `"${t.description}"`,
-        `"${t.companyName}"`,
-        t.amount.toFixed(2),
-        t.paymentMethod,
-        t.referenceNumber || '',
-        t.status
+      ...filteredCustomers.map(c => [
+        `"${c.name}"`,
+        c.type === 'company' ? 'Company' : 'Individual',
+        c.totalDues.toFixed(2),
+        c.totalAdvancePayments.toFixed(2),
+        c.creditBalance.toFixed(2),
+        c.phone || '',
+        c.email || ''
       ].join(','))
     ].join('\n');
 
@@ -190,64 +249,43 @@ const CreditReport: React.FC = () => {
   const exportReportPDF = () => {
     if (!data) return;
 
-    const pdfData = (filteredTransactions || []).map(transaction => ({
-      date: transaction.date,
-      description: transaction.description,
-      companyName: transaction.companyName,
-      amount: transaction.amount,
-      paymentMethod: transaction.paymentMethod.replace('_', ' ').toUpperCase(),
-      referenceNumber: transaction.referenceNumber || '-',
-      status: transaction.status.toUpperCase()
+    const pdfData = (filteredCustomers || []).map(customer => ({
+      name: customer.name,
+      type: customer.type === 'company' ? 'Company' : 'Individual',
+      totalDues: customer.totalDues.toFixed(2),
+      totalPayments: customer.totalAdvancePayments.toFixed(2),
+      creditBalance: customer.creditBalance.toFixed(2),
+      phone: customer.phone || '-',
+      email: customer.email || '-'
     }));
 
     const summaryData = [
-      { label: 'Total Credits', value: `AED ${data.summary.totalCredits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { label: 'Number of Transactions', value: data.summary.transactionCount },
+      { label: 'Total Credit Balance', value: `AED ${data.summary.totalCreditBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Number of Customers', value: data.summary.customerCount },
       { label: 'Average Credit', value: `AED ${data.summary.averageCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
       { label: 'Largest Credit', value: `AED ${data.summary.largestCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
     ];
 
     exportToPDF({
       title: 'Credit Report',
-      subtitle: 'Credit Transactions Summary',
-      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      subtitle: 'Customers with Credit Balances',
+      dateRange: `As of: ${new Date().toLocaleDateString()}`,
       columns: [
-        { header: 'Date', dataKey: 'date' },
-        { header: 'Description', dataKey: 'description' },
-        { header: 'Company/Individual', dataKey: 'companyName' },
-        { header: 'Amount (AED)', dataKey: 'amount' },
-        { header: 'Payment Method', dataKey: 'paymentMethod' },
-        { header: 'Reference', dataKey: 'referenceNumber' },
-        { header: 'Status', dataKey: 'status' }
+        { header: 'Customer Name', dataKey: 'name' },
+        { header: 'Type', dataKey: 'type' },
+        { header: 'Total Dues', dataKey: 'totalDues' },
+        { header: 'Total Payments', dataKey: 'totalPayments' },
+        { header: 'Credit Balance', dataKey: 'creditBalance' },
+        { header: 'Phone', dataKey: 'phone' },
+        { header: 'Email', dataKey: 'email' }
       ],
       data: pdfData,
       summaryData,
-      fileName: `Credit_Report_${dateFrom}_to_${dateTo}.pdf`,
+      fileName: `Credit_Report_${new Date().toISOString().split('T')[0]}.pdf`,
       orientation: 'landscape'
     });
 
     toast.success('PDF exported successfully!');
-  };
-
-  const getPaymentMethodColor = (method: string) => {
-    const colors: Record<string, string> = {
-      cash: 'bg-green-100 text-green-800 border-green-200',
-      bank_transfer: 'bg-blue-100 text-blue-800 border-blue-200',
-      credit_card: 'bg-purple-100 text-purple-800 border-purple-200',
-      cheque: 'bg-orange-100 text-orange-800 border-orange-200',
-      online: 'bg-cyan-100 text-cyan-800 border-cyan-200'
-    };
-    return colors[method] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      completed: 'bg-green-100 text-green-800 border-green-200',
-      pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      cancelled: 'bg-red-100 text-red-800 border-red-200',
-      refunded: 'bg-gray-100 text-gray-800 border-gray-200'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   if (loading) {
@@ -270,7 +308,7 @@ const CreditReport: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Credit Report</h1>
-                <p className="text-gray-500 mt-1">All credit transactions and receivables</p>
+                <p className="text-gray-500 mt-1">Customers with credit balances (overpayments)</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -292,62 +330,28 @@ const CreditReport: React.FC = () => {
           </div>
         </div>
 
-        {/* Date Range and Filters */}
+        {/* Filters */}
         <div className="p-6 bg-gray-50">
-          <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Customer Type</label>
               <select
-                value={selectedPaymentMethod}
-                onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                value={customerType}
+                onChange={(e) => setCustomerType(e.target.value as 'all' | 'company' | 'individual')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                {paymentMethods.map(method => (
-                  <option key={method} value={method}>
-                    {method === 'all' ? 'All Methods' : method.replace('_', ' ').toUpperCase()}
-                  </option>
-                ))}
+                <option value="all">All Types</option>
+                <option value="company">Companies</option>
+                <option value="individual">Individuals</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {statuses.map(status => (
-                  <option key={status} value={status}>
-                    {status === 'all' ? 'All Statuses' : status.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Search transactions..."
+                  placeholder="Search customers..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -363,9 +367,9 @@ const CreditReport: React.FC = () => {
         <div className="bg-white rounded-lg p-6 border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">Total Credits</p>
+              <p className="text-sm font-medium text-gray-500">Total Credit Balance</p>
               <p className="text-2xl font-bold text-green-600">
-                AED {data?.summary.totalCredits.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                AED {data?.summary.totalCreditBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -377,8 +381,8 @@ const CreditReport: React.FC = () => {
         <div className="bg-white rounded-lg p-6 border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">Total Transactions</p>
-              <p className="text-2xl font-bold text-blue-600">{data?.summary.transactionCount || 0}</p>
+              <p className="text-sm font-medium text-gray-500">Customers with Credit</p>
+              <p className="text-2xl font-bold text-blue-600">{data?.summary.customerCount || 0}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <BarChart3 className="w-6 h-6 text-blue-600" />
@@ -415,13 +419,13 @@ const CreditReport: React.FC = () => {
         </div>
       </div>
 
-      {/* Transactions Table */}
+      {/* Customers Table */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Credit Transactions</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Customers with Credit Balances</h2>
             <span className="text-sm text-gray-500">
-              Showing {filteredTransactions.length} of {data?.transactions.length || 0} transactions
+              Showing {filteredCustomers.length} of {data?.customers.length || 0} customers
             </span>
           </div>
         </div>
@@ -431,66 +435,57 @@ const CreditReport: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date & Description
+                  Customer Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Company/Customer
+                  Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
+                  Total Dues
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Payment Method
+                  Total Payments
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Reference
+                  Credit Balance
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  Contact
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTransactions.map((transaction) => (
-                <tr key={transaction.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{transaction.description}</div>
-                      <div className="text-sm text-gray-500">
-                        {new Date(transaction.date).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </div>
-                      {transaction.category && (
-                        <div className="text-xs text-gray-400 mt-1">{transaction.category}</div>
-                      )}
-                    </div>
-                  </td>
+              {filteredCustomers.map((customer) => (
+                <tr key={customer.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <Building2 className="w-4 h-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-900">{transaction.companyName}</span>
+                      <span className="text-sm font-medium text-gray-900">{customer.name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${
+                      customer.type === 'company'
+                        ? 'bg-blue-100 text-blue-800 border-blue-200'
+                        : 'bg-purple-100 text-purple-800 border-purple-200'
+                    }`}>
+                      {customer.type === 'company' ? 'Company' : 'Individual'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    AED {customer.totalDues.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    AED {customer.totalAdvancePayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm font-medium text-green-600">
-                      +AED {transaction.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      +AED {customer.creditBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPaymentMethodColor(transaction.paymentMethod)}`}>
-                      {transaction.paymentMethod.replace('_', ' ').toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {transaction.referenceNumber || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(transaction.status)}`}>
-                      {transaction.status.toUpperCase()}
-                    </span>
+                    <div className="text-sm text-gray-900">{customer.phone || '-'}</div>
+                    <div className="text-xs text-gray-500">{customer.email || '-'}</div>
                   </td>
                 </tr>
               ))}
@@ -498,12 +493,12 @@ const CreditReport: React.FC = () => {
           </table>
         </div>
 
-        {filteredTransactions.length === 0 && (
+        {filteredCustomers.length === 0 && (
           <div className="text-center py-12">
             <AlertTriangle className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No credit transactions found</h3>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No customers with credit balances found</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Try adjusting your filters or date range to see more results.
+              No customers have overpaid or have credit balances at this time.
             </p>
           </div>
         )}

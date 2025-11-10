@@ -327,7 +327,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
     // if (!employeeForm.nationality.trim()) newErrors.nationality = 'Nationality is required';
     // Document fields are now optional - removed passport validation
     if (!employeeForm.joinDate) newErrors.joinDate = 'Join date is required';
-    if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
+    // Department is now optional - removed department validation
+    // if (!employeeForm.department.trim()) newErrors.department = 'Department is required';
     // Password fields are now optional - removed password validation
 
     // Email validation
@@ -416,7 +417,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         labor_card_expiry: employeeForm.laborCardExpiry || null,
         join_date: employeeForm.joinDate || new Date().toISOString().split('T')[0],
         salary: employeeForm.salary ? parseFloat(employeeForm.salary) : null,
-        department: employeeForm.department,
+        department: employeeForm.department?.trim() || null,
         manager: employeeForm.manager || null,
         password_hash: passwordHash,
         status: 'active'
@@ -2714,7 +2715,7 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Department <span className="text-red-500">*</span>
+                    Department
                   </label>
                   <input
                     type="text"

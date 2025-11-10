@@ -72,6 +72,20 @@ const ServiceBilling: React.FC = () => {
     creditUsagePercentage: number;
   } | null>(null);
   const [selectedCustomerAdvanceBalance, setSelectedCustomerAdvanceBalance] = useState<number>(0);
+  const [selectedCardCredit, setSelectedCardCredit] = useState<{
+    cardName: string;
+    creditLimit: number;
+    totalUsed: number;
+    availableCredit: number;
+    utilizationPercentage: number;
+  } | null>(null);
+  const [editSelectedCardCredit, setEditSelectedCardCredit] = useState<{
+    cardName: string;
+    creditLimit: number;
+    totalUsed: number;
+    availableCredit: number;
+    utilizationPercentage: number;
+  } | null>(null);
 
   // Debug: Monitor balance changes
   useEffect(() => {
@@ -452,6 +466,34 @@ const ServiceBilling: React.FC = () => {
     // Load company employees if it's a company billing
     if (billing.company_id) {
       loadCompanyEmployees(billing.company_id);
+    }
+
+    // Load card credit information if card payment
+    if (billing.cash_type === 'card' && billing.card_id) {
+      const selectedCard = paymentCards.find(card => card.id === billing.card_id);
+      if (selectedCard) {
+        const cardBalance = cardBalances.find(b => b.id === billing.card_id);
+
+        if (cardBalance) {
+          setEditSelectedCardCredit({
+            cardName: cardBalance.cardName,
+            creditLimit: cardBalance.creditLimit,
+            totalUsed: cardBalance.totalUsed,
+            availableCredit: cardBalance.availableCredit,
+            utilizationPercentage: cardBalance.utilizationPercentage
+          });
+        } else {
+          setEditSelectedCardCredit({
+            cardName: selectedCard.cardName,
+            creditLimit: selectedCard.creditLimit,
+            totalUsed: 0,
+            availableCredit: selectedCard.creditLimit,
+            utilizationPercentage: 0
+          });
+        }
+      }
+    } else {
+      setEditSelectedCardCredit(null);
     }
 
     setShowEditBilling(true);
@@ -1306,6 +1348,50 @@ const ServiceBilling: React.FC = () => {
       setSelectedCustomerAdvanceBalance(0);
     } else if (name === 'clientType' && value === 'company') {
       setSelectedCustomerAdvanceBalance(0);
+    }
+
+    // Load card credit information when card is selected
+    if (name === 'cardId' && value) {
+      try {
+        // Find the selected card from paymentCards
+        const selectedCard = paymentCards.find(card => card.id === value);
+        if (selectedCard) {
+          // Find the card balance information
+          const cardBalance = cardBalances.find(b => b.id === value);
+
+          if (cardBalance) {
+            setSelectedCardCredit({
+              cardName: cardBalance.cardName,
+              creditLimit: cardBalance.creditLimit,
+              totalUsed: cardBalance.totalUsed,
+              availableCredit: cardBalance.availableCredit,
+              utilizationPercentage: cardBalance.utilizationPercentage
+            });
+            console.log('💳 Card credit info loaded:', cardBalance);
+          } else {
+            // If balance not found, calculate from card data
+            setSelectedCardCredit({
+              cardName: selectedCard.cardName,
+              creditLimit: selectedCard.creditLimit,
+              totalUsed: 0,
+              availableCredit: selectedCard.creditLimit,
+              utilizationPercentage: 0
+            });
+            console.log('💳 Card credit info loaded (from card data):', selectedCard);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading card credit info:', error);
+        setSelectedCardCredit(null);
+      }
+    } else if (name === 'cardId' && !value) {
+      setSelectedCardCredit(null);
+    }
+
+    // Clear card credit info when payment type changes from 'card'
+    if (name === 'cashType' && value !== 'card') {
+      setSelectedCardCredit(null);
+      setBillingForm(prev => ({ ...prev, cardId: '' }));
     }
 
     // Clear error when user starts typing
@@ -2217,6 +2303,43 @@ Servigence Business Services
                         {errors.cardId}
                       </p>
                     )}
+
+                    {/* Card Credit Information Display */}
+                    {selectedCardCredit && (
+                      <div className="mt-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <h4 className="text-sm font-medium text-purple-900 mb-2 flex items-center">
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Credit Information - {selectedCardCredit.cardName}
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-purple-700">Credit Limit:</span>
+                            <span className="font-semibold text-purple-900 ml-2">AED {selectedCardCredit.creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div>
+                            <span className="text-purple-700">Available Credit:</span>
+                            <span className={`font-semibold ml-2 ${
+                              selectedCardCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              AED {selectedCardCredit.availableCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-purple-700">Total Used:</span>
+                            <span className="font-semibold text-purple-900 ml-2">AED {selectedCardCredit.totalUsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div>
+                            <span className="text-purple-700">Utilization:</span>
+                            <span className={`font-semibold ml-2 ${
+                              selectedCardCredit.utilizationPercentage > 80 ? 'text-red-600' :
+                              selectedCardCredit.utilizationPercentage > 50 ? 'text-yellow-600' : 'text-green-600'
+                            }`}>
+                              {selectedCardCredit.utilizationPercentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2426,6 +2549,34 @@ Servigence Business Services
                               <div className="flex justify-between text-green-600">
                                 <span>✅ Within credit limit</span>
                                 <span className="font-medium">Remaining: AED {(selectedCompanyCredit.availableCredit - calculateTotal().total).toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Credit Limit Warning for Payment Cards */}
+                        {billingForm.cashType === 'card' && selectedCardCredit && (
+                          <div className="mt-3 pt-3 border-t border-gray-300">
+                            {calculateTotal().totalWithVat > selectedCardCredit.availableCredit ? (
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-red-600">
+                                  <span className="flex items-center">
+                                    <AlertCircle className="w-4 h-4 mr-1" />
+                                    Card credit exceeded:
+                                  </span>
+                                  <span className="font-semibold">AED {(calculateTotal().totalWithVat - selectedCardCredit.availableCredit).toFixed(2)}</span>
+                                </div>
+                                <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                  ⚠️ This billing exceeds available card credit limit. Available: AED {selectedCardCredit.availableCredit.toFixed(2)}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between text-green-600">
+                                <span className="flex items-center">
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Within credit limit
+                                </span>
+                                <span className="font-medium">Remaining: AED {(selectedCardCredit.availableCredit - calculateTotal().totalWithVat).toFixed(2)}</span>
                               </div>
                             )}
                           </div>
@@ -2867,7 +3018,38 @@ Servigence Business Services
                     <select
                       name="cardId"
                       value={editBillingForm.cardId}
-                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, cardId: e.target.value }))}
+                      onChange={(e) => {
+                        const cardId = e.target.value;
+                        setEditBillingForm(prev => ({ ...prev, cardId }));
+
+                        // Load card credit information when card is selected
+                        if (cardId) {
+                          const selectedCard = paymentCards.find(card => card.id === cardId);
+                          if (selectedCard) {
+                            const cardBalance = cardBalances.find(b => b.id === cardId);
+
+                            if (cardBalance) {
+                              setEditSelectedCardCredit({
+                                cardName: cardBalance.cardName,
+                                creditLimit: cardBalance.creditLimit,
+                                totalUsed: cardBalance.totalUsed,
+                                availableCredit: cardBalance.availableCredit,
+                                utilizationPercentage: cardBalance.utilizationPercentage
+                              });
+                            } else {
+                              setEditSelectedCardCredit({
+                                cardName: selectedCard.cardName,
+                                creditLimit: selectedCard.creditLimit,
+                                totalUsed: 0,
+                                availableCredit: selectedCard.creditLimit,
+                                utilizationPercentage: 0
+                              });
+                            }
+                          }
+                        } else {
+                          setEditSelectedCardCredit(null);
+                        }
+                      }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <option value="">Select a payment card</option>
@@ -2883,6 +3065,43 @@ Servigence Business Services
                         );
                       })}
                     </select>
+
+                    {/* Card Credit Information Display */}
+                    {editSelectedCardCredit && (
+                      <div className="mt-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <h4 className="text-sm font-medium text-purple-900 mb-2 flex items-center">
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Credit Information - {editSelectedCardCredit.cardName}
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-purple-700">Credit Limit:</span>
+                            <span className="font-semibold text-purple-900 ml-2">AED {editSelectedCardCredit.creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div>
+                            <span className="text-purple-700">Available Credit:</span>
+                            <span className={`font-semibold ml-2 ${
+                              editSelectedCardCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              AED {editSelectedCardCredit.availableCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-purple-700">Total Used:</span>
+                            <span className="font-semibold text-purple-900 ml-2">AED {editSelectedCardCredit.totalUsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div>
+                            <span className="text-purple-700">Utilization:</span>
+                            <span className={`font-semibold ml-2 ${
+                              editSelectedCardCredit.utilizationPercentage > 80 ? 'text-red-600' :
+                              editSelectedCardCredit.utilizationPercentage > 50 ? 'text-yellow-600' : 'text-green-600'
+                            }`}>
+                              {editSelectedCardCredit.utilizationPercentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
