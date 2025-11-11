@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Users, Building2, FileText, DollarSign, AlertCircle, Clock, CheckCircle, ArrowUpRight, ArrowDownRight, Wallet, TrendingDown, BarChart3 } from 'lucide-react';
-import { mockCompanies, mockServices, mockInvoices, mockReminders } from '../data/mockData';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CardBalanceWidget from './CardBalanceWidget';
@@ -19,14 +18,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [dailyProfit, setDailyProfit] = useState(0);
 
-  const totalCompanies = mockCompanies.length;
-  const activeServices = mockServices.filter(s => s.status === 'in_progress').length;
-  const pendingInvoices = mockInvoices.filter(i => i.status === 'sent').length;
+  // Real data from database instead of mock data
+  const [totalCompanies, setTotalCompanies] = useState(0);
+  const [activeServices, setActiveServices] = useState(0);
+  const [pendingInvoices, setPendingInvoices] = useState(0);
+
   const urgentReminders = realReminders.filter(r => r.priority === 'urgent').length;
 
   useEffect(() => {
+    console.log('🔄 [Dashboard] Loading all data from database...');
     loadReminders();
     loadFinancialMetrics();
+    loadDashboardMetrics();
   }, []);
 
   const loadReminders = async () => {
@@ -114,6 +117,52 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
     } catch (error) {
       console.error('Error loading financial metrics:', error);
+    }
+  };
+
+  const loadDashboardMetrics = async () => {
+    try {
+      console.log('📊 [Dashboard] Loading dashboard metrics from database...');
+
+      // Load total companies count
+      const { data: companies, error: companiesError } = await dbHelpers.supabase
+        .from('companies')
+        .select('id', { count: 'exact', head: true });
+
+      if (companiesError) throw companiesError;
+      const companiesCount = companies?.length || 0;
+      setTotalCompanies(companiesCount);
+      console.log('🏢 [Dashboard] Total companies:', companiesCount);
+
+      // Load active services count (service_billings with status 'pending' or 'in_progress')
+      const { data: services, error: servicesError } = await dbHelpers.supabase
+        .from('service_billings')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['pending', 'in_progress']);
+
+      if (servicesError) throw servicesError;
+      const servicesCount = services?.length || 0;
+      setActiveServices(servicesCount);
+      console.log('📋 [Dashboard] Active services:', servicesCount);
+
+      // Load pending invoices count (service_billings with status 'pending')
+      const { data: invoices, error: invoicesError } = await dbHelpers.supabase
+        .from('service_billings')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      if (invoicesError) throw invoicesError;
+      const invoicesCount = invoices?.length || 0;
+      setPendingInvoices(invoicesCount);
+      console.log('💰 [Dashboard] Pending invoices:', invoicesCount);
+
+      console.log('✅ [Dashboard] Dashboard metrics loaded successfully');
+    } catch (error) {
+      console.error('❌ [Dashboard] Error loading dashboard metrics:', error);
+      // Set to 0 on error to show empty state instead of stale data
+      setTotalCompanies(0);
+      setActiveServices(0);
+      setPendingInvoices(0);
     }
   };
 
