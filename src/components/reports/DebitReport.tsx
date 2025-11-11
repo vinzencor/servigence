@@ -145,11 +145,12 @@ const DebitReport: React.FC = () => {
           const companyAdvancePayments = (advancePayments || []).filter(payment => payment.company_id === company.id);
           const totalAdvancePayments = companyAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-          // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+          // Get opening balance (positive = credit/we collect from customer, negative = debit/we pay customer)
           const openingBalance = company.opening_balance ? parseFloat(company.opening_balance) : 0;
 
           // Calculate debit balance: Opening Balance + Total Dues - Total Advance Payments
-          // Only positive values represent debit (customer owes money)
+          // Positive opening balance means customer owes us from before (we need to collect)
+          // Only positive final values represent debit (customer owes money)
           const debitBalance = openingBalance + totalDues - totalAdvancePayments;
 
           // Debug logging for first 3 companies
@@ -157,6 +158,7 @@ const DebitReport: React.FC = () => {
             console.log(`🔍 [DebitReport] Company "${company.company_name}" calculation:`, {
               raw_opening_balance: company.opening_balance,
               parsed_openingBalance: openingBalance,
+              openingBalanceNote: openingBalance >= 0 ? 'Customer owes us (collect)' : 'We owe customer (pay)',
               totalDues,
               totalAdvancePayments,
               debitBalance,
@@ -192,11 +194,12 @@ const DebitReport: React.FC = () => {
           const individualAdvancePayments = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
           const totalAdvancePayments = individualAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-          // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+          // Get opening balance (positive = credit/we collect from customer, negative = debit/we pay customer)
           const openingBalance = individual.opening_balance ? parseFloat(individual.opening_balance) : 0;
 
           // Calculate debit balance: Opening Balance + Total Dues - Total Advance Payments
-          // Only positive values represent debit (customer owes money)
+          // Positive opening balance means customer owes us from before (we need to collect)
+          // Only positive final values represent debit (customer owes money)
           const debitBalance = openingBalance + totalDues - totalAdvancePayments;
 
           return {
@@ -517,7 +520,7 @@ const DebitReport: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <span className={customer.openingBalance >= 0 ? 'text-orange-600' : 'text-blue-600'}>
+                    <span className={customer.openingBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
                       AED {customer.openingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
                   </td>

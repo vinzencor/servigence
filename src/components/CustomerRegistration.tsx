@@ -2020,7 +2020,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 placeholder="0.00"
               />
               <p className="mt-1 text-xs text-gray-500">
-                Enter positive value for debit (customer owes money), negative value for credit (customer has overpaid)
+                Enter positive value if customer owes you money (receivable), negative value if you owe customer money (payable)
               </p>
             </div>
 

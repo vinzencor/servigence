@@ -263,10 +263,11 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         const companyAdvancePayments = (advancePayments || []).filter(payment => payment.company_id === company.id);
         const totalAdvancePayments = companyAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-        // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+        // Get opening balance (positive = credit/we collect from customer, negative = debit/we pay customer)
         const openingBalance = company.opening_balance ? parseFloat(company.opening_balance) : 0;
 
         // Calculate net outstanding: Opening Balance + Total Dues - Total Advance Payments
+        // Positive opening balance means customer owes us from before (we need to collect)
         // Math.max ensures we don't show negative outstanding (that would be credit balance)
         const netOutstanding = Math.max(0, openingBalance + totalDues - totalAdvancePayments);
 
@@ -310,10 +311,11 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         const individualAdvancePayments = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
         const totalAdvancePayments = individualAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-        // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+        // Get opening balance (positive = credit/we collect from customer, negative = debit/we pay customer)
         const openingBalance = individual.opening_balance ? parseFloat(individual.opening_balance) : 0;
 
         // Calculate net outstanding: Opening Balance + Total Dues - Total Advance Payments
+        // Positive opening balance means customer owes us from before (we need to collect)
         // Math.max ensures we don't show negative outstanding (that would be credit balance)
         const netOutstanding = Math.max(0, openingBalance + totalDues - totalAdvancePayments);
 
@@ -843,7 +845,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <span className={customer.openingBalance >= 0 ? 'text-orange-600' : 'text-blue-600'}>
+                      <span className={customer.openingBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
                         AED {customer.openingBalance.toLocaleString()}
                       </span>
                     </td>

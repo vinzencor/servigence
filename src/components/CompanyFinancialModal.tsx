@@ -262,10 +262,11 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
         .filter(t => t.transaction_type === 'debit' || parseFloat(t.amount?.toString() || '0') < 0)
         .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
 
-      // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+      // Get opening balance (positive = credit/we collect from customer, negative = debit/we pay customer)
       const openingBalance = company.openingBalance || 0;
 
       // Calculate outstanding: Opening Balance + Total Billed - Total Paid
+      // Positive opening balance means customer owes us from before (we need to collect)
       // Outstanding amount should never be negative (matches Outstanding Report)
       const totalOutstanding = Math.max(0, openingBalance + totalBilled - totalPaid);
       const availableCredit = Math.max(0, (company.creditLimit || 0) - totalOutstanding);
@@ -746,24 +747,24 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div className={`border rounded-lg p-4 ${
                         (company.openingBalance || 0) >= 0
-                          ? 'bg-orange-50 border-orange-200'
-                          : 'bg-blue-50 border-blue-200'
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-red-50 border-red-200'
                       }`}>
                         <div className="flex items-center justify-between">
                           <div>
                             <p className={`text-sm font-medium ${
-                              (company.openingBalance || 0) >= 0 ? 'text-orange-600' : 'text-blue-600'
+                              (company.openingBalance || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                             }`}>
                               Opening Balance
                             </p>
                             <p className={`text-2xl font-bold ${
-                              (company.openingBalance || 0) >= 0 ? 'text-orange-900' : 'text-blue-900'
+                              (company.openingBalance || 0) >= 0 ? 'text-green-900' : 'text-red-900'
                             }`}>
                               AED {(company.openingBalance || 0).toLocaleString()}
                             </p>
                           </div>
                           <DollarSign className={`w-8 h-8 ${
-                            (company.openingBalance || 0) >= 0 ? 'text-orange-500' : 'text-blue-500'
+                            (company.openingBalance || 0) >= 0 ? 'text-green-500' : 'text-red-500'
                           }`} />
                         </div>
                       </div>
