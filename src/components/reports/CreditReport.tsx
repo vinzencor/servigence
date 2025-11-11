@@ -24,6 +24,7 @@ interface CreditCustomer {
   id: string;
   name: string;
   type: 'company' | 'individual';
+  openingBalance: number;
   totalDues: number;
   totalAdvancePayments: number;
   creditBalance: number; // Positive value when customer has overpaid
@@ -70,6 +71,7 @@ const CreditReport: React.FC = () => {
           phone1,
           email1,
           credit_limit,
+          opening_balance,
           created_at
         `);
 
@@ -84,6 +86,7 @@ const CreditReport: React.FC = () => {
           phone1,
           email1,
           credit_limit,
+          opening_balance,
           created_at
         `);
 
@@ -111,6 +114,19 @@ const CreditReport: React.FC = () => {
         advancePayments: advancePayments?.length || 0
       });
 
+      console.log('🔍 [CreditReport] Opening balances from database:', {
+        companies: companies?.map(c => ({
+          name: c.company_name,
+          opening_balance: c.opening_balance,
+          opening_balance_type: typeof c.opening_balance
+        })),
+        individuals: individuals?.map(i => ({
+          name: i.individual_name,
+          opening_balance: i.opening_balance,
+          opening_balance_type: typeof i.opening_balance
+        }))
+      });
+
       // Use the same calculation method as Outstanding Report
       const billingsWithPayments = await dbHelpers.calculateOutstandingAmounts(serviceBillings || []);
 
@@ -129,13 +145,31 @@ const CreditReport: React.FC = () => {
           const companyAdvancePayments = (advancePayments || []).filter(payment => payment.company_id === company.id);
           const totalAdvancePayments = companyAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-          // Calculate credit balance (when payments exceed dues, this is positive)
-          const creditBalance = totalAdvancePayments - totalDues;
+          // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+          const openingBalance = company.opening_balance ? parseFloat(company.opening_balance) : 0;
+
+          // Calculate credit balance: Total Advance Payments - Opening Balance - Total Dues
+          // Positive value means customer has overpaid (we owe them)
+          // Note: Negative opening balance increases credit, positive opening balance decreases credit
+          const creditBalance = totalAdvancePayments - openingBalance - totalDues;
+
+          // Debug logging for first 3 companies
+          if (companies?.indexOf(company) < 3) {
+            console.log(`🔍 [CreditReport] Company "${company.company_name}" calculation:`, {
+              raw_opening_balance: company.opening_balance,
+              parsed_openingBalance: openingBalance,
+              totalDues,
+              totalAdvancePayments,
+              creditBalance,
+              formula: `${totalAdvancePayments} - ${openingBalance} - ${totalDues} = ${creditBalance}`
+            });
+          }
 
           return {
             id: company.id,
             name: company.company_name,
             type: 'company' as const,
+            openingBalance,
             totalDues,
             totalAdvancePayments,
             creditBalance,
@@ -159,13 +193,19 @@ const CreditReport: React.FC = () => {
           const individualAdvancePayments = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
           const totalAdvancePayments = individualAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-          // Calculate credit balance (when payments exceed dues, this is positive)
-          const creditBalance = totalAdvancePayments - totalDues;
+          // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+          const openingBalance = individual.opening_balance ? parseFloat(individual.opening_balance) : 0;
+
+          // Calculate credit balance: Total Advance Payments - Opening Balance - Total Dues
+          // Positive value means customer has overpaid (we owe them)
+          // Note: Negative opening balance increases credit, positive opening balance decreases credit
+          const creditBalance = totalAdvancePayments - openingBalance - totalDues;
 
           return {
             id: individual.id,
             name: individual.individual_name,
             type: 'individual' as const,
+            openingBalance,
             totalDues,
             totalAdvancePayments,
             creditBalance,
@@ -222,12 +262,13 @@ const CreditReport: React.FC = () => {
       return;
     }
 
-    const headers = ['Customer Name', 'Type', 'Total Dues', 'Total Payments', 'Credit Balance', 'Phone', 'Email'];
+    const headers = ['Customer Name', 'Type', 'Opening Balance', 'Total Dues', 'Total Payments', 'Credit Balance', 'Phone', 'Email'];
     const csvContent = [
       headers.join(','),
       ...filteredCustomers.map(c => [
         `"${c.name}"`,
         c.type === 'company' ? 'Company' : 'Individual',
+        c.openingBalance.toFixed(2),
         c.totalDues.toFixed(2),
         c.totalAdvancePayments.toFixed(2),
         c.creditBalance.toFixed(2),
@@ -252,6 +293,7 @@ const CreditReport: React.FC = () => {
     const pdfData = (filteredCustomers || []).map(customer => ({
       name: customer.name,
       type: customer.type === 'company' ? 'Company' : 'Individual',
+      openingBalance: customer.openingBalance.toFixed(2),
       totalDues: customer.totalDues.toFixed(2),
       totalPayments: customer.totalAdvancePayments.toFixed(2),
       creditBalance: customer.creditBalance.toFixed(2),
@@ -273,6 +315,7 @@ const CreditReport: React.FC = () => {
       columns: [
         { header: 'Customer Name', dataKey: 'name' },
         { header: 'Type', dataKey: 'type' },
+        { header: 'Opening Balance', dataKey: 'openingBalance' },
         { header: 'Total Dues', dataKey: 'totalDues' },
         { header: 'Total Payments', dataKey: 'totalPayments' },
         { header: 'Credit Balance', dataKey: 'creditBalance' },
@@ -441,6 +484,9 @@ const CreditReport: React.FC = () => {
                   Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Opening Balance
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Total Dues
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -470,6 +516,11 @@ const CreditReport: React.FC = () => {
                         : 'bg-purple-100 text-purple-800 border-purple-200'
                     }`}>
                       {customer.type === 'company' ? 'Company' : 'Individual'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <span className={customer.openingBalance >= 0 ? 'text-orange-600' : 'text-blue-600'}>
+                      AED {customer.openingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

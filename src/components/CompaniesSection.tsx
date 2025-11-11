@@ -71,33 +71,46 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
       console.log('Loading companies with user:', user?.service_employee_id, 'role:', user?.role);
       const supabaseCompanies = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
       // Transform Supabase data to match our Company interface
-      const transformedCompanies = supabaseCompanies.map((company: any) => ({
-        id: company.id,
-        companyName: company.company_name,
-        vatTrnNo: company.vat_trn_no,
-        phone1: company.phone1,
-        phone2: company.phone2,
-        email1: company.email1,
-        email2: company.email2,
-        address: company.address,
-        companyType: company.company_type,
-        licenseNo: company.license_no,
-        mohreNo: company.mohre_no,
-        moiNo: company.moi_no,
-        quota: company.quota,
-        companyGrade: company.company_grade,
-        creditLimit: company.credit_limit,
-        creditLimitDays: company.credit_limit_days,
-        proName: company.pro_name,
-        proPhone: company.pro_phone,
-        proEmail: company.pro_email,
-        dateOfRegistration: company.date_of_registration,
-        createdBy: company.created_by,
-        status: company.status,
-        employeeCount: company.employee_count,
-        lastActivity: company.last_activity,
-        notes: company.notes
-      }));
+      const transformedCompanies = supabaseCompanies.map((company: any) => {
+        // Handle opening_balance - can be null, string, or number
+        let openingBalance = 0;
+        if (company.opening_balance !== null && company.opening_balance !== undefined) {
+          openingBalance = typeof company.opening_balance === 'string'
+            ? parseFloat(company.opening_balance)
+            : company.opening_balance;
+        }
+
+        return {
+          id: company.id,
+          companyName: company.company_name,
+          vatTrnNo: company.vat_trn_no,
+          phone1: company.phone1,
+          phone2: company.phone2,
+          email1: company.email1,
+          email2: company.email2,
+          address: company.address,
+          companyType: company.company_type,
+          licenseNo: company.license_no,
+          mohreNo: company.mohre_no,
+          moiNo: company.moi_no,
+          quota: company.quota,
+          companyGrade: company.company_grade,
+          creditLimit: company.credit_limit,
+          creditLimitDays: company.credit_limit_days,
+          openingBalance: openingBalance,
+          openingBalanceUpdatedAt: company.opening_balance_updated_at,
+          openingBalanceUpdatedBy: company.opening_balance_updated_by,
+          proName: company.pro_name,
+          proPhone: company.pro_phone,
+          proEmail: company.pro_email,
+          dateOfRegistration: company.date_of_registration,
+          createdBy: company.created_by,
+          status: company.status,
+          employeeCount: company.employee_count,
+          lastActivity: company.last_activity,
+          notes: company.notes
+        };
+      });
 
       // Remove duplicates based on company ID
       const uniqueCompanies = transformedCompanies.filter((company, index, self) =>

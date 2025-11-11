@@ -20,6 +20,18 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
 
+  // Debug logging for company prop
+  console.log('✅ [CompanyEditModal] Received company prop:', {
+    name: company.companyName,
+    openingBalance: company.openingBalance,
+    openingBalance_type: typeof company.openingBalance,
+    openingBalanceUpdatedAt: company.openingBalanceUpdatedAt,
+    openingBalanceUpdatedBy: company.openingBalanceUpdatedBy
+  });
+
+  const openingBalanceString = company.openingBalance?.toString() || '0';
+  console.log('✅ [CompanyEditModal] Opening balance string for form:', openingBalanceString);
+
   const [formData, setFormData] = useState({
     companyName: company.companyName || '',
     vatTrnNo: company.vatTrnNo || '',
@@ -35,11 +47,14 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     quota: company.quota || '',
     companyGrade: company.companyGrade || '',
     creditLimit: company.creditLimit?.toString() || '',
+    openingBalance: openingBalanceString,
     proName: company.proName || '',
     proPhone: company.proPhone || '',
     proEmail: company.proEmail || '',
     status: company.status || 'active'
   });
+
+  console.log('✅ [CompanyEditModal] FormData initialized with openingBalance:', formData.openingBalance);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -636,12 +651,25 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     setLoading(true);
     try {
       // Prepare update data for Supabase
+      const newOpeningBalance = parseFloat(formData.openingBalance) || 0;
+      const oldOpeningBalance = company.openingBalance || 0;
+      const openingBalanceChanged = newOpeningBalance !== oldOpeningBalance;
+
+      console.log('💾 [CompanyEditModal] Preparing to save company:', {
+        formData_openingBalance: formData.openingBalance,
+        formData_openingBalance_type: typeof formData.openingBalance,
+        parsed_newOpeningBalance: newOpeningBalance,
+        parsed_type: typeof newOpeningBalance,
+        oldOpeningBalance: oldOpeningBalance,
+        openingBalanceChanged: openingBalanceChanged
+      });
+
       const updateData = {
         company_name: formData.companyName,
         vat_trn_no: formData.vatTrnNo || null,
@@ -657,6 +685,9 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         quota: formData.quota || null,
         company_grade: formData.companyGrade,
         credit_limit: parseFloat(formData.creditLimit),
+        opening_balance: newOpeningBalance,
+        opening_balance_updated_at: openingBalanceChanged ? new Date().toISOString() : company.openingBalanceUpdatedAt,
+        opening_balance_updated_by: openingBalanceChanged ? (user?.name || 'System') : company.openingBalanceUpdatedBy,
         pro_name: formData.proName || null,
         pro_phone: formData.proPhone || null,
         pro_email: formData.proEmail || null,
@@ -664,8 +695,21 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         updated_at: new Date().toISOString()
       };
 
+      console.log('💾 [CompanyEditModal] Update data:', {
+        opening_balance: updateData.opening_balance,
+        opening_balance_updated_at: updateData.opening_balance_updated_at,
+        opening_balance_updated_by: updateData.opening_balance_updated_by
+      });
+
       // Update in database
-      await dbHelpers.updateCompany(company.id, updateData);
+      const updatedData = await dbHelpers.updateCompany(company.id, updateData);
+
+      console.log('✅ [CompanyEditModal] Company updated successfully:', {
+        id: updatedData.id,
+        name: updatedData.company_name,
+        opening_balance: updatedData.opening_balance,
+        opening_balance_type: typeof updatedData.opening_balance
+      });
 
       // Handle document uploads and create reminders
       console.log('📄 Processing documents:', documents.length);
@@ -855,6 +899,9 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         quota: formData.quota || undefined,
         companyGrade: formData.companyGrade,
         creditLimit: parseFloat(formData.creditLimit),
+        openingBalance: newOpeningBalance,
+        openingBalanceUpdatedAt: openingBalanceChanged ? new Date().toISOString() : company.openingBalanceUpdatedAt,
+        openingBalanceUpdatedBy: openingBalanceChanged ? (user?.name || 'System') : company.openingBalanceUpdatedBy,
         proName: formData.proName || undefined,
         proPhone: formData.proPhone || undefined,
         proEmail: formData.proEmail || undefined,
@@ -1329,6 +1376,25 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 )}
               </div>
             )}
+
+            {/* Opening Balance */}
+            <div className="col-span-full">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Opening Balance (AED)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                name="openingBalance"
+                value={formData.openingBalance}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="0.00"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Enter positive value for debit (customer owes money), negative value for credit (customer has overpaid)
+              </p>
+            </div>
 
             {/* PRO Information */}
             <div className="col-span-full mt-6">

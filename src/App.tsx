@@ -54,42 +54,68 @@ function AppContent() {
       console.log('No user authenticated, skipping companies load in App.tsx');
       return;
     }
-    
+
     setLoading(true);
     try {
-      console.log('Loading companies from database...');
+      console.log('🔄 [App.tsx] loadCompanies() called - Loading companies from database...');
       const companiesData = await dbHelpers.getCompanies(user?.service_employee_id, user?.role);
-      console.log('Loaded companies:', companiesData);
+      console.log('🔄 [App.tsx] Raw companies data from database:', companiesData);
+      console.log('🔄 [App.tsx] First company raw data:', companiesData?.[0]);
 
       // Transform the data to match our Company interface
-      const transformedCompanies = companiesData.map((company: any) => ({
-        id: company.id,
-        companyName: company.company_name,
-        vatTrnNo: company.vat_trn_no,
-        phone1: company.phone1,
-        phone2: company.phone2,
-        email1: company.email1,
-        email2: company.email2,
-        address: company.address,
-        companyType: company.company_type,
-        licenseNo: company.license_no,
-        mohreNo: company.mohre_no,
-        moiNo: company.moi_no,
-        quota: company.quota,
-        companyGrade: company.company_grade,
-        creditLimit: company.credit_limit ? parseFloat(company.credit_limit) : 0,
-        creditLimitDays: company.credit_limit_days,
-        proName: company.pro_name,
-        proPhone: company.pro_phone,
-        proEmail: company.pro_email,
-        dateOfRegistration: company.date_of_registration,
-        createdBy: company.created_by,
-        status: company.status,
-        employeeCount: company.employee_count || 0,
-        lastActivity: company.last_activity,
-        notes: company.notes
-      }));
+      const transformedCompanies = companiesData.map((company: any) => {
+        // Handle opening_balance - can be null, string, or number
+        let openingBalance = 0;
+        if (company.opening_balance !== null && company.opening_balance !== undefined) {
+          openingBalance = typeof company.opening_balance === 'string'
+            ? parseFloat(company.opening_balance)
+            : company.opening_balance;
+        }
 
+        // Debug logging for ALL companies to see what's happening
+        console.log(`✅ [App.tsx] Transforming ${company.company_name}:`, {
+          raw_opening_balance: company.opening_balance,
+          raw_type: typeof company.opening_balance,
+          raw_is_null: company.opening_balance === null,
+          raw_is_undefined: company.opening_balance === undefined,
+          parsed_opening_balance: openingBalance,
+          parsed_type: typeof openingBalance
+        });
+
+        return {
+          id: company.id,
+          companyName: company.company_name,
+          vatTrnNo: company.vat_trn_no,
+          phone1: company.phone1,
+          phone2: company.phone2,
+          email1: company.email1,
+          email2: company.email2,
+          address: company.address,
+          companyType: company.company_type,
+          licenseNo: company.license_no,
+          mohreNo: company.mohre_no,
+          moiNo: company.moi_no,
+          quota: company.quota,
+          companyGrade: company.company_grade,
+          creditLimit: company.credit_limit ? parseFloat(company.credit_limit) : 0,
+          creditLimitDays: company.credit_limit_days,
+          openingBalance: openingBalance,
+          openingBalanceUpdatedAt: company.opening_balance_updated_at,
+          openingBalanceUpdatedBy: company.opening_balance_updated_by,
+          proName: company.pro_name,
+          proPhone: company.pro_phone,
+          proEmail: company.pro_email,
+          dateOfRegistration: company.date_of_registration,
+          createdBy: company.created_by,
+          status: company.status,
+          employeeCount: company.employee_count || 0,
+          lastActivity: company.last_activity,
+          notes: company.notes
+        };
+      });
+
+      console.log('🔄 [App.tsx] Transformed companies - First company:', transformedCompanies?.[0]);
+      console.log('🔄 [App.tsx] Setting companies state with', transformedCompanies.length, 'companies');
       setCompanies(transformedCompanies);
     } catch (error) {
       console.error('Error loading companies:', error);
@@ -119,6 +145,11 @@ function AppContent() {
   };
 
   const handleEditCompany = (company: Company) => {
+    console.log('✅ [App.tsx] handleEditCompany called with company:', {
+      name: company.companyName,
+      openingBalance: company.openingBalance,
+      openingBalance_type: typeof company.openingBalance
+    });
     setSelectedCompany(company);
     setShowEditCompany(true);
   };

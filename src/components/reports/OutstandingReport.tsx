@@ -10,6 +10,7 @@ interface OutstandingCustomer {
   id: string;
   name: string;
   type: 'company' | 'individual';
+  openingBalance: number;
   totalDues: number;
   totalAdvancePayments: number;
   netOutstanding: number;
@@ -101,6 +102,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
       const pdfData = filteredCustomers.map(customer => ({
         name: customer.name,
         type: customer.type === 'company' ? 'Company' : 'Individual',
+        openingBalance: customer.openingBalance,
         totalDues: customer.totalDues,
         advancePayments: customer.totalAdvancePayments,
         netOutstanding: customer.netOutstanding,
@@ -125,6 +127,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         columns: [
           { header: 'Customer Name', dataKey: 'name' },
           { header: 'Type', dataKey: 'type' },
+          { header: 'Opening Balance (AED)', dataKey: 'openingBalance' },
           { header: 'Total Dues (AED)', dataKey: 'totalDues' },
           { header: 'Advance Payments (AED)', dataKey: 'advancePayments' },
           { header: 'Net Outstanding (AED)', dataKey: 'netOutstanding' },
@@ -159,6 +162,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
           phone1,
           email1,
           credit_limit,
+          opening_balance,
           created_at
         `);
 
@@ -173,6 +177,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
           phone1,
           email1,
           credit_limit,
+          opening_balance,
           created_at
         `);
 
@@ -221,6 +226,19 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         advancePayments: advancePayments?.length
       });
 
+      console.log('🔍 [OutstandingReport] Opening balances from database:', {
+        companies: companies?.map(c => ({
+          name: c.company_name,
+          opening_balance: c.opening_balance,
+          opening_balance_type: typeof c.opening_balance
+        })),
+        individuals: individuals?.map(i => ({
+          name: i.individual_name,
+          opening_balance: i.opening_balance,
+          opening_balance_type: typeof i.opening_balance
+        }))
+      });
+
       console.log('💰 Sample advance payments:', advancePayments?.slice(0, 3).map(p => ({
         amount: p.amount,
         company_id: p.company_id,
@@ -245,8 +263,12 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         const companyAdvancePayments = (advancePayments || []).filter(payment => payment.company_id === company.id);
         const totalAdvancePayments = companyAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-        // Calculate net outstanding (Total Dues - Total Advance Payments)
-        const netOutstanding = Math.max(0, totalDues - totalAdvancePayments);
+        // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+        const openingBalance = company.opening_balance ? parseFloat(company.opening_balance) : 0;
+
+        // Calculate net outstanding: Opening Balance + Total Dues - Total Advance Payments
+        // Math.max ensures we don't show negative outstanding (that would be credit balance)
+        const netOutstanding = Math.max(0, openingBalance + totalDues - totalAdvancePayments);
 
         if (company.company_name === '24234324234') {
           console.log(`🏢 Company ${company.company_name}:`, {
@@ -255,6 +277,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
             advancePaymentsCount: companyAdvancePayments.length,
             advancePayments: companyAdvancePayments.map(p => ({ amount: p.amount, notes: p.notes?.substring(0, 30) })),
             totalAdvancePayments,
+            openingBalance,
             netOutstanding,
             sampleBilling: companyBillings[0]
           });
@@ -264,6 +287,7 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
           id: company.id,
           name: company.company_name,
           type: 'company' as const,
+          openingBalance,
           totalDues,
           totalAdvancePayments,
           netOutstanding,
@@ -286,13 +310,18 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
         const individualAdvancePayments = (advancePayments || []).filter(payment => payment.individual_id === individual.id);
         const totalAdvancePayments = individualAdvancePayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
-        // Calculate net outstanding (Total Dues - Total Advance Payments)
-        const netOutstanding = Math.max(0, totalDues - totalAdvancePayments);
+        // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+        const openingBalance = individual.opening_balance ? parseFloat(individual.opening_balance) : 0;
+
+        // Calculate net outstanding: Opening Balance + Total Dues - Total Advance Payments
+        // Math.max ensures we don't show negative outstanding (that would be credit balance)
+        const netOutstanding = Math.max(0, openingBalance + totalDues - totalAdvancePayments);
 
         return {
           id: individual.id,
           name: individual.individual_name,
           type: 'individual' as const,
+          openingBalance,
           totalDues,
           totalAdvancePayments,
           netOutstanding,
@@ -361,12 +390,13 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
   });
 
   const exportToCSV = () => {
-    const headers = ['Customer Name', 'Type', 'Total Dues', 'Advance Payments', 'Net Outstanding', 'Credit Limit', 'Phone', 'Email'];
+    const headers = ['Customer Name', 'Type', 'Opening Balance', 'Total Dues', 'Advance Payments', 'Net Outstanding', 'Credit Limit', 'Phone', 'Email'];
     const csvContent = [
       headers.join(','),
       ...filteredCustomers.map(customer => [
         `"${customer.name}"`,
         customer.type,
+        customer.openingBalance.toFixed(2),
         customer.totalDues.toFixed(2),
         customer.totalAdvancePayments.toFixed(2),
         customer.netOutstanding.toFixed(2),
@@ -762,6 +792,9 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
                     Type
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Opening Balance
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Dues
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -807,6 +840,11 @@ const OutstandingReport: React.FC<OutstandingReportProps> = ({ onNavigate }) => 
                           : 'bg-green-100 text-green-800'
                       }`}>
                         {customer.type === 'company' ? 'Company' : 'Individual'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <span className={customer.openingBalance >= 0 ? 'text-orange-600' : 'text-blue-600'}>
+                        AED {customer.openingBalance.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">

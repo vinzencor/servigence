@@ -37,6 +37,7 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
     visaExpiry: individual.visaExpiry || '',
     licenseNumber: individual.licenseNumber || '',
     creditLimit: individual.creditLimit?.toString() || '',
+    openingBalance: individual.openingBalance?.toString() || '0',
     status: individual.status || 'active'
   });
 
@@ -317,6 +318,10 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
     setLoading(true);
     try {
       // Prepare update data for Supabase
+      const newOpeningBalance = parseFloat(formData.openingBalance) || 0;
+      const oldOpeningBalance = individual.openingBalance || 0;
+      const openingBalanceChanged = newOpeningBalance !== oldOpeningBalance;
+
       const updateData = {
         individual_name: formData.individualName,
         nationality: formData.nationality,
@@ -334,6 +339,9 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
         visa_expiry: formData.visaExpiry || null,
         license_number: formData.licenseNumber || null,
         credit_limit: parseFloat(formData.creditLimit),
+        opening_balance: newOpeningBalance,
+        opening_balance_updated_at: openingBalanceChanged ? new Date().toISOString() : individual.openingBalanceUpdatedAt,
+        opening_balance_updated_by: openingBalanceChanged ? (user?.name || 'System') : individual.openingBalanceUpdatedBy,
         status: formData.status,
         updated_at: new Date().toISOString()
       };
@@ -453,6 +461,9 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
         visaExpiry: formData.visaExpiry || undefined,
         licenseNumber: formData.licenseNumber || undefined,
         creditLimit: parseFloat(formData.creditLimit),
+        openingBalance: newOpeningBalance,
+        openingBalanceUpdatedAt: openingBalanceChanged ? new Date().toISOString() : individual.openingBalanceUpdatedAt,
+        openingBalanceUpdatedBy: openingBalanceChanged ? (user?.name || 'System') : individual.openingBalanceUpdatedBy,
         status: formData.status as 'active' | 'inactive' | 'pending'
       };
 
@@ -647,6 +658,27 @@ const IndividualEditModal: React.FC<IndividualEditModalProps> = ({ individual, o
                   {errors.creditLimit}
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* Opening Balance */}
+          <div className="grid grid-cols-1 mb-8">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Opening Balance (AED)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                name="openingBalance"
+                value={formData.openingBalance}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Enter positive value for debit (customer owes money), negative value for credit (customer has overpaid)
+              </p>
             </div>
           </div>
 

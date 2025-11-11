@@ -262,8 +262,12 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
         .filter(t => t.transaction_type === 'debit' || parseFloat(t.amount?.toString() || '0') < 0)
         .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
 
+      // Get opening balance (positive = debit/customer owes, negative = credit/we owe)
+      const openingBalance = company.openingBalance || 0;
+
+      // Calculate outstanding: Opening Balance + Total Billed - Total Paid
       // Outstanding amount should never be negative (matches Outstanding Report)
-      const totalOutstanding = Math.max(0, totalBilled - totalPaid);
+      const totalOutstanding = Math.max(0, openingBalance + totalBilled - totalPaid);
       const availableCredit = Math.max(0, (company.creditLimit || 0) - totalOutstanding);
 
       // Calculate overdue amount from ALL bills (not filtered by date)
@@ -280,6 +284,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
           sum + (parseFloat(billing.total_amount?.toString() || '0')), 0);
 
       console.log('💵 Financial Summary Calculated:', {
+        openingBalance,
         totalBilled,
         totalPaid,
         totalOutstanding,
@@ -730,7 +735,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                         <div>
                           <p className="text-sm text-blue-900 font-medium">Outstanding Amount Calculation</p>
                           <p className="text-sm text-blue-700 mt-1">
-                            Total Billed, Total Paid, and Outstanding amounts are calculated from all-time data (not filtered by date range) to match the Outstanding Report.
+                            Outstanding = Opening Balance + Total Billed - Total Paid. All amounts are calculated from all-time data (not filtered by date range) to match the Outstanding Report.
                             The date range filter only affects the transaction tables below.
                           </p>
                         </div>
@@ -739,6 +744,30 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
 
                     {/* Financial Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div className={`border rounded-lg p-4 ${
+                        (company.openingBalance || 0) >= 0
+                          ? 'bg-orange-50 border-orange-200'
+                          : 'bg-blue-50 border-blue-200'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`text-sm font-medium ${
+                              (company.openingBalance || 0) >= 0 ? 'text-orange-600' : 'text-blue-600'
+                            }`}>
+                              Opening Balance
+                            </p>
+                            <p className={`text-2xl font-bold ${
+                              (company.openingBalance || 0) >= 0 ? 'text-orange-900' : 'text-blue-900'
+                            }`}>
+                              AED {(company.openingBalance || 0).toLocaleString()}
+                            </p>
+                          </div>
+                          <DollarSign className={`w-8 h-8 ${
+                            (company.openingBalance || 0) >= 0 ? 'text-orange-500' : 'text-blue-500'
+                          }`} />
+                        </div>
+                      </div>
+
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>

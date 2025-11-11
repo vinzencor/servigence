@@ -15,6 +15,9 @@ export interface Company {
   companyGrade: string;
   creditLimit: number;
   creditLimitDays?: number;
+  openingBalance?: number;
+  openingBalanceUpdatedAt?: string;
+  openingBalanceUpdatedBy?: string;
   proName?: string;
   proPhone?: string;
   proEmail?: string;
@@ -45,6 +48,9 @@ export interface Individual {
   licenseNumber?: string;
   creditLimit: number;
   creditLimitDays?: number;
+  openingBalance?: number;
+  openingBalanceUpdatedAt?: string;
+  openingBalanceUpdatedBy?: string;
   dateOfRegistration: string;
   createdBy: string;
   status: 'active' | 'inactive' | 'pending';

@@ -41,7 +41,19 @@ export const dbHelpers = {
       throw error;
     }
 
-    console.log('Loaded companies:', data);
+    console.log('✅ [supabase.ts] Loaded companies from database - Total:', data?.length);
+    // Log opening balance for ALL companies to debug
+    if (data && data.length > 0) {
+      console.log('✅ [supabase.ts] ALL companies opening balances:',
+        data.map(c => ({
+          name: c.company_name,
+          opening_balance: c.opening_balance,
+          type: typeof c.opening_balance,
+          is_null: c.opening_balance === null,
+          is_undefined: c.opening_balance === undefined
+        }))
+      );
+    }
     return data;
   },
 
@@ -57,7 +69,13 @@ export const dbHelpers = {
   },
 
   async updateCompany(id: string, updates: any) {
-    console.log('Updating company:', id, 'with updates:', updates);
+    console.log('💾 [supabase.ts] updateCompany called:', {
+      id: id,
+      opening_balance: updates.opening_balance,
+      opening_balance_type: typeof updates.opening_balance,
+      opening_balance_updated_at: updates.opening_balance_updated_at,
+      opening_balance_updated_by: updates.opening_balance_updated_by
+    });
 
     const { data, error } = await supabase
       .from('companies')
@@ -67,11 +85,16 @@ export const dbHelpers = {
       .single()
 
     if (error) {
-      console.error('Supabase update error:', error);
+      console.error('❌ [supabase.ts] Supabase update error:', error);
       throw error;
     }
 
-    console.log('Update successful:', data);
+    console.log('✅ [supabase.ts] Update successful:', {
+      id: data.id,
+      company_name: data.company_name,
+      opening_balance: data.opening_balance,
+      opening_balance_type: typeof data.opening_balance
+    });
     return data
   },
 

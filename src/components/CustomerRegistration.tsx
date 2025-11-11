@@ -27,6 +27,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     email2: '',
     address: '',
     creditLimit: '',
+    openingBalance: '',
     dateOfRegistration: new Date().toISOString().split('T')[0],
     createdBy: user?.name || 'System',
     assignedTo: (user?.service_employee_id && user.service_employee_id.length === 36) ? user.service_employee_id : '',
@@ -481,36 +482,63 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         };
 
         // Save to Supabase and get the created company ID
+        const openingBalanceValue = formData.openingBalance ? parseFloat(formData.openingBalance) : 0;
+
+        console.log('💾 [CustomerRegistration] Saving company with opening balance:', {
+          formData_openingBalance: formData.openingBalance,
+          formData_openingBalance_type: typeof formData.openingBalance,
+          parsed_openingBalanceValue: openingBalanceValue,
+          parsed_type: typeof openingBalanceValue,
+          will_set_audit_trail: openingBalanceValue !== 0
+        });
+
+        const insertData = {
+          company_name: newCompany.companyName,
+          vat_trn_no: newCompany.vatTrnNo,
+          phone1: newCompany.phone1,
+          phone2: newCompany.phone2,
+          email1: newCompany.email1,
+          email2: newCompany.email2,
+          address: newCompany.address,
+          company_type: newCompany.companyType,
+          license_no: newCompany.licenseNo,
+          mohre_no: newCompany.mohreNo,
+          moi_no: newCompany.moiNo,
+          quota: newCompany.quota,
+          company_grade: newCompany.companyGrade,
+          credit_limit: newCompany.creditLimit,
+          pro_name: newCompany.proName,
+          pro_phone: newCompany.proPhone,
+          pro_email: newCompany.proEmail,
+          date_of_registration: newCompany.dateOfRegistration,
+          created_by: newCompany.createdBy,
+          status: newCompany.status,
+          employee_count: newCompany.employeeCount,
+          assigned_to: formData.assignedTo && formData.assignedTo.trim() !== '' ? formData.assignedTo : null,
+          opening_balance: openingBalanceValue,
+          opening_balance_updated_at: openingBalanceValue !== 0 ? new Date().toISOString() : null,
+          opening_balance_updated_by: openingBalanceValue !== 0 ? user?.name || 'System' : null
+        };
+
+        console.log('💾 [CustomerRegistration] Insert data:', insertData);
+
         const { data: companyData, error: companyError } = await supabase
           .from('companies')
-          .insert([{
-            company_name: newCompany.companyName,
-            vat_trn_no: newCompany.vatTrnNo,
-            phone1: newCompany.phone1,
-            phone2: newCompany.phone2,
-            email1: newCompany.email1,
-            email2: newCompany.email2,
-            address: newCompany.address,
-            company_type: newCompany.companyType,
-            license_no: newCompany.licenseNo,
-            mohre_no: newCompany.mohreNo,
-            moi_no: newCompany.moiNo,
-            quota: newCompany.quota,
-            company_grade: newCompany.companyGrade,
-            credit_limit: newCompany.creditLimit,
-            pro_name: newCompany.proName,
-            pro_phone: newCompany.proPhone,
-            pro_email: newCompany.proEmail,
-            date_of_registration: newCompany.dateOfRegistration,
-            created_by: newCompany.createdBy,
-            status: newCompany.status,
-            employee_count: newCompany.employeeCount,
-            assigned_to: formData.assignedTo && formData.assignedTo.trim() !== '' ? formData.assignedTo : null
-          }])
+          .insert([insertData])
           .select()
           .single();
 
-        if (companyError) throw companyError;
+        if (companyError) {
+          console.error('❌ [CustomerRegistration] Database insert error:', companyError);
+          throw companyError;
+        }
+
+        console.log('✅ [CustomerRegistration] Company created successfully:', {
+          id: companyData.id,
+          name: companyData.company_name,
+          opening_balance: companyData.opening_balance,
+          opening_balance_type: typeof companyData.opening_balance
+        });
 
         createdCompany = companyData;
         const companyId = createdCompany.id;
@@ -649,6 +677,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         };
 
         // Save to Supabase
+        const individualOpeningBalance = formData.openingBalance ? parseFloat(formData.openingBalance) : 0;
         createdIndividual = await dbHelpers.createIndividual({
           individual_name: newIndividual.individualName,
           nationality: newIndividual.nationality,
@@ -669,7 +698,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
           date_of_registration: newIndividual.dateOfRegistration,
           created_by: newIndividual.createdBy,
           status: newIndividual.status,
-          assigned_to: formData.assignedTo && formData.assignedTo.trim() !== '' ? formData.assignedTo : null
+          assigned_to: formData.assignedTo && formData.assignedTo.trim() !== '' ? formData.assignedTo : null,
+          opening_balance: individualOpeningBalance,
+          opening_balance_updated_at: individualOpeningBalance !== 0 ? new Date().toISOString() : null,
+          opening_balance_updated_by: individualOpeningBalance !== 0 ? user?.name || 'System' : null
         });
 
         if (onSaveIndividual) {
@@ -857,6 +889,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       email2: '',
       address: '',
       creditLimit: '',
+      openingBalance: '',
       dateOfRegistration: new Date().toISOString().split('T')[0],
       createdBy: user?.name || 'System',
       assignedTo: (user?.service_employee_id && user.service_employee_id.length === 36) ? user.service_employee_id : '',
@@ -1970,6 +2003,25 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Opening Balance */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Opening Balance (AED)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                name="openingBalance"
+                value={formData.openingBalance}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Enter positive value for debit (customer owes money), negative value for credit (customer has overpaid)
+              </p>
             </div>
 
             {/* PRO Information - Only for Companies */}
