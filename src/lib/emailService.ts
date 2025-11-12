@@ -115,52 +115,87 @@ class EmailService {
 
     const template: EmailTemplate = {
       to: recipients,
-      subject: `Welcome to Servigence - ${data.companyName}`,
+      subject: `Welcome to Servigens Business Group - ${data.companyName}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to Servigence!</h1>
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 35px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 32px; font-weight: bold;">Welcome to <span style="font-weight: 900;">Servigens Business Group</span></h1>
           </div>
 
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Dear ${data.companyName} Team,</h2>
+          <div style="background: white; padding: 35px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Dear ${data.companyName} Team,</h2>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              Thank you for registering with Servigence! We're excited to have you as part of our growing community.
+            <p style="color: #555; line-height: 1.8; font-size: 16px; margin: 20px 0;">
+              We're thrilled to have you onboard! At Servigens, we don't just provide services — we create solutions that empower your business, amplify your brand, and elevate your lifestyle.
             </p>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              Your company has been successfully registered in our system. Our team will be in touch with you shortly to discuss your requirements and how we can best serve you.
+            <p style="color: #2563eb; line-height: 1.8; font-size: 18px; font-weight: bold; margin: 25px 0; text-align: center;">
+              🌟 Breaking Barriers to Global Opportunities
             </p>
-            
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-              <h3 style="color: #333; margin-top: 0;">What's Next?</h3>
-              <ul style="color: #666; line-height: 1.8;">
-                <li>Our team will review your registration</li>
-                <li>You'll receive a follow-up call within 24 hours</li>
-                <li>We'll schedule a consultation to understand your needs</li>
-                <li>Get started with our comprehensive services</li>
-              </ul>
+
+            <h3 style="color: #333; font-size: 18px; margin: 25px 0 15px 0;">Our Expertise:</h3>
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2563eb;">
+              <p style="color: #333; font-weight: bold; font-size: 16px; margin: 0 0 8px 0;">
+                🏢 <strong>Servigens Business Setup & Corporate Services</strong>
+              </p>
+              <p style="color: #555; line-height: 1.6; font-size: 15px; margin: 0 0 10px 0;">
+                Seamless company formation, PRO support, and government documentation.
+              </p>
+              <p style="color: #2563eb; font-size: 14px; margin: 0;">
+                📞 <a href="tel:+971544887748" style="color: #2563eb; text-decoration: none;">+971 54 4887748</a> |
+                ✉ <a href="mailto:info@servigens.com" style="color: #2563eb; text-decoration: none;">info@servigens.com</a>
+              </p>
             </div>
-            
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              If you have any immediate questions or concerns, please don't hesitate to contact our support team.
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2563eb;">
+              <p style="color: #333; font-weight: bold; font-size: 16px; margin: 0 0 8px 0;">
+                💡 <strong>Servigens Advertising & Digital Marketing</strong>
+              </p>
+              <p style="color: #555; line-height: 1.6; font-size: 15px; margin: 0 0 10px 0;">
+                Creative campaigns, social media strategies, and data-driven marketing to make your brand stand out.
+              </p>
+              <p style="color: #2563eb; font-size: 14px; margin: 0;">
+                📞 <a href="tel:+971564881001" style="color: #2563eb; text-decoration: none;">+971 56 4881001</a> |
+                ✉ <a href="mailto:digital@servigens.com" style="color: #2563eb; text-decoration: none;">digital@servigens.com</a>
+              </p>
+            </div>
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2563eb;">
+              <p style="color: #333; font-weight: bold; font-size: 16px; margin: 0 0 8px 0;">
+                🌍 <strong>Servigens International Holidays</strong>
+              </p>
+              <p style="color: #555; line-height: 1.6; font-size: 15px; margin: 0 0 10px 0;">
+                Curated travel experiences, adventure tours, and luxury escapes for unforgettable journeys.
+              </p>
+              <p style="color: #2563eb; font-size: 14px; margin: 0;">
+                📞 <a href="tel:+971504886065" style="color: #2563eb; text-decoration: none;">+971 50 4886065</a> |
+                ✉ <a href="mailto:bookings@servigens.com" style="color: #2563eb; text-decoration: none;">bookings@servigens.com</a>
+              </p>
+            </div>
+
+            <p style="color: #555; line-height: 1.8; font-size: 16px; margin: 25px 0; font-style: italic; text-align: center;">
+              At Servigens, we make success simple, growth effortless, and experiences unforgettable.
             </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="color: #666; margin: 5px 0;"><strong>Support Contact:</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
+
+            <div style="text-align: center; margin: 30px 0; padding: 20px; background: #eff6ff; border-radius: 8px;">
+              <p style="color: #555; margin: 0 0 10px 0; font-size: 15px;">
+                🌐 Visit us: <a href="https://www.servigens.com" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">www.servigens.com</a>
+              </p>
             </div>
-            
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+
+            <p style="color: #2563eb; line-height: 1.8; font-size: 17px; font-weight: bold; margin: 25px 0; text-align: center;">
+              Welcome aboard! Your journey to limitless opportunities starts here with Servigens.
+            </p>
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
               Best regards,<br>
-              <strong>The Servigence Team</strong>
+              <strong>The Servigens Team</strong>
             </p>
           </div>
-          
+
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-            <p>This is an automated message from Servigence CRM System.</p>
+            <p style="margin: 0;">This is an automated message from Servigens CRM System.</p>
           </div>
         </div>
       `,
@@ -177,52 +212,87 @@ class EmailService {
 
     const template: EmailTemplate = {
       to: recipients,
-      subject: `Welcome to Servigence - ${data.individualName}`,
+      subject: `Welcome to Servigens Business Group - ${data.individualName}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to Servigence!</h1>
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 35px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 32px; font-weight: bold;">Welcome to <span style="font-weight: 900;">Servigens Business Group</span></h1>
           </div>
 
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Dear ${data.individualName},</h2>
+          <div style="background: white; padding: 35px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Dear ${data.individualName},</h2>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              Thank you for registering with Servigence! We're excited to have you as part of our growing community.
+            <p style="color: #555; line-height: 1.8; font-size: 16px; margin: 20px 0;">
+              We're thrilled to have you onboard! At Servigens, we don't just provide services — we create solutions that empower your business, amplify your brand, and elevate your lifestyle.
             </p>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              Your profile has been successfully registered in our system. Our team will be in touch with you shortly to discuss your requirements and how we can best serve you.
+            <p style="color: #2563eb; line-height: 1.8; font-size: 18px; font-weight: bold; margin: 25px 0; text-align: center;">
+              🌟 Breaking Barriers to Global Opportunities
             </p>
 
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-              <h3 style="color: #333; margin-top: 0;">What's Next?</h3>
-              <ul style="color: #666; line-height: 1.8;">
-                <li>Our team will review your registration</li>
-                <li>You'll receive a follow-up call within 24 hours</li>
-                <li>We'll schedule a consultation to understand your needs</li>
-                <li>Get started with our comprehensive services</li>
-              </ul>
+            <h3 style="color: #333; font-size: 18px; margin: 25px 0 15px 0;">Our Expertise:</h3>
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2563eb;">
+              <p style="color: #333; font-weight: bold; font-size: 16px; margin: 0 0 8px 0;">
+                🏢 <strong>Servigens Business Setup & Corporate Services</strong>
+              </p>
+              <p style="color: #555; line-height: 1.6; font-size: 15px; margin: 0 0 10px 0;">
+                Seamless company formation, PRO support, and government documentation.
+              </p>
+              <p style="color: #2563eb; font-size: 14px; margin: 0;">
+                📞 <a href="tel:+971544887748" style="color: #2563eb; text-decoration: none;">+971 54 4887748</a> |
+                ✉ <a href="mailto:info@servigens.com" style="color: #2563eb; text-decoration: none;">info@servigens.com</a>
+              </p>
             </div>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              If you have any immediate questions or concerns, please don't hesitate to contact our support team.
-            </p>
-
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="color: #666; margin: 5px 0;"><strong>Support Contact:</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2563eb;">
+              <p style="color: #333; font-weight: bold; font-size: 16px; margin: 0 0 8px 0;">
+                💡 <strong>Servigens Advertising & Digital Marketing</strong>
+              </p>
+              <p style="color: #555; line-height: 1.6; font-size: 15px; margin: 0 0 10px 0;">
+                Creative campaigns, social media strategies, and data-driven marketing to make your brand stand out.
+              </p>
+              <p style="color: #2563eb; font-size: 14px; margin: 0;">
+                📞 <a href="tel:+971564881001" style="color: #2563eb; text-decoration: none;">+971 56 4881001</a> |
+                ✉ <a href="mailto:digital@servigens.com" style="color: #2563eb; text-decoration: none;">digital@servigens.com</a>
+              </p>
             </div>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2563eb;">
+              <p style="color: #333; font-weight: bold; font-size: 16px; margin: 0 0 8px 0;">
+                🌍 <strong>Servigens International Holidays</strong>
+              </p>
+              <p style="color: #555; line-height: 1.6; font-size: 15px; margin: 0 0 10px 0;">
+                Curated travel experiences, adventure tours, and luxury escapes for unforgettable journeys.
+              </p>
+              <p style="color: #2563eb; font-size: 14px; margin: 0;">
+                📞 <a href="tel:+971504886065" style="color: #2563eb; text-decoration: none;">+971 50 4886065</a> |
+                ✉ <a href="mailto:bookings@servigens.com" style="color: #2563eb; text-decoration: none;">bookings@servigens.com</a>
+              </p>
+            </div>
+
+            <p style="color: #555; line-height: 1.8; font-size: 16px; margin: 25px 0; font-style: italic; text-align: center;">
+              At Servigens, we make success simple, growth effortless, and experiences unforgettable.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0; padding: 20px; background: #eff6ff; border-radius: 8px;">
+              <p style="color: #555; margin: 0 0 10px 0; font-size: 15px;">
+                🌐 Visit us: <a href="https://www.servigens.com" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">www.servigens.com</a>
+              </p>
+            </div>
+
+            <p style="color: #2563eb; line-height: 1.8; font-size: 17px; font-weight: bold; margin: 25px 0; text-align: center;">
+              Welcome aboard! Your journey to limitless opportunities starts here with Servigens.
+            </p>
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
               Best regards,<br>
-              <strong>The Servigence Team</strong>
+              <strong>The Servigens Team</strong>
             </p>
           </div>
 
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-            <p>This is an automated message from Servigence CRM System.</p>
+            <p style="margin: 0;">This is an automated message from Servigens CRM System.</p>
           </div>
         </div>
       `,

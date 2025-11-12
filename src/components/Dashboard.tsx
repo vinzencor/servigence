@@ -125,38 +125,48 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       console.log('📊 [Dashboard] Loading dashboard metrics from database...');
 
       // Load total companies count
-      const { data: companies, error: companiesError } = await dbHelpers.supabase
+      const { count: companiesCount, error: companiesError } = await dbHelpers.supabase
         .from('companies')
-        .select('id', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true });
 
-      if (companiesError) throw companiesError;
-      const companiesCount = companies?.length || 0;
-      setTotalCompanies(companiesCount);
+      if (companiesError) {
+        console.error('❌ [Dashboard] Error loading companies count:', companiesError);
+        throw companiesError;
+      }
+      setTotalCompanies(companiesCount || 0);
       console.log('🏢 [Dashboard] Total companies:', companiesCount);
 
       // Load active services count (service_billings with status 'pending' or 'in_progress')
-      const { data: services, error: servicesError } = await dbHelpers.supabase
+      const { count: servicesCount, error: servicesError } = await dbHelpers.supabase
         .from('service_billings')
-        .select('id', { count: 'exact', head: true })
+        .select('*', { count: 'exact', head: true })
         .in('status', ['pending', 'in_progress']);
 
-      if (servicesError) throw servicesError;
-      const servicesCount = services?.length || 0;
-      setActiveServices(servicesCount);
+      if (servicesError) {
+        console.error('❌ [Dashboard] Error loading active services count:', servicesError);
+        throw servicesError;
+      }
+      setActiveServices(servicesCount || 0);
       console.log('📋 [Dashboard] Active services:', servicesCount);
 
       // Load pending invoices count (service_billings with status 'pending')
-      const { data: invoices, error: invoicesError } = await dbHelpers.supabase
+      const { count: invoicesCount, error: invoicesError } = await dbHelpers.supabase
         .from('service_billings')
-        .select('id', { count: 'exact', head: true })
+        .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
 
-      if (invoicesError) throw invoicesError;
-      const invoicesCount = invoices?.length || 0;
-      setPendingInvoices(invoicesCount);
+      if (invoicesError) {
+        console.error('❌ [Dashboard] Error loading pending invoices count:', invoicesError);
+        throw invoicesError;
+      }
+      setPendingInvoices(invoicesCount || 0);
       console.log('💰 [Dashboard] Pending invoices:', invoicesCount);
 
-      console.log('✅ [Dashboard] Dashboard metrics loaded successfully');
+      console.log('✅ [Dashboard] Dashboard metrics loaded successfully:', {
+        totalCompanies: companiesCount,
+        activeServices: servicesCount,
+        pendingInvoices: invoicesCount
+      });
     } catch (error) {
       console.error('❌ [Dashboard] Error loading dashboard metrics:', error);
       // Set to 0 on error to show empty state instead of stale data
@@ -363,19 +373,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     <div className="space-y-6">
       {/* Welcome Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-8 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">
-              Welcome back, {isSuperAdmin ? 'Super Admin' : user?.name || 'User'}!
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold">
+              Welcome to <span className="font-extrabold">Servigens!!</span>
             </h1>
-            <p className="text-blue-100 text-lg">Here's what's happening with your business today.</p>
-          </div>
-          <div className="flex items-center space-x-4">
             <div className="text-right">
               <p className="text-2xl font-bold">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</p>
               <p className="text-blue-100">{new Date().toLocaleDateString()}</p>
             </div>
           </div>
+
+          
         </div>
       </div>
 
