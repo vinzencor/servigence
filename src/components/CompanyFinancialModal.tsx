@@ -511,7 +511,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
       </head>
       <body>
         <div class="header">
-          <div class="company-name">${company.companyName}</div>
+          <div class="company-name">Servigence</div>
           <div class="statement-title">Financial Statement & Account Details</div>
           <div class="period">Period: ${new Date(dateRange.startDate).toLocaleDateString()} to ${new Date(dateRange.endDate).toLocaleDateString()}</div>
           <div class="period">Generated: ${new Date().toLocaleDateString()}</div>
@@ -634,7 +634,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                 <Building2 className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold">{company.companyName}</h2>
+                <h2 className="text-2xl font-bold">Servigence</h2>
                 <p className="text-blue-100">Financial Statement & Account Details</p>
               </div>
             </div>

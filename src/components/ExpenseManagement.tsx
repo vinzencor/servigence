@@ -44,6 +44,8 @@ interface ExpenseForm {
   paymentMethod: string;
   referenceNumber: string;
   notes: string;
+  vatRate: string;
+  includeVat: boolean;
 }
 
 const ExpenseManagement: React.FC = () => {
@@ -66,7 +68,9 @@ const ExpenseManagement: React.FC = () => {
     transactionDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'cash',
     referenceNumber: '',
-    notes: ''
+    notes: '',
+    vatRate: '5',
+    includeVat: false
   });
 
   const expenseCategories = [
@@ -188,7 +192,9 @@ const ExpenseManagement: React.FC = () => {
       transactionDate: new Date().toISOString().split('T')[0],
       paymentMethod: 'cash',
       referenceNumber: '',
-      notes: ''
+      notes: '',
+      vatRate: '5',
+      includeVat: false
     });
   };
 
@@ -201,7 +207,9 @@ const ExpenseManagement: React.FC = () => {
       transactionDate: expense.transactionDate,
       paymentMethod: expense.paymentMethod,
       referenceNumber: expense.referenceNumber || '',
-      notes: expense.notes || ''
+      notes: expense.notes || '',
+      vatRate: '5',
+      includeVat: false
     });
     setShowEditModal(true);
   };
@@ -606,6 +614,60 @@ const ExpenseManagement: React.FC = () => {
                   />
                 </div>
 
+                {/* VAT Option */}
+                <div className="col-span-full">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <input
+                      type="checkbox"
+                      id="includeVat"
+                      checked={expenseForm.includeVat}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, includeVat: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="includeVat" className="text-sm font-medium text-gray-700">
+                      Include VAT
+                    </label>
+                  </div>
+
+                  {expenseForm.includeVat && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          VAT Rate (%)
+                        </label>
+                        <select
+                          value={expenseForm.vatRate}
+                          onChange={(e) => setExpenseForm({ ...expenseForm, vatRate: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="0">0% (No VAT)</option>
+                          <option value="5">5% (Standard)</option>
+                          <option value="15">15% (Luxury)</option>
+                        </select>
+                      </div>
+
+                      {expenseForm.amount && parseFloat(expenseForm.amount) > 0 && (
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Amount:</span>
+                              <span className="font-medium">AED {parseFloat(expenseForm.amount).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">VAT ({expenseForm.vatRate}%):</span>
+                              <span className="font-medium">AED {((parseFloat(expenseForm.amount) * parseFloat(expenseForm.vatRate)) / 100).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 mt-1">
+                              <span>Total:</span>
+                              <span>AED {(parseFloat(expenseForm.amount) + (parseFloat(expenseForm.amount) * parseFloat(expenseForm.vatRate)) / 100).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Notes
@@ -748,6 +810,60 @@ const ExpenseManagement: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Optional reference number"
                   />
+                </div>
+
+                {/* VAT Option */}
+                <div className="col-span-full">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <input
+                      type="checkbox"
+                      id="editIncludeVat"
+                      checked={expenseForm.includeVat}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, includeVat: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="editIncludeVat" className="text-sm font-medium text-gray-700">
+                      Include VAT
+                    </label>
+                  </div>
+
+                  {expenseForm.includeVat && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          VAT Rate (%)
+                        </label>
+                        <select
+                          value={expenseForm.vatRate}
+                          onChange={(e) => setExpenseForm({ ...expenseForm, vatRate: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="0">0% (No VAT)</option>
+                          <option value="5">5% (Standard)</option>
+                          <option value="15">15% (Luxury)</option>
+                        </select>
+                      </div>
+
+                      {expenseForm.amount && parseFloat(expenseForm.amount) > 0 && (
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Amount:</span>
+                              <span className="font-medium">AED {parseFloat(expenseForm.amount).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">VAT ({expenseForm.vatRate}%):</span>
+                              <span className="font-medium">AED {((parseFloat(expenseForm.amount) * parseFloat(expenseForm.vatRate)) / 100).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 mt-1">
+                              <span>Total:</span>
+                              <span>AED {(parseFloat(expenseForm.amount) + (parseFloat(expenseForm.amount) * parseFloat(expenseForm.vatRate)) / 100).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

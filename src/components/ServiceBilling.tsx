@@ -1118,6 +1118,19 @@ const ServiceBilling: React.FC = () => {
           .bank-details strong {
             color: #000;
           }
+            .logo-footer-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  margin-top: 10px;
+}
+          .logo-footer {
+  width: 60px;      /* fixed width */
+  height: 60px;     /* fixed height */
+  object-fit: contain;
+}
           @media print {
             body {
               margin: 0;
@@ -1156,6 +1169,7 @@ const ServiceBilling: React.FC = () => {
               text-align: left;
               margin-top: 10px;
             }
+            
           }
         </style>
       </head>
@@ -1262,6 +1276,16 @@ const ServiceBilling: React.FC = () => {
           <div class="amount-words">
             In Words: <span>${amountInWords}</span>
           </div>
+
+        <div class="logo-footer-container">
+  <img src="/Daman Health Insurance Logo Vector.svg .png" class="logo-footer" />
+  <img src="/abu-dhabi-judicial-department-adjd-logo-vector-1.png" class="logo-footer" />
+  <img src="/tamm abu dhabi government Logo Vector.svg .png" class="logo-footer" />
+  <img src="/tas-heel-dubai-uae-seeklogo.png" class="logo-footer" />
+  <img src="/the-emirates-new-seeklogo.png" class="logo-footer" />
+  <img src="/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" class="logo-footer" />
+</div>
+
 
           <!-- Bank Details -->
           <div class="bank-details">
@@ -1509,7 +1533,7 @@ const ServiceBilling: React.FC = () => {
           amount: typingCharges,
           transaction_date: billingForm.serviceDate,
           payment_method: billingForm.cashType === 'cash' ? 'cash' :
-                         billingForm.cashType === 'card' ? 'credit_card' : 'bank_transfer',
+            billingForm.cashType === 'card' ? 'credit_card' : 'bank_transfer',
           reference_number: invoiceNumber,
           status: 'completed',
           created_by: 'System'
@@ -1527,7 +1551,7 @@ const ServiceBilling: React.FC = () => {
           amount: governmentCharges,
           transaction_date: billingForm.serviceDate,
           payment_method: billingForm.cashType === 'cash' ? 'cash' :
-                         billingForm.cashType === 'card' ? 'credit_card' : 'bank_transfer',
+            billingForm.cashType === 'card' ? 'credit_card' : 'bank_transfer',
           reference_number: invoiceNumber,
           status: 'completed',
           created_by: 'System'
@@ -1930,11 +1954,10 @@ Servigence Business Services
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{tab.label}</span>
@@ -2021,7 +2044,7 @@ Servigence Business Services
                 </div>
               </div>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -2194,7 +2217,7 @@ Servigence Business Services
                   {loading ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
-              
+
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <DollarSign className="w-12 h-12 text-green-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Analysis</h3>
@@ -2230,7 +2253,7 @@ Servigence Business Services
               <h2 className="text-xl font-semibold text-gray-900">Service Completion Tracking</h2>
               <p className="text-gray-500 mt-1">Monitor and track completion status of all services</p>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -2258,11 +2281,10 @@ Servigence Business Services
                       </td>
                       <td className="px-6 py-4">
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div className={`h-2 rounded-full ${
-                            service.status === 'completed' ? 'bg-green-500 w-full' :
+                          <div className={`h-2 rounded-full ${service.status === 'completed' ? 'bg-green-500 w-full' :
                             service.status === 'in_progress' ? 'bg-blue-500 w-3/4' :
-                            'bg-yellow-500 w-1/4'
-                          }`}></div>
+                              'bg-yellow-500 w-1/4'
+                            }`}></div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -2346,9 +2368,8 @@ Servigence Business Services
                       name="companyId"
                       value={billingForm.companyId}
                       onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.companyId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.companyId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
                     >
                       <option value="">Select a company</option>
                       {companies.map((company) => (
@@ -2375,9 +2396,8 @@ Servigence Business Services
                           </div>
                           <div>
                             <span className="text-blue-700">Available Credit:</span>
-                            <span className={`font-semibold ml-2 ${
-                              selectedCompanyCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
+                            <span className={`font-semibold ml-2 ${selectedCompanyCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
                               AED {selectedCompanyCredit.availableCredit.toFixed(2)}
                             </span>
                           </div>
@@ -2387,10 +2407,9 @@ Servigence Business Services
                           </div>
                           <div>
                             <span className="text-blue-700">Usage:</span>
-                            <span className={`font-semibold ml-2 ${
-                              selectedCompanyCredit.creditUsagePercentage > 80 ? 'text-red-600' :
+                            <span className={`font-semibold ml-2 ${selectedCompanyCredit.creditUsagePercentage > 80 ? 'text-red-600' :
                               selectedCompanyCredit.creditUsagePercentage > 60 ? 'text-orange-600' : 'text-green-600'
-                            }`}>
+                              }`}>
                               {selectedCompanyCredit.creditUsagePercentage.toFixed(1)}%
                             </span>
                           </div>
@@ -2404,10 +2423,9 @@ Servigence Business Services
                           </div>
                           <div className="w-full bg-blue-200 rounded-full h-2">
                             <div
-                              className={`h-2 rounded-full transition-all duration-300 ${
-                                selectedCompanyCredit.creditUsagePercentage > 80 ? 'bg-red-500' :
+                              className={`h-2 rounded-full transition-all duration-300 ${selectedCompanyCredit.creditUsagePercentage > 80 ? 'bg-red-500' :
                                 selectedCompanyCredit.creditUsagePercentage > 60 ? 'bg-orange-500' : 'bg-green-500'
-                              }`}
+                                }`}
                               style={{ width: `${Math.min(selectedCompanyCredit.creditUsagePercentage, 100)}%` }}
                             ></div>
                           </div>
@@ -2442,9 +2460,8 @@ Servigence Business Services
                       name="individualId"
                       value={billingForm.individualId}
                       onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.individualId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.individualId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
                     >
                       <option value="">Select an individual</option>
                       {individuals.map((individual) => (
@@ -2489,9 +2506,8 @@ Servigence Business Services
                     name="serviceTypeId"
                     value={billingForm.serviceTypeId}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.serviceTypeId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.serviceTypeId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                   >
                     <option value="">Select a service</option>
                     {services.map((service) => (
@@ -2553,9 +2569,8 @@ Servigence Business Services
                     name="serviceDate"
                     value={billingForm.serviceDate}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.serviceDate ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.serviceDate ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                   />
                   {errors.serviceDate && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -2592,9 +2607,8 @@ Servigence Business Services
                       name="cardId"
                       value={billingForm.cardId}
                       onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.cardId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.cardId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
                     >
                       <option value="">Select a payment card</option>
                       {paymentCards.map((card) => {
@@ -2630,9 +2644,8 @@ Servigence Business Services
                           </div>
                           <div>
                             <span className="text-purple-700">Available Credit:</span>
-                            <span className={`font-semibold ml-2 ${
-                              selectedCardCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
+                            <span className={`font-semibold ml-2 ${selectedCardCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
                               AED {selectedCardCredit.availableCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </div>
@@ -2642,10 +2655,9 @@ Servigence Business Services
                           </div>
                           <div>
                             <span className="text-purple-700">Utilization:</span>
-                            <span className={`font-semibold ml-2 ${
-                              selectedCardCredit.utilizationPercentage > 80 ? 'text-red-600' :
+                            <span className={`font-semibold ml-2 ${selectedCardCredit.utilizationPercentage > 80 ? 'text-red-600' :
                               selectedCardCredit.utilizationPercentage > 50 ? 'text-yellow-600' : 'text-green-600'
-                            }`}>
+                              }`}>
                               {selectedCardCredit.utilizationPercentage.toFixed(1)}%
                             </span>
                           </div>
@@ -2666,9 +2678,8 @@ Servigence Business Services
                     value={billingForm.quantity}
                     onChange={handleInputChange}
                     min="1"
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.quantity ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.quantity ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                   />
                   {errors.quantity && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -3392,9 +3403,8 @@ Servigence Business Services
                           </div>
                           <div>
                             <span className="text-purple-700">Available Credit:</span>
-                            <span className={`font-semibold ml-2 ${
-                              editSelectedCardCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
+                            <span className={`font-semibold ml-2 ${editSelectedCardCredit.availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
                               AED {editSelectedCardCredit.availableCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </div>
@@ -3404,10 +3414,9 @@ Servigence Business Services
                           </div>
                           <div>
                             <span className="text-purple-700">Utilization:</span>
-                            <span className={`font-semibold ml-2 ${
-                              editSelectedCardCredit.utilizationPercentage > 80 ? 'text-red-600' :
+                            <span className={`font-semibold ml-2 ${editSelectedCardCredit.utilizationPercentage > 80 ? 'text-red-600' :
                               editSelectedCardCredit.utilizationPercentage > 50 ? 'text-yellow-600' : 'text-green-600'
-                            }`}>
+                              }`}>
                               {editSelectedCardCredit.utilizationPercentage.toFixed(1)}%
                             </span>
                           </div>
@@ -3733,15 +3742,15 @@ Servigence Business Services
                     const csvData = reportType === 'monthly-revenue'
                       ? reportData.map((row: any) => [row.month, row.serviceRevenue, row.governmentCharges, row.totalRevenue, row.billingsCount])
                       : reportType === 'service-performance'
-                      ? reportData.map((service: any) => [service.name, service.count, service.revenue, service.profit, service.governmentCharges, service.averageProfit])
-                      : [];
+                        ? reportData.map((service: any) => [service.name, service.count, service.revenue, service.profit, service.governmentCharges, service.averageProfit])
+                        : [];
 
                     if (csvData.length > 0) {
                       const headers = reportType === 'monthly-revenue'
                         ? ['Month', 'Service Revenue (Profit)', 'Government Charges', 'Total Revenue', 'Billings Count']
                         : reportType === 'service-performance'
-                        ? ['Service Name', 'Count', 'Total Revenue', 'Profit', 'Government Charges', 'Average Profit']
-                        : ['Service Name', 'Count', 'Total Revenue', 'Average Amount'];
+                          ? ['Service Name', 'Count', 'Total Revenue', 'Profit', 'Government Charges', 'Average Profit']
+                          : ['Service Name', 'Count', 'Total Revenue', 'Average Amount'];
 
                       const csvContent = [
                         headers.join(','),
@@ -3868,10 +3877,9 @@ Servigence Business Services
                   <p className="text-sm text-green-600">Paid: AED {billingDetails.paidAmount?.toLocaleString()}</p>
                   <p className="text-lg font-bold text-red-600">Outstanding: AED {billingDetails.outstandingAmount?.toLocaleString()}</p>
                   <p className="text-sm text-gray-600">
-                    Status: <span className={`font-medium ${
-                      billingDetails.payment_status === 'paid' ? 'text-green-600' :
+                    Status: <span className={`font-medium ${billingDetails.payment_status === 'paid' ? 'text-green-600' :
                       billingDetails.payment_status === 'partial' ? 'text-yellow-600' : 'text-red-600'
-                    }`}>
+                      }`}>
                       {billingDetails.payment_status || 'pending'}
                     </span>
                   </p>

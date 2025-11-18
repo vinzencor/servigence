@@ -214,7 +214,7 @@ const AccountManagement: React.FC = () => {
     paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'cheque' | 'card',
     reference: '',
     companyId: '',
-    gstRate: '5',
+    vatRate: '5',
     notes: ''
   });
 
@@ -261,8 +261,8 @@ const AccountManagement: React.FC = () => {
       }
 
       const amount = parseFloat(transactionForm.amount);
-      const gstRate = parseFloat(transactionForm.gstRate) || 5;
-      const gstAmount = (amount * gstRate) / 100;
+      const vatRate = parseFloat(transactionForm.vatRate) || 5;
+      const vatAmount = (amount * vatRate) / 100;
 
       // Prepare transaction data for database
       const transactionData = {
@@ -274,8 +274,8 @@ const AccountManagement: React.FC = () => {
         payment_method: transactionForm.paymentMethod,
         reference_number: transactionForm.reference.trim() || null,
         company_id: transactionForm.companyId && transactionForm.companyId.trim() !== '' ? transactionForm.companyId : null,
-        gst_rate: gstRate,
-        gst_amount: gstAmount,
+        gst_rate: vatRate,
+        gst_amount: vatAmount,
         status: 'completed',
         created_by: 'System',
         notes: transactionForm.notes.trim() || null
@@ -324,7 +324,7 @@ const AccountManagement: React.FC = () => {
       paymentMethod: 'cash',
       reference: '',
       companyId: '',
-      gstRate: '5',
+      vatRate: '5',
       notes: ''
     });
   };
@@ -339,8 +339,8 @@ const AccountManagement: React.FC = () => {
     paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'cheque' | 'card',
     reference: '',
     status: 'pending' as 'pending' | 'completed' | 'cancelled',
-    gstAmount: 0,
-    gstRate: 5,
+    vatAmount: 0,
+    vatRate: 5,
     notes: ''
   });
 
@@ -354,7 +354,7 @@ const AccountManagement: React.FC = () => {
         'Type',
         'Category',
         'Amount (AED)',
-        'GST Amount (AED)',
+        'VAT Amount (AED)',
         'Payment Method',
         'Status',
         'Reference',
@@ -415,8 +415,8 @@ const AccountManagement: React.FC = () => {
       paymentMethod: transaction.paymentMethod,
       reference: transaction.reference || '',
       status: transaction.status,
-      gstAmount: transaction.gstAmount || 0,
-      gstRate: transaction.gstRate || 5,
+      vatAmount: transaction.gstAmount || 0,
+      vatRate: transaction.gstRate || 5,
       notes: transaction.notes || ''
     });
     setShowEditTransaction(true);
@@ -679,7 +679,7 @@ const AccountManagement: React.FC = () => {
         .filter(a => a.type === 'refund' && a.status === 'completed')
         .reduce((sum, a) => sum + a.amount, 0);
 
-      const totalGST = accounts
+      const totalVAT = accounts
         .filter(a => a.status === 'completed')
         .reduce((sum, a) => sum + (a.gstAmount || 0), 0);
 
@@ -696,7 +696,7 @@ const AccountManagement: React.FC = () => {
         `Total Government Fees: AED ${totalGovernmentFees.toLocaleString()}`,
         `Total Expenses: AED ${totalExpenses.toLocaleString()}`,
         `Total Refunds: AED ${totalRefunds.toLocaleString()}`,
-        `Total GST Collected: AED ${totalGST.toLocaleString()}`,
+        `Total VAT Collected: AED ${totalVAT.toLocaleString()}`,
         `Net Revenue: AED ${netRevenue.toLocaleString()}`,
         '',
         'TRANSACTION DETAILS',
@@ -797,7 +797,7 @@ const AccountManagement: React.FC = () => {
                                .reduce((sum, a) => sum + a.amount, 0);
   const vendorPayments = accounts.filter(a => a.type === 'vendor_payment' && a.status === 'completed')
                                 .reduce((sum, a) => sum + a.amount, 0);
-  const totalGST = accounts.filter(a => a.status === 'completed')
+  const totalVAT = accounts.filter(a => a.status === 'completed')
                           .reduce((sum, a) => sum + (a.gstAmount || 0), 0);
   const totalProfit = serviceCharges + totalIncome; // Service charges and income are profit, government fees are pass-through
   const netProfit = totalProfit - totalExpenses - vendorPayments; // Profit minus all expenses
@@ -808,7 +808,7 @@ const AccountManagement: React.FC = () => {
     governmentFees,
     totalRevenue,
     totalExpenses,
-    totalGST,
+    totalVAT,
     totalProfit
   });
 
@@ -1745,7 +1745,7 @@ const AccountManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Reference Number and GST Rate */}
+                {/* Reference Number and VAT Rate */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1762,21 +1762,21 @@ const AccountManagement: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      GST Rate (%)
+                      VAT Rate (%)
                     </label>
                     <select
-                      value={transactionForm.gstRate}
-                      onChange={(e) => setTransactionForm(prev => ({ ...prev, gstRate: e.target.value }))}
+                      value={transactionForm.vatRate}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, vatRate: e.target.value }))}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     >
-                      <option value="0">0% (No GST)</option>
+                      <option value="0">0% (No VAT)</option>
                       <option value="5">5% (Standard)</option>
                       <option value="15">15% (Luxury)</option>
                     </select>
                   </div>
                 </div>
 
-                {/* GST Amount Display */}
+                {/* VAT Amount Display */}
                 {transactionForm.amount && parseFloat(transactionForm.amount) > 0 && (
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="flex justify-between items-center text-sm">
@@ -1784,12 +1784,12 @@ const AccountManagement: React.FC = () => {
                       <span className="font-medium">AED {parseFloat(transactionForm.amount).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600">GST ({transactionForm.gstRate}%):</span>
-                      <span className="font-medium">AED {((parseFloat(transactionForm.amount) * parseFloat(transactionForm.gstRate)) / 100).toFixed(2)}</span>
+                      <span className="text-gray-600">VAT ({transactionForm.vatRate}%):</span>
+                      <span className="font-medium">AED {((parseFloat(transactionForm.amount) * parseFloat(transactionForm.vatRate)) / 100).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm font-semibold border-t border-gray-200 pt-2 mt-2">
                       <span>Total Amount:</span>
-                      <span>AED {(parseFloat(transactionForm.amount) + (parseFloat(transactionForm.amount) * parseFloat(transactionForm.gstRate)) / 100).toFixed(2)}</span>
+                      <span>AED {(parseFloat(transactionForm.amount) + (parseFloat(transactionForm.amount) * parseFloat(transactionForm.vatRate)) / 100).toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -2031,7 +2031,7 @@ const AccountManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Reference and GST */}
+                {/* Reference and VAT */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2048,14 +2048,14 @@ const AccountManagement: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      GST Amount (AED)
+                      VAT Amount (AED)
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      value={editTransactionForm.gstAmount}
-                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, gstAmount: parseFloat(e.target.value) || 0 }))}
+                      value={editTransactionForm.vatAmount}
+                      onChange={(e) => setEditTransactionForm(prev => ({ ...prev, vatAmount: parseFloat(e.target.value) || 0 }))}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       placeholder="0.00"
                     />
@@ -2602,7 +2602,7 @@ const AccountManagement: React.FC = () => {
                             {account.type === 'expense' ? '-' : '+'}AED {account.amount.toLocaleString()}
                           </p>
                           {account.gstAmount && (
-                            <p className="text-xs text-gray-500">GST: AED {account.gstAmount}</p>
+                            <p className="text-xs text-gray-500">VAT: AED {account.gstAmount}</p>
                           )}
                         </div>
                       </td>
@@ -2877,8 +2877,8 @@ const AccountManagement: React.FC = () => {
                   <span className="font-semibold text-red-600">AED {totalExpenses.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                  <span className="text-blue-700">GST Collected</span>
-                  <span className="font-semibold text-blue-600">AED {totalGST.toLocaleString()}</span>
+                  <span className="text-blue-700">VAT Collected</span>
+                  <span className="font-semibold text-blue-600">AED {totalVAT.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg border-2 border-purple-200">
                   <span className="text-purple-700 font-medium">Net Profit</span>

@@ -86,8 +86,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
       if (todayBillingsError) throw todayBillingsError;
 
-      // Calculate today's revenue
-      const todayRevenue = todayBillings?.reduce((sum, b) => sum + parseFloat(b.total_amount_with_vat || b.total_amount || 0), 0) || 0;
+      // Calculate today's service charges only (excluding government charges)
+      const todayServiceCharges = todayBillings?.reduce((sum, b) => sum + parseFloat(b.typing_charges || 0), 0) || 0;
 
       // Load TODAY's expenses for daily profit calculation
       const { data: todayExpenses, error: todayExpensesError } = await dbHelpers.supabase
@@ -101,8 +101,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       // Calculate today's expenses
       const todayExp = todayExpenses?.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0;
 
-      // Calculate Daily Profit (today's revenue - today's expenses)
-      const profit = todayRevenue - todayExp;
+      // Calculate Daily Profit (today's service charges only - today's expenses)
+      const profit = todayServiceCharges - todayExp;
       setDailyProfit(profit);
 
       console.log('Financial Metrics Loaded:', {
@@ -110,7 +110,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         totalAdvancePayment: totalAdvance,
         totalExpenses: totalExp,
         totalRevenue: totalRev,
-        todayRevenue,
+        todayServiceCharges,
         todayExpenses: todayExp,
         dailyProfit: profit
       });
