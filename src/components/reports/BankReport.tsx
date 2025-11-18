@@ -110,7 +110,7 @@ Total Transactions: ${transactions.length}
 
 TRANSACTIONS
 ------------
-${transactions.map(t => 
+${transactions.map(t =>
   `${t.date} | ${t.type.toUpperCase()} | AED ${t.amount.toLocaleString()} | ${t.description} | ${t.clientName || 'N/A'}`
 ).join('\n')}
     `;
@@ -124,8 +124,50 @@ ${transactions.map(t =>
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast.success('Bank report exported successfully');
+  };
+
+  const exportReportPDF = () => {
+    const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const netFlow = totalIncome - totalExpenses;
+
+    const pdfData = transactions.map(t => ({
+      date: t.date,
+      type: t.type.toUpperCase(),
+      description: t.description,
+      client: t.clientName || '-',
+      reference: t.referenceNumber || '-',
+      amount: t.amount
+    }));
+
+    const summaryData = [
+      { label: 'Total Transactions', value: transactions.length },
+      { label: 'Total Bank Income', value: `AED ${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Total Bank Expenses', value: `AED ${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { label: 'Net Bank Flow', value: `AED ${netFlow.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+    ];
+
+    exportToPDF({
+      title: 'Bank Transactions Report',
+      subtitle: 'All Bank Transfer Transactions',
+      dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Type', dataKey: 'type' },
+        { header: 'Description', dataKey: 'description' },
+        { header: 'Client', dataKey: 'client' },
+        { header: 'Reference #', dataKey: 'reference' },
+        { header: 'Amount (AED)', dataKey: 'amount' }
+      ],
+      data: pdfData,
+      summaryData,
+      fileName: `Bank_Report_${dateFrom}_to_${dateTo}.pdf`,
+      orientation: 'landscape'
+    });
+
+    toast.success('PDF exported successfully!');
   };
 
   if (loading) {
@@ -148,13 +190,22 @@ ${transactions.map(t =>
           <h1 className="text-2xl font-bold text-gray-900">Bank Transactions Report</h1>
           <p className="text-gray-600">All bank transfer transactions</p>
         </div>
-        <button
-          onClick={exportReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={exportReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportReportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

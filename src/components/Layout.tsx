@@ -123,15 +123,18 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center">
+                {/* <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center">
                   <Building2 className="w-6 h-6 text-white" />
+                </div> */}
+                <div className="w-32 h-10 flex items-center justify-center">
+                  <img src="/servigens-logo.png" alt="Servigens Logo" className="w-full h-auto" />
                 </div>
-                <div>
+                {/* <div>
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
                     Servigens CRM
                   </h1>
                   <p className="text-sm text-gray-500">Corporate Services Management</p>
-                </div>
+                </div> */}
               </div>
             </div>
             
