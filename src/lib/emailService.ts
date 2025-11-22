@@ -312,15 +312,30 @@ class EmailService {
       to: data.recipientEmail,
       subject: `${urgencyText}: ${serviceDisplayName} Document Expiring in ${data.daysUntilExpiry} days`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: ${urgencyColor}; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <!-- Header with Company Logo and Info -->
+          <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              Dar Al Salam - Building, 9th Floor - Corniche St<br>
+              Al Danah - Abu Dhabi Corniche - UAE<br>
+              Tel: +97154887748 | Mob: 0544887748<br>
+              Email: info@servigens.com | Web: https://www.servigens.com/<br>
+              TRN: 1050653462000003
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div style="background: ${urgencyColor}; padding: 20px; text-align: center;">
             <h1 style="color: white; margin: 0; font-size: 24px;">${urgencyText}: Service Document Expiry Notice</h1>
           </div>
 
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Service Document Expiry Reminder</h2>
+          <!-- Main Content -->
+          <div style="background: white; padding: 35px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Service Document Expiry Reminder</h2>
 
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
               <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
                 <strong>Service:</strong> ${serviceDisplayName}${data.serviceCategory ? ` (${data.serviceCategory})` : ''}<br>
                 <strong>Expiry Date:</strong> ${data.expiryDate}<br>
@@ -329,25 +344,38 @@ class EmailService {
               </p>
             </div>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
               This is an automated reminder that your ${serviceDisplayName} document will expire in ${data.daysUntilExpiry} days.
               Please take the necessary action to renew this document before the expiry date.
             </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="color: #666; margin: 5px 0;"><strong>Need Assistance?</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
+
+            <div style="text-align: center; margin: 30px 0; padding: 20px; background: #eff6ff; border-radius: 8px;">
+              <p style="color: #666; margin: 5px 0; font-size: 15px;"><strong>Need Assistance?</strong></p>
+              <p style="color: #2563eb; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #2563eb; margin: 5px 0;">📞 +971 54 4887748</p>
             </div>
-            
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
               Best regards,<br>
-              <strong>The Servigence Team</strong>
+              <strong>The Servigens Team</strong>
             </p>
           </div>
-          
+
+          <!-- Partner Logos Footer -->
+          <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
+            <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
+              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+            </div>
+          </div>
+
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-            <p>This is an automated reminder from Servigence CRM System.</p>
+            <p style="margin: 0;">This is an automated reminder from Servigens CRM System.</p>
           </div>
         </div>
       `,
@@ -364,15 +392,30 @@ class EmailService {
       to: data.recipientEmail,
       subject: `${urgencyText}: Payment Due in ${data.daysUntilDue} days - ${data.companyName}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: ${urgencyColor}; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <!-- Header with Company Logo and Info -->
+          <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              Dar Al Salam - Building, 9th Floor - Corniche St<br>
+              Al Danah - Abu Dhabi Corniche - UAE<br>
+              Tel: +97154887748 | Mob: 0544887748<br>
+              Email: info@servigens.com | Web: https://www.servigens.com/<br>
+              TRN: 1050653462000003
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div style="background: ${urgencyColor}; padding: 20px; text-align: center;">
             <h1 style="color: white; margin: 0; font-size: 24px;">${urgencyText}: Payment Due Notice</h1>
           </div>
 
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Payment Reminder - ${data.companyName}</h2>
+          <!-- Main Content -->
+          <div style="background: white; padding: 35px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Payment Reminder - ${data.companyName}</h2>
 
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
               <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
                 <strong>Service:</strong> ${data.serviceName}<br>
                 <strong>Original Amount:</strong> AED ${data.originalAmount.toFixed(2)}<br>
@@ -382,7 +425,7 @@ class EmailService {
               </p>
             </div>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
               This is an automated reminder that your payment of <strong>AED ${data.dueAmount.toFixed(2)}</strong> for ${data.serviceName} is due in ${data.daysUntilDue} days.
               Please arrange for payment before the due date to avoid any inconvenience.
             </p>
@@ -393,20 +436,33 @@ class EmailService {
               </p>
             </div>
 
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="color: #666; margin: 5px 0;"><strong>Payment Assistance:</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 accounts@servigence.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
+            <div style="text-align: center; margin: 30px 0; padding: 20px; background: #eff6ff; border-radius: 8px;">
+              <p style="color: #666; margin: 5px 0; font-size: 15px;"><strong>Payment Assistance:</strong></p>
+              <p style="color: #2563eb; margin: 5px 0;">📧 accounts@servigens.com</p>
+              <p style="color: #2563eb; margin: 5px 0;">📞 +971 54 4887748</p>
             </div>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
               Best regards,<br>
-              <strong>The Servigence Accounts Team</strong>
+              <strong>The Servigens Accounts Team</strong>
             </p>
           </div>
 
+          <!-- Partner Logos Footer -->
+          <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
+            <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
+              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+            </div>
+          </div>
+
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-            <p>This is an automated payment reminder from Servigence CRM System.</p>
+            <p style="margin: 0;">This is an automated payment reminder from Servigens CRM System.</p>
           </div>
         </div>
       `,
@@ -430,20 +486,35 @@ class EmailService {
       to: data.recipientEmail,
       subject: `⚠️ Reminder: ${data.reminderTitle} - Due ${data.daysUntilDue === 0 ? 'Today' : `in ${data.daysUntilDue} day${data.daysUntilDue === 1 ? '' : 's'}`}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: ${priorityColor}; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <!-- Header with Company Logo and Info -->
+          <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              Dar Al Salam - Building, 9th Floor - Corniche St<br>
+              Al Danah - Abu Dhabi Corniche - UAE<br>
+              Tel: +97154887748 | Mob: 0544887748<br>
+              Email: info@servigens.com | Web: https://www.servigens.com/<br>
+              TRN: 1050653462000003
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div style="background: ${priorityColor}; padding: 20px; text-align: center;">
             <h1 style="color: white; margin: 0; font-size: 24px;">📅 Reminder Alert</h1>
           </div>
 
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Dear ${data.recipientName},</h2>
+          <!-- Main Content -->
+          <div style="background: white; padding: 35px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Dear ${data.recipientName},</h2>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
               This is a reminder about an important deadline that requires your attention.
             </p>
 
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${priorityColor};">
-              <h3 style="color: #333; margin-top: 0;">Reminder Details:</h3>
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${priorityColor};">
+              <h3 style="color: #333; margin-top: 0; font-size: 18px;">Reminder Details:</h3>
               <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
                 <strong>Title:</strong> ${data.reminderTitle}<br>
                 ${data.reminderDescription ? `<strong>Description:</strong> ${data.reminderDescription}<br>` : ''}
@@ -464,24 +535,37 @@ class EmailService {
               </div>
             ` : ''}
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
               Please ensure you complete the necessary actions before the due date to avoid any complications.
             </p>
 
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="color: #666; margin: 5px 0;"><strong>Need Assistance?</strong></p>
-              <p style="color: #667eea; margin: 5px 0;">📧 info@servigens.com</p>
-              <p style="color: #667eea; margin: 5px 0;">📞 +971544887748</p>
+            <div style="text-align: center; margin: 30px 0; padding: 20px; background: #eff6ff; border-radius: 8px;">
+              <p style="color: #666; margin: 5px 0; font-size: 15px;"><strong>Need Assistance?</strong></p>
+              <p style="color: #2563eb; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #2563eb; margin: 5px 0;">📞 +971 54 4887748</p>
             </div>
 
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
               Best regards,<br>
-              <strong>The Servigence Team</strong>
+              <strong>The Servigens Team</strong>
             </p>
           </div>
 
+          <!-- Partner Logos Footer -->
+          <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
+            <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
+              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+            </div>
+          </div>
+
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-            <p>This is an automated reminder from Servigence CRM System.</p>
+            <p style="margin: 0;">This is an automated reminder from Servigens CRM System.</p>
           </div>
         </div>
       `,

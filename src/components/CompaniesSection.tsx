@@ -5,6 +5,7 @@ import { dbHelpers, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import IndividualEditModal from './IndividualEditModal';
 import CompanyFinancialModal from './CompanyFinancialModal';
+import IndividualFinancialModal from './IndividualFinancialModal';
 
 interface CompaniesSectionProps {
   companies: Company[];
@@ -45,6 +46,8 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   const [individualNotes, setIndividualNotes] = useState('');
   const [companyDocuments, setCompanyDocuments] = useState<any[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [showIndividualFinancialModal, setShowIndividualFinancialModal] = useState(false);
+  const [financialIndividual, setFinancialIndividual] = useState<any>(null);
 
   // Load companies and individuals from Supabase on component mount
   useEffect(() => {
@@ -321,6 +324,40 @@ This action cannot be undone. Are you sure?`;
     setSelectedIndividual(individual);
     setIndividualNotes(individual.notes || '');
     setShowIndividualNotes(true);
+  };
+
+  const handleIndividualFinancialDetails = (individual: any) => {
+    // Transform snake_case database fields to camelCase for the modal
+    const transformedIndividual: Individual = {
+      id: individual.id,
+      individualName: individual.individual_name,
+      nationality: individual.nationality,
+      phone1: individual.phone1,
+      phone2: individual.phone2,
+      email1: individual.email1,
+      email2: individual.email2,
+      address: individual.address,
+      idNumber: individual.id_number,
+      passportNumber: individual.passport_number,
+      passportExpiry: individual.passport_expiry,
+      emiratesId: individual.emirates_id,
+      emiratesIdExpiry: individual.emirates_id_expiry,
+      visaNumber: individual.visa_number,
+      visaExpiry: individual.visa_expiry,
+      licenseNumber: individual.license_number,
+      creditLimit: individual.credit_limit || 0,
+      creditLimitDays: individual.credit_limit_days,
+      openingBalance: individual.opening_balance || 0,
+      openingBalanceUpdatedAt: individual.opening_balance_updated_at,
+      openingBalanceUpdatedBy: individual.opening_balance_updated_by,
+      dateOfRegistration: individual.date_of_registration || individual.created_at,
+      createdBy: individual.created_by || 'System',
+      status: individual.status || 'active',
+      lastActivity: individual.last_activity
+    };
+
+    setFinancialIndividual(transformedIndividual);
+    setShowIndividualFinancialModal(true);
   };
 
   const confirmDeleteIndividual = async () => {
@@ -683,6 +720,13 @@ This action cannot be undone. Are you sure?`;
                               title="Edit Individual"
                             >
                               <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleIndividualFinancialDetails(individual)}
+                              className="text-indigo-600 hover:text-indigo-900 transition-colors"
+                              title="Financial Details"
+                            >
+                              <DollarSign className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleIndividualNotes(individual)}
@@ -1190,6 +1234,18 @@ This action cannot be undone. Are you sure?`;
           onClose={() => {
             setShowFinancialModal(false);
             setFinancialCompany(null);
+          }}
+        />
+      )}
+
+      {/* Individual Financial Modal */}
+      {financialIndividual && (
+        <IndividualFinancialModal
+          individual={financialIndividual}
+          isOpen={showIndividualFinancialModal}
+          onClose={() => {
+            setShowIndividualFinancialModal(false);
+            setFinancialIndividual(null);
           }}
         />
       )}

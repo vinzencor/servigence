@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save, CreditCard, X, CheckCircle } from 'lucide-react';
+import { DollarSign, FileText, TrendingUp, Calendar, Filter, Download, Eye, Edit, Plus, Search, Building2, User, AlertCircle, Save, CreditCard, X, CheckCircle, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mockServices, mockInvoices } from '../data/mockData';
 import { Company, Individual, ServiceType, ServiceEmployee, ServiceBilling as ServiceBillingType } from '../types';
@@ -8,6 +8,19 @@ import { useAuth } from '../contexts/AuthContext';
 import DailyCardSummary from './DailyCardSummary';
 import PaymentMethodSelector from './PaymentMethodSelector';
 import { exportToPDF } from '../utils/pdfExport';
+
+// Service item interface for multi-service billing
+interface ServiceItem {
+  id: string;
+  service_id: string;
+  service_name: string;
+  quantity: number;
+  typing_charges: number;
+  government_charges: number;
+  line_total: number;
+  default_typing_charges?: number;
+  default_government_charges?: number;
+}
 
 const ServiceBilling: React.FC = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -29,6 +42,17 @@ const ServiceBilling: React.FC = () => {
   const [serviceBillings, setServiceBillings] = useState<ServiceBillingType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Searchable dropdown states
+  const [searchCompany, setSearchCompany] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [searchService, setSearchService] = useState('');
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+
+  // Multi-service selection states
+  const [multiServiceMode, setMultiServiceMode] = useState(false);
+  const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
+
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState('');
   const [reportData, setReportData] = useState<any>(null);
@@ -445,6 +469,11 @@ const ServiceBilling: React.FC = () => {
 
   const editBilling = (billing: any) => {
     setSelectedBilling(billing);
+
+    // Reset multi-service mode when editing
+    setMultiServiceMode(false);
+    setServiceItems([]);
+
     // Populate edit form with existing billing data
     setEditBillingForm({
       clientType: billing.company_id ? 'company' : 'individual',
@@ -465,6 +494,21 @@ const ServiceBilling: React.FC = () => {
       customServiceCharges: billing.typing_charges?.toString() || '',
       customGovernmentCharges: billing.government_charges?.toString() || ''
     });
+
+    // Initialize search fields for company and service
+    if (billing.company_id) {
+      const company = companies.find(c => c.id === billing.company_id);
+      if (company) {
+        setSearchCompany(company.companyName);
+      }
+    }
+
+    if (billing.service_type_id) {
+      const service = services.find(s => s.id === billing.service_type_id);
+      if (service) {
+        setSearchService(`${service.name} - AED ${service.typingCharges + service.governmentCharges}`);
+      }
+    }
 
     // Load company employees if it's a company billing
     if (billing.company_id) {
@@ -1322,14 +1366,21 @@ const ServiceBilling: React.FC = () => {
       newErrors.individualId = 'Please select an individual';
     }
 
-    if (!billingForm.serviceTypeId) {
-      newErrors.serviceTypeId = 'Please select a service';
+    // In multi-service mode, validate service items instead of single service
+    if (multiServiceMode) {
+      if (serviceItems.length === 0) {
+        newErrors.serviceTypeId = 'Please add at least one service';
+      }
+    } else {
+      if (!billingForm.serviceTypeId) {
+        newErrors.serviceTypeId = 'Please select a service';
+      }
+      if (!billingForm.quantity || parseInt(billingForm.quantity) <= 0) {
+        newErrors.quantity = 'Valid quantity is required';
+      }
     }
 
     if (!billingForm.serviceDate) newErrors.serviceDate = 'Service date is required';
-    if (!billingForm.quantity || parseInt(billingForm.quantity) <= 0) {
-      newErrors.quantity = 'Valid quantity is required';
-    }
 
     // Validate card selection when cash type is 'card'
     if (billingForm.cashType === 'card' && !billingForm.cardId) {
@@ -1347,6 +1398,95 @@ const ServiceBilling: React.FC = () => {
       return;
     }
 
+    // Handle multi-service mode
+    if (multiServiceMode) {
+      if (serviceItems.length === 0) {
+        toast.error('Please add at least one service');
+        return;
+      }
+
+      // Validate all service items have a service selected
+      const invalidItems = serviceItems.filter(item => !item.service_id);
+      if (invalidItems.length > 0) {
+        toast.error('Please select a service for all items');
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const createdBillings = [];
+
+        // Create a billing record for each service item
+        for (const item of serviceItems) {
+          const service = services.find(s => s.id === item.service_id);
+          if (!service) continue;
+
+          const discount = parseFloat(billingForm.discount) || 0;
+          const discountPerItem = serviceItems.length > 0 ? discount / serviceItems.length : 0;
+          const vendorCost = parseFloat(billingForm.vendorCost) || 0;
+          const vendorCostPerItem = serviceItems.length > 0 ? vendorCost / serviceItems.length : 0;
+
+          const subtotal = item.line_total;
+          const totalAmount = Math.max(0, subtotal - discountPerItem);
+
+          // Calculate VAT
+          const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
+          let vatAmount = 0;
+          if (billingForm.vatAppliesTo === 'service_charge') {
+            const typingCharges = item.typing_charges * item.quantity;
+            const discountOnTyping = Math.min(discountPerItem, typingCharges);
+            const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
+            vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+          } else {
+            vatAmount = (totalAmount * vatPercentage) / 100;
+          }
+          const totalAmountWithVat = totalAmount + vatAmount;
+
+          const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}-${createdBillings.length + 1}`;
+
+          const billingData = {
+            company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
+            individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
+            service_type_id: item.service_id,
+            assigned_employee_id: billingForm.clientType === 'individual' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
+            company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
+            service_date: billingForm.serviceDate,
+            cash_type: billingForm.cashType,
+            typing_charges: item.typing_charges * item.quantity,
+            government_charges: item.government_charges * item.quantity,
+            discount: discountPerItem,
+            total_amount: totalAmount,
+            vat_percentage: vatPercentage,
+            vat_amount: vatAmount,
+            vat_applies_to: billingForm.vatAppliesTo,
+            total_amount_with_vat: totalAmountWithVat,
+            quantity: item.quantity,
+            status: 'pending',
+            notes: billingForm.notes ? `${billingForm.notes} (Multi-service billing ${createdBillings.length + 1}/${serviceItems.length})` : `Multi-service billing ${createdBillings.length + 1}/${serviceItems.length}`,
+            invoice_generated: true,
+            invoice_number: invoiceNumber,
+            card_id: billingForm.cashType === 'card' && billingForm.cardId ? billingForm.cardId : null
+          };
+
+          const createdBilling = await dbHelpers.createServiceBilling(billingData);
+          createdBillings.push(createdBilling);
+        }
+
+        toast.success(`✅ Created ${createdBillings.length} service billings successfully!`);
+        setShowCreateBilling(false);
+        resetForm();
+        loadServiceBillings();
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.error('Error creating multi-service billings:', error);
+        toast.error('Failed to create service billings');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Single service mode (original logic)
     try {
       const selectedService = services.find(s => s.id === billingForm.serviceTypeId);
       if (!selectedService) return;
@@ -1627,6 +1767,10 @@ const ServiceBilling: React.FC = () => {
       customGovernmentCharges: ''
     });
     setErrors({});
+    setMultiServiceMode(false);
+    setServiceItems([]);
+    setSearchCompany('');
+    setSearchService('');
   };
 
   const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1736,22 +1880,216 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
+  // Searchable dropdown handlers
+  const handleCompanySelect = async (company: Company) => {
+    setBillingForm(prev => ({ ...prev, companyId: company.id }));
+    setSearchCompany(company.companyName);
+    setShowCompanyDropdown(false);
+
+    // Load company employees and credit info
+    loadCompanyEmployees(company.id);
+
+    // Load credit information
+    try {
+      const creditUsage = await dbHelpers.getCompanyCreditUsage(company.id);
+      setSelectedCompanyCredit(creditUsage);
+      console.log('Company credit info loaded:', creditUsage);
+    } catch (error) {
+      console.error('Error loading company credit info:', error);
+      setSelectedCompanyCredit(null);
+    }
+
+    // Load advance payment balance
+    try {
+      const balanceData = await dbHelpers.getAvailableAdvanceBalance(company.id, 'company');
+      setSelectedCustomerAdvanceBalance(balanceData.availableBalance);
+      console.log('💰 Company advance payment balance:', balanceData);
+    } catch (error) {
+      console.error('Error loading advance balance:', error);
+      setSelectedCustomerAdvanceBalance(0);
+    }
+  };
+
+  const handleServiceSelect = (service: ServiceType) => {
+    if (multiServiceMode) {
+      // In multi-service mode, add to service items
+      addServiceItem(service);
+    } else {
+      // In single service mode, set the service
+      setBillingForm(prev => ({ ...prev, serviceTypeId: service.id }));
+      setSearchService(`${service.name} - AED ${service.typingCharges + service.governmentCharges}`);
+    }
+    setShowServiceDropdown(false);
+  };
+
+  // Multi-service management functions
+  const addServiceItem = (service?: ServiceType) => {
+    const newItem: ServiceItem = {
+      id: Date.now().toString(),
+      service_id: service?.id || '',
+      service_name: service?.name || '',
+      quantity: 1,
+      typing_charges: service?.typingCharges || 0,
+      government_charges: service?.governmentCharges || 0,
+      line_total: service ? (service.typingCharges + service.governmentCharges) : 0,
+      default_typing_charges: service?.typingCharges,
+      default_government_charges: service?.governmentCharges
+    };
+    setServiceItems(prev => [...prev, newItem]);
+    setSearchService(''); // Clear search after adding
+  };
+
+  const removeServiceItem = (id: string) => {
+    setServiceItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const updateServiceItem = (id: string, field: keyof ServiceItem, value: any) => {
+    setServiceItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, [field]: value };
+
+        // Recalculate line total when quantity or charges change
+        if (field === 'quantity' || field === 'typing_charges' || field === 'government_charges') {
+          const qty = field === 'quantity' ? parseInt(value) || 1 : item.quantity;
+          const typing = field === 'typing_charges' ? parseFloat(value) || 0 : item.typing_charges;
+          const govt = field === 'government_charges' ? parseFloat(value) || 0 : item.government_charges;
+          updated.line_total = (typing + govt) * qty;
+        }
+
+        return updated;
+      }
+      return item;
+    }));
+  };
+
+  const handleServiceItemServiceSelect = (itemId: string, service: ServiceType) => {
+    setServiceItems(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          service_id: service.id,
+          service_name: service.name,
+          typing_charges: service.typingCharges,
+          government_charges: service.governmentCharges,
+          line_total: (service.typingCharges + service.governmentCharges) * item.quantity,
+          default_typing_charges: service.typingCharges,
+          default_government_charges: service.governmentCharges
+        };
+      }
+      return item;
+    }));
+  };
+
+  const toggleMultiServiceMode = () => {
+    const newMode = !multiServiceMode;
+    setMultiServiceMode(newMode);
+
+    if (newMode) {
+      // Switching to multi-service mode
+      // If there's a selected service, add it as the first item
+      if (billingForm.serviceTypeId) {
+        const selectedService = services.find(s => s.id === billingForm.serviceTypeId);
+        if (selectedService) {
+          const quantity = parseInt(billingForm.quantity) || 1;
+          const typingCharges = billingForm.customServiceCharges ?
+            parseFloat(billingForm.customServiceCharges) :
+            selectedService.typingCharges;
+          const governmentCharges = billingForm.customGovernmentCharges ?
+            parseFloat(billingForm.customGovernmentCharges) :
+            selectedService.governmentCharges;
+
+          setServiceItems([{
+            id: Date.now().toString(),
+            service_id: selectedService.id,
+            service_name: selectedService.name,
+            quantity: quantity,
+            typing_charges: typingCharges,
+            government_charges: governmentCharges,
+            line_total: (typingCharges + governmentCharges) * quantity,
+            default_typing_charges: selectedService.typingCharges,
+            default_government_charges: selectedService.governmentCharges
+          }]);
+        }
+      } else {
+        // Start with one empty item
+        addServiceItem();
+      }
+      // Clear single service selection
+      setBillingForm(prev => ({
+        ...prev,
+        serviceTypeId: '',
+        customServiceCharges: '',
+        customGovernmentCharges: ''
+      }));
+      setSearchService('');
+    } else {
+      // Switching to single service mode
+      // If there's one service item, convert it back
+      if (serviceItems.length === 1) {
+        const item = serviceItems[0];
+        setBillingForm(prev => ({
+          ...prev,
+          serviceTypeId: item.service_id,
+          quantity: item.quantity.toString(),
+          customServiceCharges: item.typing_charges !== item.default_typing_charges ?
+            item.typing_charges.toString() : '',
+          customGovernmentCharges: item.government_charges !== item.default_government_charges ?
+            item.government_charges.toString() : ''
+        }));
+        const service = services.find(s => s.id === item.service_id);
+        if (service) {
+          setSearchService(`${service.name} - AED ${service.typingCharges + service.governmentCharges}`);
+        }
+      }
+      setServiceItems([]);
+    }
+  };
+
+  // Filtered lists for searchable dropdowns
+  const filteredCompanies = companies.filter(company =>
+    company.companyName.toLowerCase().includes(searchCompany.toLowerCase())
+  );
+
+  const filteredServices = services.filter(service =>
+    service.name.toLowerCase().includes(searchService.toLowerCase())
+  );
+
+  // Reset search fields when opening create billing modal
+  const handleOpenCreateBilling = () => {
+    setSearchCompany('');
+    setSearchService('');
+    setMultiServiceMode(false);
+    setServiceItems([]);
+    setShowCreateBilling(true);
+  };
+
   const getSelectedService = () => {
     return services.find(s => s.id === billingForm.serviceTypeId);
   };
 
   const calculateTotal = () => {
-    const selectedService = getSelectedService();
-    if (!selectedService) return { typing: 0, government: 0, total: 0, discount: 0, profit: 0, vendorCost: 0, vatPercentage: 0, vatAmount: 0, totalWithVat: 0 };
+    let typing = 0;
+    let government = 0;
 
-    const quantity = parseInt(billingForm.quantity) || 1;
-    // Use custom charges if provided, otherwise use service defaults
-    const typing = billingForm.customServiceCharges ?
-      parseFloat(billingForm.customServiceCharges) :
-      selectedService.typingCharges * quantity;
-    const government = billingForm.customGovernmentCharges ?
-      parseFloat(billingForm.customGovernmentCharges) :
-      selectedService.governmentCharges * quantity;
+    if (multiServiceMode) {
+      // Calculate totals from service items
+      typing = serviceItems.reduce((sum, item) => sum + (item.typing_charges * item.quantity), 0);
+      government = serviceItems.reduce((sum, item) => sum + (item.government_charges * item.quantity), 0);
+    } else {
+      // Single service mode
+      const selectedService = getSelectedService();
+      if (!selectedService) return { typing: 0, government: 0, total: 0, discount: 0, profit: 0, vendorCost: 0, vatPercentage: 0, vatAmount: 0, totalWithVat: 0, subtotal: 0 };
+
+      const quantity = parseInt(billingForm.quantity) || 1;
+      // Use custom charges if provided, otherwise use service defaults
+      typing = billingForm.customServiceCharges ?
+        parseFloat(billingForm.customServiceCharges) :
+        selectedService.typingCharges * quantity;
+      government = billingForm.customGovernmentCharges ?
+        parseFloat(billingForm.customGovernmentCharges) :
+        selectedService.governmentCharges * quantity;
+    }
+
     const discount = parseFloat(billingForm.discount) || 0;
     const vendorCost = parseFloat(billingForm.vendorCost) || 0;
     const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
@@ -1871,7 +2209,7 @@ Servigence Business Services
               <p className="text-gray-500 mt-1">Create and manage service billings with invoice generation</p>
             </div>
             <button
-              onClick={() => setShowCreateBilling(true)}
+              onClick={handleOpenCreateBilling}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2"
             >
               <Plus className="w-5 h-5" />
@@ -1977,7 +2315,7 @@ Servigence Business Services
               <h3 className="text-lg font-medium text-gray-900 mb-2">Service Billing Dashboard</h3>
               <p className="text-gray-500 mb-6">Overview of your service billing activities and revenue.</p>
               <button
-                onClick={() => setShowCreateBilling(true)}
+                onClick={handleOpenCreateBilling}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
               >
                 <Plus className="w-5 h-5" />
@@ -2163,7 +2501,7 @@ Servigence Business Services
                           <h3 className="text-lg font-medium text-gray-900 mb-2">No service billings found</h3>
                           <p className="text-gray-600 mb-4">Start by creating your first service billing.</p>
                           <button
-                            onClick={() => setShowCreateBilling(true)}
+                            onClick={handleOpenCreateBilling}
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
                           >
                             Create Billing
@@ -2364,20 +2702,46 @@ Servigence Business Services
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Select Company <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      name="companyId"
-                      value={billingForm.companyId}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.companyId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                        }`}
-                    >
-                      <option value="">Select a company</option>
-                      {companies.map((company) => (
-                        <option key={company.id} value={company.id}>
-                          {company.companyName}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input
+                          type="text"
+                          value={searchCompany}
+                          onChange={(e) => {
+                            setSearchCompany(e.target.value);
+                            setShowCompanyDropdown(true);
+                          }}
+                          onFocus={() => setShowCompanyDropdown(true)}
+                          onBlur={() => {
+                            // Delay to allow click on dropdown item
+                            setTimeout(() => setShowCompanyDropdown(false), 200);
+                          }}
+                          placeholder="Search and select company..."
+                          className={`pl-10 pr-4 py-3 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            errors.companyId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                          }`}
+                        />
+                      </div>
+
+                      {showCompanyDropdown && filteredCompanies.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredCompanies.map((company) => (
+                            <button
+                              key={company.id}
+                              type="button"
+                              onClick={() => handleCompanySelect(company)}
+                              className="w-full px-4 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+                            >
+                              <div className="font-medium">{company.companyName}</div>
+                              {company.phone1 && (
+                                <div className="text-sm text-gray-500">{company.phone1}</div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     {errors.companyId && (
                       <p className="mt-1 text-sm text-red-600 flex items-center">
                         <AlertCircle className="w-4 h-4 mr-1" />
@@ -2502,27 +2866,196 @@ Servigence Business Services
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Select Service <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    name="serviceTypeId"
-                    value={billingForm.serviceTypeId}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.serviceTypeId ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                  >
-                    <option value="">Select a service</option>
-                    {services.map((service) => (
-                      <option key={service.id} value={service.id}>
-                        {service.name} - AED {service.typingCharges + service.governmentCharges}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.serviceTypeId && (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="text"
+                        value={searchService}
+                        onChange={(e) => {
+                          setSearchService(e.target.value);
+                          setShowServiceDropdown(true);
+                        }}
+                        onFocus={() => setShowServiceDropdown(true)}
+                        onBlur={() => {
+                          // Delay to allow click on dropdown item
+                          setTimeout(() => setShowServiceDropdown(false), 200);
+                        }}
+                        placeholder="Search and select service..."
+                        className={`pl-10 pr-4 py-3 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          errors.serviceTypeId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                    </div>
+
+                    {showServiceDropdown && filteredServices.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredServices.map((service) => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => handleServiceSelect(service)}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+                          >
+                            <div className="font-medium">{service.name}</div>
+                            <div className="text-sm text-gray-500">
+                              AED {service.typingCharges + service.governmentCharges}
+                              {service.category && ` • ${service.category}`}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {errors.serviceTypeId && !multiServiceMode && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-4 h-4 mr-1" />
                       {errors.serviceTypeId}
                     </p>
                   )}
+
+                  {/* Multi-Service Mode Toggle */}
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={toggleMultiServiceMode}
+                      className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors ${
+                        multiServiceMode
+                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {multiServiceMode ? '✓ Multi-Service Mode' : 'Enable Multi-Service Mode'}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {multiServiceMode
+                        ? 'You can add multiple services to this billing'
+                        : 'Click to add multiple services to a single billing'}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Multi-Service Items Section */}
+                {multiServiceMode && (
+                  <div className="lg:col-span-2">
+                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-gray-900">Service Items</h3>
+                        <button
+                          type="button"
+                          onClick={() => addServiceItem()}
+                          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add Service</span>
+                        </button>
+                      </div>
+
+                      {serviceItems.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                          <p>No services added yet. Click "Add Service" to begin.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {serviceItems.map((item, index) => (
+                            <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-start justify-between mb-3">
+                                <h4 className="font-medium text-gray-900">Service #{index + 1}</h4>
+                                <button
+                                  type="button"
+                                  onClick={() => removeServiceItem(item.id)}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Remove service"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Service Selection */}
+                                <div className="md:col-span-2">
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Service <span className="text-red-500">*</span>
+                                  </label>
+                                  <select
+                                    value={item.service_id}
+                                    onChange={(e) => {
+                                      const service = services.find(s => s.id === e.target.value);
+                                      if (service) {
+                                        handleServiceItemServiceSelect(item.id, service);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    <option value="">Select a service</option>
+                                    {services.map((service) => (
+                                      <option key={service.id} value={service.id}>
+                                        {service.name} - AED {service.typingCharges + service.governmentCharges}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Quantity */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                                  <input
+                                    type="number"
+                                    value={item.quantity}
+                                    onChange={(e) => updateServiceItem(item.id, 'quantity', e.target.value)}
+                                    min="1"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+
+                                {/* Line Total */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Line Total</label>
+                                  <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg font-medium text-gray-900">
+                                    AED {item.line_total.toFixed(2)}
+                                  </div>
+                                </div>
+
+                                {/* Service Charges */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Service Charges (AED)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={item.typing_charges}
+                                    onChange={(e) => updateServiceItem(item.id, 'typing_charges', e.target.value)}
+                                    min="0"
+                                    step="0.01"
+                                    placeholder={item.default_typing_charges?.toString() || '0'}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+
+                                {/* Government Charges */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Government Charges (AED)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={item.government_charges}
+                                    onChange={(e) => updateServiceItem(item.id, 'government_charges', e.target.value)}
+                                    min="0"
+                                    step="0.01"
+                                    placeholder={item.default_government_charges?.toString() || '0'}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Employee Assignment */}
                 <div>
@@ -2667,30 +3200,32 @@ Servigence Business Services
                   </div>
                 )}
 
-                {/* Quantity */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    value={billingForm.quantity}
-                    onChange={handleInputChange}
-                    min="1"
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.quantity ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                  />
-                  {errors.quantity && (
-                    <p className="mt-1 text-sm text-red-600 flex items-center">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      {errors.quantity}
-                    </p>
-                  )}
-                </div>
+                {/* Quantity - Hide in multi-service mode */}
+                {!multiServiceMode && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Quantity <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={billingForm.quantity}
+                      onChange={handleInputChange}
+                      min="1"
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.quantity ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                    />
+                    {errors.quantity && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        {errors.quantity}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-                {/* Custom Service Charges */}
-                {billingForm.serviceTypeId && (
+                {/* Custom Service Charges - Hide in multi-service mode */}
+                {!multiServiceMode && billingForm.serviceTypeId && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Service Charges (AED) <span className="text-gray-500">(Optional - Override default)</span>
@@ -2709,8 +3244,8 @@ Servigence Business Services
                   </div>
                 )}
 
-                {/* Custom Government Charges */}
-                {billingForm.serviceTypeId && (
+                {/* Custom Government Charges - Hide in multi-service mode */}
+                {!multiServiceMode && billingForm.serviceTypeId && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Government Charges (AED) <span className="text-gray-500">(Optional - Override default)</span>

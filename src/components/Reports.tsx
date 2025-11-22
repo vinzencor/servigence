@@ -38,6 +38,7 @@ import OutstandingReport from './reports/OutstandingReport';
 import CreditReport from './reports/CreditReport';
 import DebitReport from './reports/DebitReport';
 import AdvancePaymentReport from './reports/AdvancePaymentReport';
+import VendorReports from './VendorReports';
 
 interface ReportType {
   id: string;
@@ -158,6 +159,14 @@ const Reports: React.FC = () => {
       icon: Clock,
       color: 'violet',
       category: 'financial'
+    },
+    {
+      id: 'vendor',
+      title: 'Vendor Report',
+      description: 'Vendor transactions, expenses, and performance metrics',
+      icon: Users,
+      color: 'slate',
+      category: 'operational'
     }
   ];
 
@@ -190,7 +199,8 @@ const Reports: React.FC = () => {
       amber: 'bg-amber-100 text-amber-600 border-amber-200',
       teal: 'bg-teal-100 text-teal-600 border-teal-200',
       rose: 'bg-rose-100 text-rose-600 border-rose-200',
-      violet: 'bg-violet-100 text-violet-600 border-violet-200'
+      violet: 'bg-violet-100 text-violet-600 border-violet-200',
+      slate: 'bg-slate-100 text-slate-600 border-slate-200'
     };
     return colorMap[color] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
@@ -223,6 +233,8 @@ const Reports: React.FC = () => {
         return <DebitReport />;
       case 'advance-payment':
         return <AdvancePaymentReport />;
+      case 'vendor':
+        return <VendorReports />;
       default:
         return null;
     }

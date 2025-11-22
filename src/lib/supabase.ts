@@ -3193,9 +3193,152 @@ export const dbHelpers = {
     }
   },
 
+  // Individual Financial Data Functions
+  async getIndividualServiceBillings(individualId: string, startDate?: string, endDate?: string) {
+    let query = supabase
+      .from('service_billings')
+      .select(`
+        id,
+        invoice_number,
+        service_date,
+        typing_charges,
+        government_charges,
+        vat_amount,
+        total_amount_with_vat,
+        status,
+        cash_type,
+        created_at,
+        service_type:service_types(name)
+      `)
+      .eq('individual_id', individualId)
+      .order('service_date', { ascending: false });
+
+    if (startDate) {
+      query = query.gte('service_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('service_date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  async getIndividualAdvancePayments(individualId: string, startDate?: string, endDate?: string) {
+    let query = supabase
+      .from('account_transactions')
+      .select('*')
+      .eq('individual_id', individualId)
+      .eq('transaction_type', 'advance_payment')
+      .order('transaction_date', { ascending: false });
+
+    if (startDate) {
+      query = query.gte('transaction_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('transaction_date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  async getIndividualAccountTransactions(individualId: string, startDate?: string, endDate?: string) {
+    let query = supabase
+      .from('account_transactions')
+      .select('*')
+      .eq('individual_id', individualId)
+      .order('transaction_date', { ascending: false });
+
+    if (startDate) {
+      query = query.gte('transaction_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('transaction_date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  async getIndividualFinancialSummary(individualId: string, startDate?: string, endDate?: string) {
+    try {
+      // Get ALL service billings for this individual (excluding cancelled)
+      const { data: allBillings, error: allBillingsError } = await supabase
+        .from('service_billings')
+        .select('id, total_amount, service_date, status')
+        .eq('individual_id', individualId)
+        .neq('status', 'cancelled');
+
+      if (allBillingsError) {
+        console.error('Error loading all billings:', allBillingsError);
+        throw allBillingsError;
+      }
+
+      // Get ALL advance payments for this individual
+      const { data: allPayments, error: allPaymentsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount, transaction_date')
+        .eq('individual_id', individualId)
+        .eq('transaction_type', 'advance_payment')
+        .eq('status', 'completed');
+
+      if (allPaymentsError) {
+        console.error('Error loading all payments:', allPaymentsError);
+        throw allPaymentsError;
+      }
+
+      // Get ALL account transactions for credits/debits
+      const { data: allTransactions, error: allTransactionsError } = await supabase
+        .from('account_transactions')
+        .select('id, amount, transaction_type')
+        .eq('individual_id', individualId)
+        .in('transaction_type', ['credit', 'debit']);
+
+      if (allTransactionsError) {
+        console.error('Error loading all transactions:', allTransactionsError);
+        throw allTransactionsError;
+      }
+
+      // Calculate totals
+      const totalBilled = (allBillings || []).reduce((sum, billing) =>
+        sum + (parseFloat(billing.total_amount?.toString() || '0')), 0);
+
+      const totalPaid = (allPayments || []).reduce((sum, payment) =>
+        sum + (parseFloat(payment.amount?.toString() || '0')), 0);
+
+      const totalCredits = (allTransactions || [])
+        .filter(t => t.transaction_type === 'credit' || parseFloat(t.amount?.toString() || '0') > 0)
+        .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
+
+      const totalDebits = (allTransactions || [])
+        .filter(t => t.transaction_type === 'debit' || parseFloat(t.amount?.toString() || '0') < 0)
+        .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount?.toString() || '0')), 0);
+
+      const totalOutstanding = Math.max(0, totalBilled - totalPaid);
+
+      return {
+        totalBilled,
+        totalPaid,
+        totalOutstanding,
+        totalCredits,
+        totalDebits,
+        billingCount: (allBillings || []).length,
+        paymentCount: (allPayments || []).length,
+        transactionCount: (allTransactions || []).length
+      };
+    } catch (error) {
+      console.error('Error calculating financial summary:', error);
+      throw error;
+    }
+  },
+
   // Expense Management Functions
   async getExpenses() {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('account_transactions')
       .select('*')
       .eq('transaction_type', 'expense')

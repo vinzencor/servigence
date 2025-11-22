@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
-  FileText, 
+import {
+  TrendingUp,
+  Users,
+  DollarSign,
+  FileText,
   Calendar,
   Download,
   Filter,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import { exportToPDF } from '../utils/pdfExport';
 
 interface VendorMetric {
   id: string;
@@ -118,8 +119,60 @@ Report End
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
-    toast.success('Vendor report downloaded');
+
+    toast.success('Vendor report downloaded as TXT');
+  };
+
+  const exportPDF = () => {
+    if (!reportsData) return;
+
+    const title = 'Vendor Performance Report';
+    const dateRange = `${dateFrom || 'All time'} to ${dateTo || 'Present'}`;
+
+    // Summary data
+    const summaryData = [
+      { label: 'Total Vendors', value: reportsData.totalVendors.toString() },
+      { label: 'Total Jobs', value: reportsData.totalJobs.toString() },
+      { label: 'Total Cost', value: `AED ${reportsData.totalCost.toLocaleString()}` },
+      { label: 'Total Revenue', value: `AED ${reportsData.totalRevenue.toLocaleString()}` },
+      { label: 'Total Profit', value: `AED ${(reportsData.totalRevenue - reportsData.totalCost).toLocaleString()}` }
+    ];
+
+    // Vendor breakdown table - convert to object format
+    const columns = [
+      { header: 'Vendor', dataKey: 'vendor' },
+      { header: 'Category', dataKey: 'category' },
+      { header: 'Jobs', dataKey: 'jobs' },
+      { header: 'Completed', dataKey: 'completed' },
+      { header: 'Pending', dataKey: 'pending' },
+      { header: 'Cost', dataKey: 'cost' },
+      { header: 'Revenue', dataKey: 'revenue' },
+      { header: 'Profit', dataKey: 'profit' },
+      { header: 'Completion %', dataKey: 'completion' }
+    ];
+
+    const data = reportsData.vendors.map(vendor => ({
+      vendor: vendor.name,
+      category: vendor.serviceCategory,
+      jobs: vendor.totalJobs.toString(),
+      completed: vendor.completedJobs.toString(),
+      pending: vendor.pendingJobs.toString(),
+      cost: `AED ${vendor.totalCost.toLocaleString()}`,
+      revenue: `AED ${vendor.totalRevenue.toLocaleString()}`,
+      profit: `AED ${vendor.profit.toLocaleString()}`,
+      completion: `${vendor.completionRate.toFixed(1)}%`
+    }));
+
+    exportToPDF({
+      title,
+      dateRange,
+      summaryData,
+      columns,
+      data,
+      fileName: `vendor-report-${new Date().toISOString().split('T')[0]}.pdf`
+    });
+
+    toast.success('Vendor report exported to PDF');
   };
 
   if (loading) {
@@ -169,13 +222,22 @@ Report End
           <h1 className="text-2xl font-bold text-gray-900">Vendor Reports</h1>
           <p className="text-gray-600">Track vendor performance and costs</p>
         </div>
-        <button
-          onClick={generateReport}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          <span>Download Report</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={generateReport}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export TXT</span>
+          </button>
+          <button
+            onClick={exportPDF}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
