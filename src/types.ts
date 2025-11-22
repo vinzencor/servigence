@@ -89,20 +89,27 @@ export interface Employee {
 
 export interface Dependent {
   id: string;
-  employeeId: string;
+  employeeId?: string;
+  individualId?: string;
   name: string;
   relationship: 'spouse' | 'child' | 'parent';
   nationality: string;
   passportNumber: string;
   passportExpiry: string;
-  visaStatus: 'active' | 'pending' | 'expired' | 'cancelled';
+  visaStatus?: 'active' | 'pending' | 'expired' | 'cancelled';
   visaNumber?: string;
   visaIssueDate?: string;
   visaExpiryDate?: string;
   emiratesId?: string;
   emiratesIdExpiry?: string;
   dateOfBirth: string;
-  documents: DependentDocument[];
+  phone?: string;
+  email?: string;
+  status?: 'active' | 'inactive';
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  documents?: DependentDocument[];
 }
 
 export interface EmployeeDocument {

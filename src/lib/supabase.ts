@@ -365,6 +365,62 @@ export const dbHelpers = {
     return data
   },
 
+  // Dependents (for both employees and individuals)
+  async getDependents(employeeId?: string, individualId?: string) {
+    let query = supabase
+      .from('dependents')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (employeeId) {
+      query = query.eq('employee_id', employeeId);
+    }
+
+    if (individualId) {
+      query = query.eq('individual_id', individualId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error fetching dependents:', error);
+      throw error;
+    }
+    return data;
+  },
+
+  async createDependent(dependent: any) {
+    const { data, error } = await supabase
+      .from('dependents')
+      .insert([dependent])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateDependent(dependentId: string, updates: any) {
+    const { data, error } = await supabase
+      .from('dependents')
+      .update(updates)
+      .eq('id', dependentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteDependent(dependentId: string) {
+    const { data, error } = await supabase
+      .from('dependents')
+      .delete()
+      .eq('id', dependentId);
+
+    if (error) throw error;
+    return data;
+  },
+
   // Employee Documents
   async createEmployeeDocument(document: any) {
     const { data, error } = await supabase

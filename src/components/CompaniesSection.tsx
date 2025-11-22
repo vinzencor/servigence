@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import IndividualEditModal from './IndividualEditModal';
 import CompanyFinancialModal from './CompanyFinancialModal';
 import IndividualFinancialModal from './IndividualFinancialModal';
+import DependentManagement from './DependentManagement';
 
 interface CompaniesSectionProps {
   companies: Company[];
@@ -48,6 +49,9 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [showIndividualFinancialModal, setShowIndividualFinancialModal] = useState(false);
   const [financialIndividual, setFinancialIndividual] = useState<any>(null);
+  const [showDependentManagement, setShowDependentManagement] = useState(false);
+  const [dependentIndividual, setDependentIndividual] = useState<any>(null);
+  const [individualDependentCounts, setIndividualDependentCounts] = useState<Record<string, number>>({});
 
   // Load companies and individuals from Supabase on component mount
   useEffect(() => {
@@ -140,9 +144,27 @@ const CompaniesSection: React.FC<CompaniesSectionProps> = ({
       const supabaseIndividuals = await dbHelpers.getIndividuals(user?.service_employee_id, user?.role);
       console.log('Loaded individuals:', supabaseIndividuals);
       setIndividuals(supabaseIndividuals || []);
+
+      // Load dependent counts for each individual
+      await loadDependentCounts(supabaseIndividuals || []);
     } catch (error) {
       console.error('Error loading individuals:', error);
       setIndividuals([]);
+    }
+  };
+
+  const loadDependentCounts = async (individualsList: any[]) => {
+    try {
+      const counts: Record<string, number> = {};
+
+      for (const individual of individualsList) {
+        const dependents = await dbHelpers.getDependents(undefined, individual.id);
+        counts[individual.id] = dependents?.length || 0;
+      }
+
+      setIndividualDependentCounts(counts);
+    } catch (error) {
+      console.error('Error loading dependent counts:', error);
     }
   };
 
@@ -358,6 +380,40 @@ This action cannot be undone. Are you sure?`;
 
     setFinancialIndividual(transformedIndividual);
     setShowIndividualFinancialModal(true);
+  };
+
+  const handleManageDependents = (individual: any) => {
+    // Transform snake_case database fields to camelCase for the component
+    const transformedIndividual: Individual = {
+      id: individual.id,
+      individualName: individual.individual_name,
+      nationality: individual.nationality,
+      phone1: individual.phone1,
+      phone2: individual.phone2,
+      email1: individual.email1,
+      email2: individual.email2,
+      address: individual.address,
+      idNumber: individual.id_number,
+      passportNumber: individual.passport_number,
+      passportExpiry: individual.passport_expiry,
+      emiratesId: individual.emirates_id,
+      emiratesIdExpiry: individual.emirates_id_expiry,
+      visaNumber: individual.visa_number,
+      visaExpiry: individual.visa_expiry,
+      licenseNumber: individual.license_number,
+      creditLimit: individual.credit_limit || 0,
+      creditLimitDays: individual.credit_limit_days,
+      openingBalance: individual.opening_balance || 0,
+      openingBalanceUpdatedAt: individual.opening_balance_updated_at,
+      openingBalanceUpdatedBy: individual.opening_balance_updated_by,
+      dateOfRegistration: individual.date_of_registration || individual.created_at,
+      createdBy: individual.created_by || 'System',
+      status: individual.status || 'active',
+      lastActivity: individual.last_activity
+    };
+
+    setDependentIndividual(transformedIndividual);
+    setShowDependentManagement(true);
   };
 
   const confirmDeleteIndividual = async () => {
@@ -720,6 +776,18 @@ This action cannot be undone. Are you sure?`;
                               title="Edit Individual"
                             >
                               <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleManageDependents(individual)}
+                              className="relative text-teal-600 hover:text-teal-900 transition-colors"
+                              title="Manage Dependents"
+                            >
+                              <Users className="w-4 h-4" />
+                              {individualDependentCounts[individual.id] > 0 && (
+                                <span className="absolute -top-2 -right-2 bg-teal-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                                  {individualDependentCounts[individual.id]}
+                                </span>
+                              )}
                             </button>
                             <button
                               onClick={() => handleIndividualFinancialDetails(individual)}
@@ -1246,6 +1314,19 @@ This action cannot be undone. Are you sure?`;
           onClose={() => {
             setShowIndividualFinancialModal(false);
             setFinancialIndividual(null);
+          }}
+        />
+      )}
+
+      {/* Dependent Management */}
+      {showDependentManagement && dependentIndividual && (
+        <DependentManagement
+          individual={dependentIndividual}
+          onBack={async () => {
+            setShowDependentManagement(false);
+            setDependentIndividual(null);
+            // Reload individuals to update dependent counts
+            await loadIndividuals();
           }}
         />
       )}
