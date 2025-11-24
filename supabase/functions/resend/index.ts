@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${RESEND_API_KEY}`
       },
       body: JSON.stringify({
-        from: from || 'Servigence CRM <info@servigens.com>',
+        from: from || 'Servigens CRM <info@servigens.com>',
         to: Array.isArray(to) ? to : [to],
         subject: subject,
         html: html,

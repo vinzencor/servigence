@@ -455,7 +455,7 @@ Your account is fully balanced. Thank you for your prompt payments.
 `}
 
 Thank you for your business!
-Servigence Business Services
+Servigens Business Services
 
 Generated on ${new Date().toLocaleString()}
 This is a computer-generated statement.

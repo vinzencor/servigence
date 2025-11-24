@@ -82,7 +82,7 @@ class EmailService {
           to: template.to,
           subject: template.subject,
           html: template.html,
-          from: template.from || 'Servigence CRM <info@servigens.com>'
+          from: template.from || 'Servigens CRM <info@servigens.com>'
         })
       });
 

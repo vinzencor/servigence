@@ -16,7 +16,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Printer
+  Printer,
+  Wallet
 } from 'lucide-react';
 import { Company } from '../types';
 import { dbHelpers, supabase } from '../lib/supabase';
@@ -74,6 +75,8 @@ interface FinancialSummary {
   creditLimit: number;
   availableCredit: number;
   overdueAmount: number;
+  totalAdvancePayments: number;
+  advancePaymentCount: number;
 }
 
 const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
@@ -102,7 +105,9 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
     totalDebits: 0,
     creditLimit: company.creditLimit || 0,
     availableCredit: 0,
-    overdueAmount: 0
+    overdueAmount: 0,
+    totalAdvancePayments: 0,
+    advancePaymentCount: 0
   });
 
   useEffect(() => {
@@ -253,6 +258,10 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
       const totalPaid = (allPayments || []).reduce((sum, payment) =>
         sum + (parseFloat(payment.amount?.toString() || '0')), 0);
 
+      // Calculate advance payment statistics
+      const totalAdvancePayments = totalPaid; // Same as totalPaid
+      const advancePaymentCount = (allPayments || []).length;
+
       // Calculate credits and debits from ALL account transactions (not filtered by date)
       const totalCredits = (allTransactions || [])
         .filter(t => t.transaction_type === 'credit' || parseFloat(t.amount?.toString() || '0') > 0)
@@ -292,7 +301,9 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
         totalCredits,
         totalDebits,
         availableCredit,
-        overdueAmount
+        overdueAmount,
+        totalAdvancePayments,
+        advancePaymentCount
       });
 
       setFinancialSummary({
@@ -303,7 +314,9 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
         totalDebits,
         creditLimit: company.creditLimit || 0,
         availableCredit,
-        overdueAmount
+        overdueAmount,
+        totalAdvancePayments,
+        advancePaymentCount
       });
     } catch (error) {
       console.error('Error calculating financial summary:', error);
@@ -511,7 +524,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
       </head>
       <body>
         <div class="header">
-          <div class="company-name">Servigence</div>
+          <div class="company-name">Servigens</div>
           <div class="statement-title">Financial Statement & Account Details</div>
           <div class="period">Period: ${new Date(dateRange.startDate).toLocaleDateString()} to ${new Date(dateRange.endDate).toLocaleDateString()}</div>
           <div class="period">Generated: ${new Date().toLocaleDateString()}</div>
@@ -525,6 +538,11 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
           <div class="summary-card">
             <div class="summary-title">Total Paid</div>
             <div class="summary-amount positive">AED ${financialSummary.totalPaid.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Advance Payments</div>
+            <div class="summary-amount positive">AED ${financialSummary.totalAdvancePayments.toLocaleString()}</div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">${financialSummary.advancePaymentCount} ${financialSummary.advancePaymentCount === 1 ? 'transaction' : 'transactions'}</div>
           </div>
           <div class="summary-card">
             <div class="summary-title">Outstanding Balance</div>
@@ -634,7 +652,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                 <Building2 className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Servigence</h2>
+                <h2 className="text-2xl font-bold">Servigens</h2>
                 <p className="text-blue-100">Financial Statement & Account Details</p>
               </div>
             </div>
@@ -744,7 +762,7 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                     </div>
 
                     {/* Financial Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <div className={`border rounded-lg p-4 ${
                         (company.openingBalance || 0) >= 0
                           ? 'bg-green-50 border-green-200'
@@ -790,6 +808,21 @@ const CompanyFinancialModal: React.FC<CompanyFinancialModalProps> = ({
                             </p>
                           </div>
                           <CheckCircle className="w-8 h-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-purple-600">Advance Payments</p>
+                            <p className="text-2xl font-bold text-purple-900">
+                              AED {financialSummary.totalAdvancePayments.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-purple-600 mt-1">
+                              {financialSummary.advancePaymentCount} {financialSummary.advancePaymentCount === 1 ? 'transaction' : 'transactions'}
+                            </p>
+                          </div>
+                          <Wallet className="w-8 h-8 text-purple-500" />
                         </div>
                       </div>
 

@@ -415,7 +415,7 @@ ${sortedExpenses.map(expense =>
         </table>
 
         <div class="footer">
-          <p>This report was generated automatically by Servigence Management System</p>
+          <p>This report was generated automatically by Servigen Management System</p>
         </div>
       </body>
       </html>

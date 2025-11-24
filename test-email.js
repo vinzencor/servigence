@@ -8,7 +8,7 @@ async function testEmail() {
       },
       body: JSON.stringify({
         to: ['servigence@gmail.com'],
-        subject: 'Test Email from Servigence',
+        subject: 'Test Email from Servigens',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -28,12 +28,12 @@ async function testEmail() {
               
               <div style="text-align: center; margin: 30px 0;">
                 <p style="color: #667eea; margin: 5px 0;">📧 Sent via Resend API</p>
-                <p style="color: #667eea; margin: 5px 0;">🚀 Servigence CRM System</p>
+                <p style="color: #667eea; margin: 5px 0;">🚀 Servigens CRM System</p>
               </div>
             </div>
             
             <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-              <p>This is a test message from Servigence CRM System.</p>
+              <p>This is a test message from Servigens CRM System.</p>
             </div>
           </div>
         `,

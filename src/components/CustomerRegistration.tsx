@@ -1195,7 +1195,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       <body>
         <div class="header">
           <div class="company-info">
-            <div class="company-name">SERVIGENCE</div>
+            <div class="company-name">SERVIGENS</div>
             <div class="company-tagline">Professional Business Services</div>
             <div class="company-details">
               Dubai, United Arab Emirates<br>
@@ -1416,7 +1416,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
       </head>
       <body>
         <div class="header">
-          <div class="company-name">SERVIGENCE</div>
+          <div class="company-name">SERVIGENS</div>
           <div style="color: #6b7280;">Professional Services</div>
         </div>
 

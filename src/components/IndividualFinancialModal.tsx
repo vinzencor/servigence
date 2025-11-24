@@ -13,7 +13,8 @@ import {
   User,
   Search,
   Filter,
-  CheckCircle
+  CheckCircle,
+  Wallet
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -71,6 +72,8 @@ interface FinancialSummary {
   creditLimit: number;
   availableCredit: number;
   overdueAmount: number;
+  totalAdvancePayments: number;
+  advancePaymentCount: number;
 }
 
 const IndividualFinancialModal: React.FC<IndividualFinancialModalProps> = ({
@@ -99,7 +102,9 @@ const IndividualFinancialModal: React.FC<IndividualFinancialModalProps> = ({
     totalDebits: 0,
     creditLimit: individual.creditLimit || 0,
     availableCredit: 0,
-    overdueAmount: 0
+    overdueAmount: 0,
+    totalAdvancePayments: 0,
+    advancePaymentCount: 0
   });
 
   useEffect(() => {
@@ -321,6 +326,7 @@ const IndividualFinancialModal: React.FC<IndividualFinancialModalProps> = ({
         { label: 'Opening Balance', value: `AED ${(individual.openingBalance || 0).toFixed(2)}` },
         { label: 'Total Billed', value: `AED ${financialSummary.totalBilled.toFixed(2)}` },
         { label: 'Total Paid', value: `AED ${financialSummary.totalPaid.toFixed(2)}` },
+        { label: 'Advance Payments', value: `AED ${financialSummary.totalAdvancePayments.toFixed(2)} (${financialSummary.advancePaymentCount} ${financialSummary.advancePaymentCount === 1 ? 'transaction' : 'transactions'})` },
         { label: 'Outstanding Balance', value: `AED ${financialSummary.totalOutstanding.toFixed(2)}` },
         { label: 'Credit Limit', value: `AED ${financialSummary.creditLimit.toFixed(2)}` },
         { label: 'Available Credit', value: `AED ${financialSummary.availableCredit.toFixed(2)}` }
@@ -403,6 +409,10 @@ const IndividualFinancialModal: React.FC<IndividualFinancialModalProps> = ({
       const totalOutstanding = Math.max(0, openingBalance + summary.totalBilled - summary.totalPaid);
       const availableCredit = Math.max(0, (individual.creditLimit || 0) - totalOutstanding);
 
+      // Advance payment statistics
+      const totalAdvancePayments = summary.totalPaid; // Same as totalPaid
+      const advancePaymentCount = summary.paymentCount || 0;
+
       setFinancialSummary({
         totalBilled: summary.totalBilled,
         totalPaid: summary.totalPaid,
@@ -411,7 +421,9 @@ const IndividualFinancialModal: React.FC<IndividualFinancialModalProps> = ({
         totalDebits: summary.totalDebits,
         creditLimit: individual.creditLimit || 0,
         availableCredit,
-        overdueAmount: 0 // Calculate if needed
+        overdueAmount: 0, // Calculate if needed
+        totalAdvancePayments,
+        advancePaymentCount
       });
     } catch (error) {
       console.error('Error loading financial summary:', error);
@@ -552,6 +564,21 @@ const IndividualFinancialModal: React.FC<IndividualFinancialModalProps> = ({
                           </p>
                         </div>
                         <CheckCircle className="w-8 h-8 text-purple-600 opacity-50" />
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-4 rounded-lg border border-pink-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-pink-600 font-medium">Advance Payments</p>
+                          <p className="text-2xl font-bold text-pink-900 mt-1">
+                            AED {financialSummary.totalAdvancePayments.toFixed(2)}
+                          </p>
+                          <p className="text-xs text-pink-600 mt-1">
+                            {financialSummary.advancePaymentCount} {financialSummary.advancePaymentCount === 1 ? 'transaction' : 'transactions'}
+                          </p>
+                        </div>
+                        <Wallet className="w-8 h-8 text-pink-600 opacity-50" />
                       </div>
                     </div>
 
