@@ -95,7 +95,8 @@ const ReceiptManagement: React.FC = () => {
     paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'credit_card' | 'cheque' | 'online',
     status: 'paid' as 'paid' | 'cancelled',
     transactionId: '',
-    notes: ''
+    notes: '',
+    contactDetails: ''
   });
 
   // Load receipts and customers on component mount
@@ -315,7 +316,7 @@ const ReceiptManagement: React.FC = () => {
         reference_number: receiptNumber,
         status: receiptForm.status === 'cancelled' ? 'cancelled' : 'completed',
         created_by: 'current-user',
-        notes: `Receipt Number: ${receiptNumber}${receiptForm.notes ? ` | ${receiptForm.notes}` : ''}`,
+        notes: `Receipt Number: ${receiptNumber}${receiptForm.contactDetails ? ` | Contact: ${receiptForm.contactDetails}` : ''}${receiptForm.notes ? ` | ${receiptForm.notes}` : ''}`,
         // Set customer ID based on customer type
         ...(receiptForm.customerType === 'company'
           ? { company_id: receiptForm.customerId, individual_id: null }
@@ -395,7 +396,8 @@ const ReceiptManagement: React.FC = () => {
       paymentMethod: 'cash',
       status: 'paid',
       transactionId: '',
-      notes: ''
+      notes: '',
+      contactDetails: ''
     });
   };
 
@@ -1256,6 +1258,20 @@ const ReceiptManagement: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contact Details
+                  <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={receiptForm.contactDetails}
+                  onChange={(e) => setReceiptForm(prev => ({ ...prev, contactDetails: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Enter contact number or details"
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
@@ -1552,6 +1568,20 @@ const ReceiptManagement: React.FC = () => {
                   onChange={(e) => setReceiptForm(prev => ({ ...prev, description: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                   placeholder="Enter service description (optional)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contact Details
+                  <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={receiptForm.contactDetails}
+                  onChange={(e) => setReceiptForm(prev => ({ ...prev, contactDetails: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  placeholder="Enter contact number or details"
                 />
               </div>
 

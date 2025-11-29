@@ -36,6 +36,7 @@ interface Invoice {
   tax: number;
   total: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue';
+  contactDetails?: string;
   services: {
     id: string;
     name: string;
@@ -138,6 +139,7 @@ const InvoiceManagement: React.FC = () => {
     companyName: '',
     companyEmail: '',
     companyAddress: '',
+    contactDetails: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: '',
     services: [] as Array<{
@@ -374,6 +376,7 @@ const InvoiceManagement: React.FC = () => {
         tax: createInvoiceForm.tax,
         total: createInvoiceForm.total,
         status: 'draft',
+        contactDetails: createInvoiceForm.contactDetails,
         services: createInvoiceForm.services
       };
 
@@ -385,6 +388,7 @@ const InvoiceManagement: React.FC = () => {
         companyName: '',
         companyEmail: '',
         companyAddress: '',
+        contactDetails: '',
         invoiceDate: new Date().toISOString().split('T')[0],
         dueDate: '',
         services: [],
@@ -622,6 +626,11 @@ const InvoiceManagement: React.FC = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">{selectedInvoice.invoiceNumber}</h2>
                   <p className="text-gray-600">{selectedInvoice.companyName}</p>
+                  {selectedInvoice.contactDetails && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      <span className="font-medium">Contact:</span> {selectedInvoice.contactDetails}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => setSelectedInvoice(null)}
@@ -800,6 +809,19 @@ const InvoiceManagement: React.FC = () => {
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                       placeholder="Enter company address"
                       rows={2}
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contact Details
+                      <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={createInvoiceForm.contactDetails}
+                      onChange={(e) => setCreateInvoiceForm(prev => ({ ...prev, contactDetails: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Enter contact number or details"
                     />
                   </div>
                 </div>

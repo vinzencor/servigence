@@ -68,6 +68,19 @@ interface ServiceExpiryReminderEmailData {
   individualName?: string;
 }
 
+interface DocumentExpiryReminderEmailData {
+  recipientEmail: string;
+  recipientName: string;
+  documentTitle: string;
+  documentType?: string;
+  documentNumber?: string;
+  expiryDate: string;
+  daysUntilExpiry: number;
+  companyName?: string;
+  individualName?: string;
+  serviceName?: string;
+}
+
 class EmailService {
   private async sendEmail(template: EmailTemplate): Promise<boolean> {
     try {
@@ -688,6 +701,117 @@ class EmailService {
 
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
             <p style="margin: 0;">This is an automated service expiry reminder from Servigens CRM System.</p>
+            <p style="margin: 5px 0 0 0;">Please do not reply to this email. For inquiries, contact info@servigens.com</p>
+          </div>
+        </div>
+      `,
+    };
+
+    return await this.sendEmail(template);
+  }
+
+  // Send document expiry reminder email
+  async sendDocumentExpiryReminderEmail(data: DocumentExpiryReminderEmailData): Promise<boolean> {
+    // Determine urgency based on days until expiry
+    const urgencyColor = data.daysUntilExpiry <= 3 ? '#dc2626' : data.daysUntilExpiry <= 7 ? '#f59e0b' : '#3b82f6';
+    const urgencyText = data.daysUntilExpiry <= 3 ? '🚨 URGENT' : data.daysUntilExpiry <= 7 ? '⚠️ IMPORTANT' : '📅 REMINDER';
+    const urgencyBg = data.daysUntilExpiry <= 3 ? '#fef2f2' : data.daysUntilExpiry <= 7 ? '#fffbeb' : '#eff6ff';
+    const urgencyBorder = data.daysUntilExpiry <= 3 ? '#fecaca' : data.daysUntilExpiry <= 7 ? '#fde68a' : '#bfdbfe';
+
+    const clientName = data.companyName || data.individualName || data.recipientName;
+
+    const template: EmailTemplate = {
+      to: data.recipientEmail,
+      subject: `${urgencyText}: Document Expiry Reminder - ${data.documentTitle} (${data.daysUntilExpiry} days remaining)`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <!-- Header with Company Logo and Info -->
+          <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              Dar Al Salam - Building, 9th Floor - Corniche St<br>
+              Al Danah - Abu Dhabi Corniche - UAE<br>
+              Tel: +97154887748 | Mob: 0544887748<br>
+              Email: info@servigens.com | Web: https://www.servigens.com/<br>
+              TRN: 1050653462000003
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div style="background: linear-gradient(135deg, ${urgencyColor} 0%, ${urgencyColor}dd 100%); padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">${urgencyText} Document Expiry Reminder</h1>
+          </div>
+
+          <!-- Main Content -->
+          <div style="background: white; padding: 35px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Dear ${clientName},</h2>
+
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
+              This is a friendly reminder that your document <strong>"${data.documentTitle}"</strong> will expire soon.
+            </p>
+
+            ${data.daysUntilExpiry <= 3 ? `
+              <div style="background: ${urgencyBg}; border: 1px solid ${urgencyBorder}; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: ${urgencyColor}; font-weight: bold; margin: 0; font-size: 16px;">
+                  ⚠️ URGENT: Your document will expire in ${data.daysUntilExpiry} day${data.daysUntilExpiry === 1 ? '' : 's'}. Please renew immediately to avoid any issues!
+                </p>
+              </div>
+            ` : ''}
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
+              <h3 style="color: #333; margin-top: 0; font-size: 18px;">Document Details:</h3>
+              <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
+                <strong>Document Title:</strong> ${data.documentTitle}<br>
+                ${data.documentType ? `<strong>Document Type:</strong> ${data.documentType}<br>` : ''}
+                ${data.documentNumber ? `<strong>Document Number:</strong> ${data.documentNumber}<br>` : ''}
+                ${data.serviceName ? `<strong>Related Service:</strong> ${data.serviceName}<br>` : ''}
+                <strong>Expiry Date:</strong> ${new Date(data.expiryDate).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}<br>
+                <strong>Days Remaining:</strong> <span style="color: ${urgencyColor}; font-weight: bold;">${data.daysUntilExpiry} day${data.daysUntilExpiry === 1 ? '' : 's'}</span>
+              </p>
+            </div>
+
+            <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+              <h3 style="color: #1e40af; margin-top: 0; font-size: 18px;">📋 Action Required:</h3>
+              <p style="color: #1e3a8a; line-height: 1.6; font-size: 16px; margin: 0;">
+                Please take the necessary steps to renew this document before it expires. Contact us if you need assistance with the renewal process.
+              </p>
+            </div>
+
+            <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+              <p style="color: white; margin: 0; font-size: 16px; line-height: 1.6;">
+                <strong>Need Help?</strong><br>
+                Contact us at <a href="mailto:info@servigens.com" style="color: white; text-decoration: underline;">info@servigens.com</a><br>
+                or call us at <strong>+971 54 887 7748</strong>
+              </p>
+            </div>
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
+              Thank you for choosing Servigens Business Group.<br><br>
+              Best regards,<br>
+              <strong>The Servigens Team</strong>
+            </p>
+          </div>
+
+          <!-- Partner Logos Footer -->
+          <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
+            <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
+              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+            </div>
+          </div>
+
+          <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+            <p style="margin: 0;">This is an automated document expiry reminder from Servigens CRM System.</p>
             <p style="margin: 5px 0 0 0;">Please do not reply to this email. For inquiries, contact info@servigens.com</p>
           </div>
         </div>

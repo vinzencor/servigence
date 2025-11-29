@@ -64,6 +64,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     id: string;
     expiryDate: string;
     serviceId?: string;
+    customReminderIntervals?: string;
+    customReminderDates?: string;
     file: File | null;
     fileUrl?: string;
     preview?: string;
@@ -218,6 +220,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
         id: doc.id,
         expiryDate: doc.expiry_date || '',
         serviceId: doc.service_id || undefined,
+        customReminderIntervals: doc.custom_reminder_intervals || '',
+        customReminderDates: doc.custom_reminder_dates || '',
         file: null, // Existing files are already uploaded
         fileUrl: doc.file_attachments?.[0]?.url || '',
         preview: 'existing-file'
@@ -245,6 +249,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
     const newDoc = {
       id: tempId,
       expiryDate: '',
+      customReminderIntervals: '',
+      customReminderDates: '',
       file: null,
       preview: undefined
     };
@@ -756,6 +762,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 title: documentTitle,
                 document_number: null,
                 expiry_date: doc.expiryDate,
+                custom_reminder_intervals: doc.customReminderIntervals || null,
+                custom_reminder_dates: doc.customReminderDates || null,
                 service_id: doc.serviceId,
                 ...(fileUrl && {
                   file_attachments: [{
@@ -804,6 +812,8 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 title: documentTitle,
                 document_number: null,
                 expiry_date: doc.expiryDate,
+                custom_reminder_intervals: doc.customReminderIntervals || null,
+                custom_reminder_dates: doc.customReminderDates || null,
                 service_id: doc.serviceId,
                 file_attachments: fileUrl ? [{
                   name: doc.file?.name,
@@ -1537,6 +1547,44 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                             Documents with expiry dates will create automatic reminders
                           </p>
                         </div>
+                      </div>
+
+                      {/* Custom Reminder Intervals */}
+                      {doc.expiryDate && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Custom Reminder Intervals (Days Before Expiry)
+                            <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={doc.customReminderIntervals || ''}
+                            onChange={(e) => updateDocument(doc.id, 'customReminderIntervals', e.target.value)}
+                            placeholder="e.g., 30, 15, 7, 3"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter days before expiry separated by commas (e.g., 30, 15, 7). Leave blank to use global settings.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Custom Reminder Dates */}
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Custom Reminder Dates (Specific Calendar Dates)
+                          <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={doc.customReminderDates || ''}
+                          onChange={(e) => updateDocument(doc.id, 'customReminderDates', e.target.value)}
+                          placeholder="e.g., 2025-02-15, 2025-03-01, 2025-03-10"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Enter specific dates when reminders should be sent, separated by commas (e.g., 2025-02-15, 2025-03-01). Independent of expiry date.
+                        </p>
                       </div>
 
                       <div className="mt-4">

@@ -87,7 +87,9 @@ const ServiceBilling: React.FC = () => {
     cardId: '',
     customServiceCharges: '',
     customGovernmentCharges: '',
-    expiryDate: ''
+    expiryDate: '',
+    customReminderIntervals: '',
+    customReminderDates: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -158,7 +160,9 @@ const ServiceBilling: React.FC = () => {
     cardId: '',
     customServiceCharges: '',
     customGovernmentCharges: '',
-    expiryDate: ''
+    expiryDate: '',
+    customReminderIntervals: '',
+    customReminderDates: ''
   });
 
   const tabs = [
@@ -497,7 +501,9 @@ const ServiceBilling: React.FC = () => {
       cardId: billing.card_id || '',
       customServiceCharges: billing.typing_charges?.toString() || '',
       customGovernmentCharges: billing.government_charges?.toString() || '',
-      expiryDate: billing.expiry_date || ''
+      expiryDate: billing.expiry_date || '',
+      customReminderIntervals: billing.custom_reminder_intervals || '',
+      customReminderDates: billing.custom_reminder_dates || ''
     });
 
     // Initialize search fields for company and service
@@ -600,6 +606,8 @@ const ServiceBilling: React.FC = () => {
         company_employee_id: editBillingForm.clientType === 'company' && editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
         service_date: editBillingForm.serviceDate,
         expiry_date: editBillingForm.expiryDate || null,
+        custom_reminder_intervals: editBillingForm.customReminderIntervals || null,
+        custom_reminder_dates: editBillingForm.customReminderDates || null,
         cash_type: editBillingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
@@ -922,7 +930,8 @@ const ServiceBilling: React.FC = () => {
 
     // Safely get client information
     const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientContact = billing.company?.contact_number || billing.individual?.contact_number || '';
+    const clientEmail = billing.company?.email1 || billing.individual?.email1 || '';
+    const clientPhone = billing.company?.phone1 || billing.individual?.phone1 || '';
     const serviceName = billing.service_type?.name || 'Service';
     const invoiceNumber = billing.invoice_number || 'N/A';
     const quantity = billing.quantity || 1;
@@ -1270,7 +1279,8 @@ const ServiceBilling: React.FC = () => {
           <div class="client-info">
             <div class="client-details">
               <strong>${clientName.toUpperCase()}</strong>
-              ${clientContact ? `<strong>Contact No:</strong> ${clientContact}` : ''}
+              ${clientEmail ? `<div><strong>Email:</strong> ${clientEmail}</div>` : ''}
+              ${clientPhone ? `<div><strong>Phone:</strong> ${clientPhone}</div>` : ''}
             </div>
             <div class="status-section">
               <span class="status-badge">${amountDue > 0 ? 'Unpaid' : 'Paid'}</span>
@@ -1369,7 +1379,8 @@ const ServiceBilling: React.FC = () => {
     const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
 
     const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientContact = billing.company?.contact_number || billing.individual?.contact_number || '';
+    const clientEmail = billing.company?.email1 || billing.individual?.email1 || '';
+    const clientPhone = billing.company?.phone1 || billing.individual?.phone1 || '';
     const serviceName = billing.service_type?.name || 'Service';
     const invoiceNumber = billing.invoice_number || 'N/A';
     const quantity = billing.quantity || 1;
@@ -1652,7 +1663,8 @@ const ServiceBilling: React.FC = () => {
           <div class="client-info">
             <div class="client-details">
               <strong>${clientName.toUpperCase()}</strong>
-              ${clientContact ? `<strong>Contact No:</strong> ${clientContact}` : ''}
+              ${clientEmail ? `<div><strong>Email:</strong> ${clientEmail}</div>` : ''}
+              ${clientPhone ? `<div><strong>Phone:</strong> ${clientPhone}</div>` : ''}
             </div>
             <div class="status-section">
               <span class="status-badge">${amountDue > 0 ? 'Unpaid' : 'Paid'}</span>
@@ -1750,7 +1762,8 @@ const ServiceBilling: React.FC = () => {
     const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
 
     const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientContact = billing.company?.contact_number || billing.individual?.contact_number || '';
+    const clientEmail = billing.company?.email1 || billing.individual?.email1 || '';
+    const clientPhone = billing.company?.phone1 || billing.individual?.phone1 || '';
     const serviceName = billing.service_type?.name || 'Service';
     const invoiceNumber = billing.invoice_number || 'N/A';
     const quantity = billing.quantity || 1;
@@ -2030,7 +2043,8 @@ const ServiceBilling: React.FC = () => {
           <div class="client-info">
             <div class="client-details">
               <strong>${clientName.toUpperCase()}</strong>
-              ${clientContact ? `<strong>Contact No:</strong> ${clientContact}` : ''}
+              ${clientEmail ? `<div><strong>Email:</strong> ${clientEmail}</div>` : ''}
+              ${clientPhone ? `<div><strong>Phone:</strong> ${clientPhone}</div>` : ''}
             </div>
             <div class="status-section">
               <span class="status-badge">${amountDue > 0 ? 'Unpaid' : 'Paid'}</span>
@@ -2220,6 +2234,8 @@ const ServiceBilling: React.FC = () => {
             company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
             service_date: billingForm.serviceDate,
             expiry_date: billingForm.expiryDate || null,
+            custom_reminder_intervals: billingForm.customReminderIntervals || null,
+            custom_reminder_dates: billingForm.customReminderDates || null,
             cash_type: billingForm.cashType,
             typing_charges: item.typing_charges * item.quantity,
             government_charges: item.government_charges * item.quantity,
@@ -2300,6 +2316,8 @@ const ServiceBilling: React.FC = () => {
         company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
         service_date: billingForm.serviceDate,
         expiry_date: billingForm.expiryDate || null,
+        custom_reminder_intervals: billingForm.customReminderIntervals || null,
+        custom_reminder_dates: billingForm.customReminderDates || null,
         cash_type: billingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
@@ -2525,6 +2543,8 @@ const ServiceBilling: React.FC = () => {
       assignedEmployeeId: '',
       serviceDate: new Date().toISOString().split('T')[0],
       expiryDate: '',
+      customReminderIntervals: '',
+      customReminderDates: '',
       cashType: 'cash',
       quantity: '1',
       notes: '',
@@ -3902,6 +3922,46 @@ Servigens Business Services
                   </p>
                 </div>
 
+                {/* Custom Reminder Intervals */}
+                {billingForm.expiryDate && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Custom Reminder Intervals (Days Before Expiry)
+                      <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="customReminderIntervals"
+                      value={billingForm.customReminderIntervals || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g., 30, 15, 7, 3"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
+                      Enter days before expiry separated by commas (e.g., 30, 15, 7). Leave blank to use global settings.
+                    </p>
+                  </div>
+                )}
+
+                {/* Custom Reminder Dates */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Custom Reminder Dates (Specific Calendar Dates)
+                    <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="customReminderDates"
+                    value={billingForm.customReminderDates || ''}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 2025-02-15, 2025-03-01, 2025-03-10"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-gray-500 text-xs mt-1">
+                    Enter specific dates when reminders should be sent, separated by commas (e.g., 2025-02-15, 2025-03-01). Independent of expiry date.
+                  </p>
+                </div>
+
                 {/* Payment Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
@@ -4716,6 +4776,46 @@ Servigens Business Services
                   />
                   <p className="text-gray-500 text-xs mt-1">
                     Set an expiry date to receive automated email reminders before service expiration
+                  </p>
+                </div>
+
+                {/* Custom Reminder Intervals */}
+                {editBillingForm.expiryDate && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Custom Reminder Intervals (Days Before Expiry)
+                      <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="customReminderIntervals"
+                      value={editBillingForm.customReminderIntervals || ''}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, customReminderIntervals: e.target.value }))}
+                      placeholder="e.g., 30, 15, 7, 3"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
+                      Enter days before expiry separated by commas (e.g., 30, 15, 7). Leave blank to use global settings.
+                    </p>
+                  </div>
+                )}
+
+                {/* Custom Reminder Dates */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Custom Reminder Dates (Specific Calendar Dates)
+                    <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="customReminderDates"
+                    value={editBillingForm.customReminderDates || ''}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, customReminderDates: e.target.value }))}
+                    placeholder="e.g., 2025-02-15, 2025-03-01, 2025-03-10"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <p className="text-gray-500 text-xs mt-1">
+                    Enter specific dates when reminders should be sent, separated by commas (e.g., 2025-02-15, 2025-03-01). Independent of expiry date.
                   </p>
                 </div>
 

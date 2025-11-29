@@ -17,14 +17,24 @@ interface ReminderSettings {
 }
 
 const ExpiryReminderSettings: React.FC = () => {
-  const [settings, setSettings] = useState<ReminderSettings | null>(null);
+  const [serviceSettings, setServiceSettings] = useState<ReminderSettings | null>(null);
+  const [documentSettings, setDocumentSettings] = useState<ReminderSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [enabled, setEnabled] = useState(true);
-  const [reminderIntervals, setReminderIntervals] = useState<number[]>([30, 15, 7, 3, 1]);
-  const [emailSubject, setEmailSubject] = useState('Service Expiry Reminder - {{service_name}}');
-  const [emailTemplate, setEmailTemplate] = useState('');
-  const [newInterval, setNewInterval] = useState('');
+
+  // Service settings
+  const [serviceEnabled, setServiceEnabled] = useState(true);
+  const [serviceIntervals, setServiceIntervals] = useState<number[]>([30, 15, 7, 3, 1]);
+  const [serviceEmailSubject, setServiceEmailSubject] = useState('Service Expiry Reminder - {{service_name}}');
+  const [serviceEmailTemplate, setServiceEmailTemplate] = useState('');
+  const [newServiceInterval, setNewServiceInterval] = useState('');
+
+  // Document settings
+  const [documentEnabled, setDocumentEnabled] = useState(true);
+  const [documentIntervals, setDocumentIntervals] = useState<number[]>([30, 15, 7, 3, 1]);
+  const [documentEmailSubject, setDocumentEmailSubject] = useState('Document Expiry Reminder - {{document_title}}');
+  const [documentEmailTemplate, setDocumentEmailTemplate] = useState('');
+  const [newDocumentInterval, setNewDocumentInterval] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -33,22 +43,43 @@ const ExpiryReminderSettings: React.FC = () => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      // Load service settings
+      const { data: serviceData, error: serviceError } = await supabase
         .from('email_reminder_settings')
         .select('*')
         .eq('reminder_type', 'service_expiry')
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
+      if (serviceError && serviceError.code !== 'PGRST116') {
+        throw serviceError;
       }
 
-      if (data) {
-        setSettings(data);
-        setEnabled(data.enabled);
-        setReminderIntervals(data.reminder_intervals || [30, 15, 7, 3, 1]);
-        setEmailSubject(data.email_subject || 'Service Expiry Reminder - {{service_name}}');
-        setEmailTemplate(data.email_template || '');
+      if (serviceData) {
+        setServiceSettings(serviceData);
+        setServiceEnabled(serviceData.enabled);
+        setServiceIntervals(serviceData.reminder_intervals || [30, 15, 7, 3, 1]);
+        setServiceEmailSubject(serviceData.email_subject || 'Service Expiry Reminder - {{service_name}}');
+        setServiceEmailTemplate(serviceData.email_template || '');
+      }
+
+      // Load document settings
+      const { data: documentData, error: documentError } = await supabase
+        .from('email_reminder_settings')
+        .select('*')
+        .eq('reminder_type', 'document_expiry')
+        .single();
+
+      if (documentError && documentError.code !== 'PGRST116') {
+        throw documentError;
+      }
+
+      if (documentData) {
+        setDocumentSettings(documentData);
+        setDocumentEnabled(documentData.enabled);
+        setDocumentIntervals(documentData.reminder_intervals || [30, 15, 7, 3, 1]);
+        setDocumentEmailSubject(documentData.email_subject || 'Document Expiry Reminder - {{document_title}}');
+        setDocumentEmailTemplate(documentData.email_template || '');
       }
     } catch (error: any) {
       console.error('Error loading settings:', error);
@@ -62,30 +93,51 @@ const ExpiryReminderSettings: React.FC = () => {
     try {
       setSaving(true);
 
-      const settingsData = {
-        enabled,
+      // Save service settings
+      const serviceData = {
+        enabled: serviceEnabled,
         reminder_type: 'service_expiry',
-        reminder_intervals: reminderIntervals.sort((a, b) => b - a), // Sort descending
-        email_subject: emailSubject,
-        email_template: emailTemplate,
+        reminder_intervals: serviceIntervals.sort((a, b) => b - a), // Sort descending
+        email_subject: serviceEmailSubject,
+        email_template: serviceEmailTemplate,
         updated_at: new Date().toISOString(),
         updated_by: 'Admin'
       };
 
-      if (settings?.id) {
-        // Update existing settings
+      if (serviceSettings?.id) {
         const { error } = await supabase
           .from('email_reminder_settings')
-          .update(settingsData)
-          .eq('id', settings.id);
-
+          .update(serviceData)
+          .eq('id', serviceSettings.id);
         if (error) throw error;
       } else {
-        // Create new settings
         const { error } = await supabase
           .from('email_reminder_settings')
-          .insert([{ ...settingsData, created_by: 'Admin' }]);
+          .insert([{ ...serviceData, created_by: 'Admin' }]);
+        if (error) throw error;
+      }
 
+      // Save document settings
+      const documentData = {
+        enabled: documentEnabled,
+        reminder_type: 'document_expiry',
+        reminder_intervals: documentIntervals.sort((a, b) => b - a), // Sort descending
+        email_subject: documentEmailSubject,
+        email_template: documentEmailTemplate,
+        updated_at: new Date().toISOString(),
+        updated_by: 'Admin'
+      };
+
+      if (documentSettings?.id) {
+        const { error } = await supabase
+          .from('email_reminder_settings')
+          .update(documentData)
+          .eq('id', documentSettings.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('email_reminder_settings')
+          .insert([{ ...documentData, created_by: 'Admin' }]);
         if (error) throw error;
       }
 
@@ -99,18 +151,32 @@ const ExpiryReminderSettings: React.FC = () => {
     }
   };
 
-  const addInterval = () => {
-    const interval = parseInt(newInterval);
-    if (interval > 0 && !reminderIntervals.includes(interval)) {
-      setReminderIntervals([...reminderIntervals, interval].sort((a, b) => b - a));
-      setNewInterval('');
+  const addServiceInterval = () => {
+    const interval = parseInt(newServiceInterval);
+    if (interval > 0 && !serviceIntervals.includes(interval)) {
+      setServiceIntervals([...serviceIntervals, interval].sort((a, b) => b - a));
+      setNewServiceInterval('');
     } else {
       toast.error('Invalid interval or interval already exists');
     }
   };
 
-  const removeInterval = (interval: number) => {
-    setReminderIntervals(reminderIntervals.filter(i => i !== interval));
+  const removeServiceInterval = (interval: number) => {
+    setServiceIntervals(serviceIntervals.filter(i => i !== interval));
+  };
+
+  const addDocumentInterval = () => {
+    const interval = parseInt(newDocumentInterval);
+    if (interval > 0 && !documentIntervals.includes(interval)) {
+      setDocumentIntervals([...documentIntervals, interval].sort((a, b) => b - a));
+      setNewDocumentInterval('');
+    } else {
+      toast.error('Invalid interval or interval already exists');
+    }
+  };
+
+  const removeDocumentInterval = (interval: number) => {
+    setDocumentIntervals(documentIntervals.filter(i => i !== interval));
   };
 
   if (loading) {
@@ -122,15 +188,15 @@ const ExpiryReminderSettings: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto p-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 mb-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Settings className="w-8 h-8 text-white" />
             <div>
-              <h1 className="text-2xl font-bold text-white">Service Expiry Reminder Settings</h1>
-              <p className="text-blue-100 text-sm mt-1">Configure automated email reminders for service expiry dates</p>
+              <h1 className="text-2xl font-bold text-white">Expiry Reminder Settings</h1>
+              <p className="text-blue-100 text-sm mt-1">Configure automated email reminders for service and document expiry dates</p>
             </div>
           </div>
           <button
@@ -139,162 +205,215 @@ const ExpiryReminderSettings: React.FC = () => {
             className="bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors flex items-center space-x-2 disabled:opacity-50"
           >
             <Save className="w-5 h-5" />
-            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
+            <span>{saving ? 'Saving...' : 'Save All Settings'}</span>
           </button>
         </div>
       </div>
 
-      {/* Enable/Disable Toggle */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Bell className="w-6 h-6 text-blue-600" />
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">Automated Email Reminders</h2>
-              <p className="text-gray-600 text-sm mt-1">Enable or disable automated email reminders for service expiry</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* SERVICE EXPIRY SETTINGS */}
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg p-4">
+            <h2 className="text-xl font-bold text-white">Service Expiry Reminders</h2>
+            <p className="text-red-100 text-sm mt-1">Configure reminders for service billing expiry dates</p>
+          </div>
+
+          {/* Service Enable/Disable Toggle */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Bell className="w-6 h-6 text-red-600" />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Service Reminders</h3>
+                  <p className="text-gray-600 text-sm mt-1">Enable or disable service expiry reminders</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={serviceEnabled}
+                  onChange={(e) => setServiceEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-600"></div>
+                <span className="ml-3 text-sm font-medium text-gray-700">
+                  {serviceEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </label>
             </div>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
-            <span className="ml-3 text-sm font-medium text-gray-700">
-              {enabled ? 'Enabled' : 'Disabled'}
-            </span>
-          </label>
-        </div>
-      </div>
 
-      {/* Reminder Intervals */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <Clock className="w-6 h-6 text-blue-600" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800">Reminder Intervals</h2>
-            <p className="text-gray-600 text-sm mt-1">Set how many days before expiry to send reminder emails</p>
-          </div>
-        </div>
+          {/* Service Reminder Intervals */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <Clock className="w-6 h-6 text-red-600" />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">Service Intervals</h3>
+                <p className="text-gray-600 text-sm mt-1">Days before expiry to send reminders</p>
+              </div>
+            </div>
 
-        <div className="space-y-4">
-          {/* Current Intervals */}
-          <div className="flex flex-wrap gap-2">
-            {reminderIntervals.map((interval) => (
-              <div
-                key={interval}
-                className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg flex items-center space-x-2"
-              >
-                <Calendar className="w-4 h-4" />
-                <span className="font-medium">{interval} days before</span>
+            <div className="space-y-4">
+              {/* Current Intervals */}
+              <div className="flex flex-wrap gap-2">
+                {serviceIntervals.map((interval) => (
+                  <div
+                    key={interval}
+                    className="bg-red-100 text-red-800 px-4 py-2 rounded-lg flex items-center space-x-2"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span className="font-medium">{interval} days</span>
+                    <button
+                      onClick={() => removeServiceInterval(interval)}
+                      className="ml-2 text-red-600 hover:text-red-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add New Service Interval */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  value={newServiceInterval}
+                  onChange={(e) => setNewServiceInterval(e.target.value)}
+                  placeholder="Enter days (e.g., 30)"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                  min="1"
+                />
                 <button
-                  onClick={() => removeInterval(interval)}
-                  className="ml-2 text-red-600 hover:text-red-800"
+                  onClick={addServiceInterval}
+                  className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
                 >
-                  ×
+                  Add
                 </button>
               </div>
-            ))}
+            </div>
+          </div>
+        </div>
+
+        {/* DOCUMENT EXPIRY SETTINGS */}
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4">
+            <h2 className="text-xl font-bold text-white">Document Expiry Reminders</h2>
+            <p className="text-orange-100 text-sm mt-1">Configure reminders for document & certificate expiry dates</p>
           </div>
 
-          {/* Add New Interval */}
-          <div className="flex items-center space-x-2">
-            <input
-              type="number"
-              value={newInterval}
-              onChange={(e) => setNewInterval(e.target.value)}
-              placeholder="Enter days (e.g., 30)"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              min="1"
-            />
-            <button
-              onClick={addInterval}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Add Interval
-            </button>
+          {/* Document Enable/Disable Toggle */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Bell className="w-6 h-6 text-orange-600" />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Document Reminders</h3>
+                  <p className="text-gray-600 text-sm mt-1">Enable or disable document expiry reminders</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={documentEnabled}
+                  onChange={(e) => setDocumentEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-600"></div>
+                <span className="ml-3 text-sm font-medium text-gray-700">
+                  {documentEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </label>
+            </div>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start space-x-2">
-              <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium">How it works:</p>
-                <p className="mt-1">
-                  Reminder emails will be sent automatically when a service's expiry date matches any of the intervals above.
-                  For example, if you set intervals of 30, 15, and 7 days, emails will be sent 30 days before expiry, 15 days before, and 7 days before.
-                </p>
+          {/* Document Reminder Intervals */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <Clock className="w-6 h-6 text-orange-600" />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">Document Intervals</h3>
+                <p className="text-gray-600 text-sm mt-1">Days before expiry to send reminders</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Current Intervals */}
+              <div className="flex flex-wrap gap-2">
+                {documentIntervals.map((interval) => (
+                  <div
+                    key={interval}
+                    className="bg-orange-100 text-orange-800 px-4 py-2 rounded-lg flex items-center space-x-2"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span className="font-medium">{interval} days</span>
+                    <button
+                      onClick={() => removeDocumentInterval(interval)}
+                      className="ml-2 text-orange-600 hover:text-orange-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add New Document Interval */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  value={newDocumentInterval}
+                  onChange={(e) => setNewDocumentInterval(e.target.value)}
+                  placeholder="Enter days (e.g., 30)"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  min="1"
+                />
+                <button
+                  onClick={addDocumentInterval}
+                  className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  Add
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Email Template Customization */}
+      {/* Info Box */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+        <div className="flex items-start space-x-3">
+          <AlertCircle className="w-6 h-6 text-blue-600 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium text-lg mb-2">How Automated Reminders Work:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Reminder emails are sent automatically when expiry dates match the configured intervals</li>
+              <li>For example, with intervals of 30, 15, and 7 days, emails will be sent at each of these milestones</li>
+              <li>The system prevents duplicate emails - only one reminder per interval per day</li>
+              <li>Both service and document reminders work independently with their own settings</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Email Template Customization - Removed for now as templates are hardcoded in emailService */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <div className="flex items-center space-x-3 mb-4">
           <Mail className="w-6 h-6 text-blue-600" />
           <div>
-            <h2 className="text-lg font-semibold text-gray-800">Email Template</h2>
-            <p className="text-gray-600 text-sm mt-1">Customize the email subject and body (placeholders will be replaced automatically)</p>
+            <h2 className="text-lg font-semibold text-gray-800">Email Templates</h2>
+            <p className="text-gray-600 text-sm mt-1">Professional email templates are automatically used for both service and document expiry reminders</p>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {/* Email Subject */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Subject
-            </label>
-            <input
-              type="text"
-              value={emailSubject}
-              onChange={(e) => setEmailSubject(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Service Expiry Reminder - {{service_name}}"
-            />
-          </div>
-
-          {/* Email Body */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Body Template
-            </label>
-            <textarea
-              value={emailTemplate}
-              onChange={(e) => setEmailTemplate(e.target.value)}
-              rows={10}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-              placeholder="Enter email template..."
-            />
-          </div>
-
-          {/* Available Placeholders */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <p className="font-medium text-gray-800 mb-2">Available Placeholders:</p>
-            <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
-              <div><code className="bg-gray-200 px-2 py-1 rounded">{'{{client_name}}'}</code> - Client name</div>
-              <div><code className="bg-gray-200 px-2 py-1 rounded">{'{{service_name}}'}</code> - Service name</div>
-              <div><code className="bg-gray-200 px-2 py-1 rounded">{'{{invoice_number}}'}</code> - Invoice number</div>
-              <div><code className="bg-gray-200 px-2 py-1 rounded">{'{{expiry_date}}'}</code> - Expiry date</div>
-              <div><code className="bg-gray-200 px-2 py-1 rounded">{'{{days_until_expiry}}'}</code> - Days until expiry</div>
-              <div><code className="bg-gray-200 px-2 py-1 rounded">{'{{total_amount}}'}</code> - Total amount</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Success Message */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start space-x-2">
-        <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-        <div className="text-sm text-green-800">
-          <p className="font-medium">Note:</p>
-          <p className="mt-1">
-            The actual email template uses a professional HTML design with company branding, partner logos, and responsive layout.
-            The template above is for reference only. The system will automatically format the email with proper styling.
-          </p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <p className="font-medium text-gray-800 mb-2">Email Template Features:</p>
+          <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
+            <li>Professional HTML design with company branding and logo</li>
+            <li>Responsive layout optimized for all devices</li>
+            <li>Color-coded urgency indicators (red for urgent, orange for important, blue for normal)</li>
+            <li>Detailed service/document information display</li>
+            <li>Partner logos footer (Daman, ADJD, TAMM, Tasheel, Emirates, ICP)</li>
+            <li>Automatic placeholder replacement with actual data</li>
+          </ul>
         </div>
       </div>
     </div>

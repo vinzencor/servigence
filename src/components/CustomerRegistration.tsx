@@ -67,6 +67,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     id: string;
     expiryDate: string;
     serviceId?: string;
+    customReminderIntervals?: string;
+    customReminderDates?: string;
     file: File | null;
     fileUrl?: string;
     preview?: string;
@@ -202,6 +204,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
     const newDoc = {
       id: Date.now().toString(),
       expiryDate: '',
+      customReminderIntervals: '',
+      customReminderDates: '',
       file: null,
       preview: undefined
     };
@@ -575,6 +579,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 title: documentTitle,
                 document_number: null,
                 expiry_date: doc.expiryDate,
+                custom_reminder_intervals: doc.customReminderIntervals || null,
+                custom_reminder_dates: doc.customReminderDates || null,
                 service_id: doc.serviceId,
                 file_attachments: fileUrl ? [{
                   name: doc.file?.name,
@@ -741,6 +747,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                 document_number: null,
                 issue_date: null,
                 expiry_date: doc.expiryDate,
+                custom_reminder_intervals: doc.customReminderIntervals || null,
+                custom_reminder_dates: doc.customReminderDates || null,
                 document_type: 'individual_document',
                 file_attachments: fileUrl ? [{ name: doc.file?.name, url: fileUrl }] : [],
                 created_by: user?.name || 'System',
@@ -2222,6 +2230,44 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                               Documents with expiry dates will create automatic reminders
                             </p>
                           </div>
+                        </div>
+
+                        {/* Custom Reminder Intervals */}
+                        {doc.expiryDate && (
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Custom Reminder Intervals (Days Before Expiry)
+                              <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={doc.customReminderIntervals || ''}
+                              onChange={(e) => updateDocument(doc.id, 'customReminderIntervals', e.target.value)}
+                              placeholder="e.g., 30, 15, 7, 3"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Enter days before expiry separated by commas (e.g., 30, 15, 7). Leave blank to use global settings.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Custom Reminder Dates */}
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Custom Reminder Dates (Specific Calendar Dates)
+                            <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={doc.customReminderDates || ''}
+                            onChange={(e) => updateDocument(doc.id, 'customReminderDates', e.target.value)}
+                            placeholder="e.g., 2025-02-15, 2025-03-01, 2025-03-10"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter specific dates when reminders should be sent, separated by commas (e.g., 2025-02-15, 2025-03-01). Independent of expiry date.
+                          </p>
                         </div>
 
                         <div className="mt-4">
