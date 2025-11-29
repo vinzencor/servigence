@@ -14,6 +14,7 @@ import ServiceBilling from './components/ServiceBilling';
 import VendorManagement from './components/VendorManagement';
 import CardsManagement from './components/CardsManagement';
 import RemindersServices from './components/RemindersServices';
+import ServiceExpiryReminderManager from './components/ServiceExpiryReminderManager';
 import AccountManagement from './components/AccountManagement';
 import InvoiceManagement from './components/InvoiceManagement';
 import RemindersManagement from './components/RemindersManagement';
@@ -234,6 +235,8 @@ function AppContent() {
         return <Chat />;
       case 'reminders':
         return <RemindersServices />;
+      case 'service-expiry-reminders':
+        return <ServiceExpiryReminderManager />;
       case 'accounts':
         return <AccountManagement />;
       case 'invoices':

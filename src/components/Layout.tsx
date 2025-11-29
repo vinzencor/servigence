@@ -100,6 +100,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
     { id: 'cards', label: 'Cards', icon: CreditCard },
     { id: 'chat', label: 'Chat', icon: MessageCircle },
     { id: 'reminders', label: 'Reminders & Services', icon: Bell },
+    { id: 'service-expiry-reminders', label: 'Service Expiry Reminders', icon: Bell },
     { id: 'accounts', label: 'Account', icon: DollarSign },
     { id: 'expenses', label: 'Expenses', icon: TrendingDown },
     { id: 'invoices', label: 'Invoice', icon: FileText },

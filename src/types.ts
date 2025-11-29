@@ -308,6 +308,10 @@ export interface ServiceBilling {
   notes?: string;
   invoiceGenerated: boolean;
   invoiceNumber?: string;
+  expiryDate?: string;
+  renewalDate?: string;
+  reminderSent?: boolean;
+  lastReminderSentAt?: string;
   createdAt: string;
   updatedAt: string;
   // Populated fields

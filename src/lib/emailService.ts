@@ -55,6 +55,19 @@ interface GeneralReminderEmailData {
   daysUntilDue: number;
 }
 
+interface ServiceExpiryReminderEmailData {
+  recipientEmail: string;
+  recipientName: string;
+  serviceName: string;
+  invoiceNumber: string;
+  expiryDate: string;
+  daysUntilExpiry: number;
+  totalAmount: number;
+  serviceDate: string;
+  companyName?: string;
+  individualName?: string;
+}
+
 class EmailService {
   private async sendEmail(template: EmailTemplate): Promise<boolean> {
     try {
@@ -566,6 +579,116 @@ class EmailService {
 
           <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
             <p style="margin: 0;">This is an automated reminder from Servigens CRM System.</p>
+          </div>
+        </div>
+      `,
+    };
+
+    return await this.sendEmail(template);
+  }
+
+  // Send service expiry reminder email
+  async sendServiceExpiryReminderEmail(data: ServiceExpiryReminderEmailData): Promise<boolean> {
+    // Determine urgency based on days until expiry
+    const urgencyColor = data.daysUntilExpiry <= 3 ? '#dc2626' : data.daysUntilExpiry <= 7 ? '#f59e0b' : '#3b82f6';
+    const urgencyText = data.daysUntilExpiry <= 3 ? '🚨 URGENT' : data.daysUntilExpiry <= 7 ? '⚠️ IMPORTANT' : '📅 REMINDER';
+    const urgencyBg = data.daysUntilExpiry <= 3 ? '#fef2f2' : data.daysUntilExpiry <= 7 ? '#fffbeb' : '#eff6ff';
+    const urgencyBorder = data.daysUntilExpiry <= 3 ? '#fecaca' : data.daysUntilExpiry <= 7 ? '#fde68a' : '#bfdbfe';
+
+    const clientName = data.companyName || data.individualName || data.recipientName;
+
+    const template: EmailTemplate = {
+      to: data.recipientEmail,
+      subject: `${urgencyText}: Service Expiry Reminder - ${data.serviceName} (${data.daysUntilExpiry} days remaining)`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <!-- Header with Company Logo and Info -->
+          <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              Dar Al Salam - Building, 9th Floor - Corniche St<br>
+              Al Danah - Abu Dhabi Corniche - UAE<br>
+              Tel: +97154887748 | Mob: 0544887748<br>
+              Email: info@servigens.com | Web: https://www.servigens.com/<br>
+              TRN: 1050653462000003
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div style="background: linear-gradient(135deg, ${urgencyColor} 0%, ${urgencyColor}dd 100%); padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">${urgencyText} Service Expiry Reminder</h1>
+          </div>
+
+          <!-- Main Content -->
+          <div style="background: white; padding: 35px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; margin-top: 0; font-size: 20px;">Dear ${clientName},</h2>
+
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
+              This is a friendly reminder that your service <strong>"${data.serviceName}"</strong> will expire soon.
+            </p>
+
+            ${data.daysUntilExpiry <= 3 ? `
+              <div style="background: ${urgencyBg}; border: 1px solid ${urgencyBorder}; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: ${urgencyColor}; font-weight: bold; margin: 0; font-size: 16px;">
+                  ⚠️ URGENT: Your service will expire in ${data.daysUntilExpiry} day${data.daysUntilExpiry === 1 ? '' : 's'}. Please renew immediately to avoid service interruption!
+                </p>
+              </div>
+            ` : ''}
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
+              <h3 style="color: #333; margin-top: 0; font-size: 18px;">Service Details:</h3>
+              <p style="color: #666; line-height: 1.6; font-size: 16px; margin: 0;">
+                <strong>Service Name:</strong> ${data.serviceName}<br>
+                <strong>Invoice Number:</strong> ${data.invoiceNumber}<br>
+                <strong>Service Date:</strong> ${new Date(data.serviceDate).toLocaleDateString()}<br>
+                <strong>Expiry Date:</strong> <span style="color: ${urgencyColor}; font-weight: bold;">${new Date(data.expiryDate).toLocaleDateString()}</span><br>
+                <strong>Days Until Expiry:</strong> <span style="color: ${urgencyColor}; font-weight: bold;">${data.daysUntilExpiry} day${data.daysUntilExpiry === 1 ? '' : 's'}</span><br>
+                <strong>Total Amount:</strong> AED ${data.totalAmount.toFixed(2)}
+              </p>
+            </div>
+
+            <p style="color: #555; line-height: 1.8; font-size: 16px;">
+              To ensure uninterrupted service, please contact us to renew your service before the expiry date. Our team is ready to assist you with the renewal process.
+            </p>
+
+            <!-- Call to Action -->
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="mailto:info@servigens.com" style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px;">
+                📧 Contact Us to Renew
+              </a>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0; padding: 20px; background: #eff6ff; border-radius: 8px;">
+              <p style="color: #666; margin: 5px 0; font-size: 15px;"><strong>Need Assistance?</strong></p>
+              <p style="color: #2563eb; margin: 5px 0;">📧 info@servigens.com</p>
+              <p style="color: #2563eb; margin: 5px 0;">📞 +971 54 4887748</p>
+              <p style="color: #2563eb; margin: 5px 0;">🌐 https://www.servigens.com/</p>
+            </div>
+
+            <p style="color: #666; line-height: 1.6; font-size: 16px; margin-top: 30px;">
+              Thank you for choosing Servigens Business Group.<br><br>
+              Best regards,<br>
+              <strong>The Servigens Team</strong>
+            </p>
+          </div>
+
+          <!-- Partner Logos Footer -->
+          <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
+            <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
+              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
+              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+            </div>
+          </div>
+
+          <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+            <p style="margin: 0;">This is an automated service expiry reminder from Servigens CRM System.</p>
+            <p style="margin: 5px 0 0 0;">Please do not reply to this email. For inquiries, contact info@servigens.com</p>
           </div>
         </div>
       `,

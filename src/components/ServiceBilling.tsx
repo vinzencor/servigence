@@ -86,7 +86,8 @@ const ServiceBilling: React.FC = () => {
     discount: '0',
     cardId: '',
     customServiceCharges: '',
-    customGovernmentCharges: ''
+    customGovernmentCharges: '',
+    expiryDate: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -156,7 +157,8 @@ const ServiceBilling: React.FC = () => {
     discount: '0',
     cardId: '',
     customServiceCharges: '',
-    customGovernmentCharges: ''
+    customGovernmentCharges: '',
+    expiryDate: ''
   });
 
   const tabs = [
@@ -494,7 +496,8 @@ const ServiceBilling: React.FC = () => {
       discount: billing.discount?.toString() || '0',
       cardId: billing.card_id || '',
       customServiceCharges: billing.typing_charges?.toString() || '',
-      customGovernmentCharges: billing.government_charges?.toString() || ''
+      customGovernmentCharges: billing.government_charges?.toString() || '',
+      expiryDate: billing.expiry_date || ''
     });
 
     // Initialize search fields for company and service
@@ -596,6 +599,7 @@ const ServiceBilling: React.FC = () => {
         assigned_employee_id: editBillingForm.clientType === 'individual' && editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
         company_employee_id: editBillingForm.clientType === 'company' && editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
         service_date: editBillingForm.serviceDate,
+        expiry_date: editBillingForm.expiryDate || null,
         cash_type: editBillingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
@@ -2215,6 +2219,7 @@ const ServiceBilling: React.FC = () => {
             assigned_employee_id: billingForm.clientType === 'individual' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
             company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
             service_date: billingForm.serviceDate,
+            expiry_date: billingForm.expiryDate || null,
             cash_type: billingForm.cashType,
             typing_charges: item.typing_charges * item.quantity,
             government_charges: item.government_charges * item.quantity,
@@ -2294,6 +2299,7 @@ const ServiceBilling: React.FC = () => {
         assigned_employee_id: billingForm.clientType === 'individual' && billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
         company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
         service_date: billingForm.serviceDate,
+        expiry_date: billingForm.expiryDate || null,
         cash_type: billingForm.cashType,
         typing_charges: typingCharges,
         government_charges: governmentCharges,
@@ -2518,6 +2524,7 @@ const ServiceBilling: React.FC = () => {
       serviceTypeId: '',
       assignedEmployeeId: '',
       serviceDate: new Date().toISOString().split('T')[0],
+      expiryDate: '',
       cashType: 'cash',
       quantity: '1',
       notes: '',
@@ -3877,6 +3884,24 @@ Servigens Business Services
                   )}
                 </div>
 
+                {/* Expiry Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Expiry Date
+                    <span className="text-gray-500 text-xs ml-2">(Optional - for renewal reminders)</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="expiryDate"
+                    value={billingForm.expiryDate || ''}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-gray-500 text-xs mt-1">
+                    Set an expiry date to receive automated email reminders before service expiration
+                  </p>
+                </div>
+
                 {/* Payment Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
@@ -4674,6 +4699,24 @@ Servigens Business Services
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     required
                   />
+                </div>
+
+                {/* Expiry Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Expiry Date
+                    <span className="text-gray-500 text-xs ml-2">(Optional - for renewal reminders)</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="expiryDate"
+                    value={editBillingForm.expiryDate || ''}
+                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <p className="text-gray-500 text-xs mt-1">
+                    Set an expiry date to receive automated email reminders before service expiration
+                  </p>
                 </div>
 
                 {/* Payment Type */}
