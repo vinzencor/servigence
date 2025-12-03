@@ -1325,7 +1325,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
         </div>
 
         <div class="footer">
-          <p><strong>Thank you for choosing SERVIGENCE!</strong></p>
+          <p><strong>Thank you for choosing SERVIGENS!</strong></p>
           <p>This is a computer-generated invoice. Generated on ${currentDate} at ${new Date().toLocaleTimeString()}</p>
           <p>For support, contact us at info@servigence.com or +971 XX XXX XXXX</p>
         </div>

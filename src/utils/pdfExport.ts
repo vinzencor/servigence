@@ -31,7 +31,7 @@ const addProfessionalHeader = (doc: jsPDF, title: string, subtitle?: string, dat
   let baseY = 20;
 
   // Try loading the logo
-  const logoImg = "/servigens-logo.png";
+  const logoImg = "/servigens.png";
   const logoWidth = 35;
   const logoHeight = 35;
 
@@ -47,7 +47,7 @@ const addProfessionalHeader = (doc: jsPDF, title: string, subtitle?: string, dat
   // Company details
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text("SERVIGENS VISA SERVICES", leftX, leftY);
+  doc.text("Servigens Business Group", leftX, leftY);
   leftY += 6;
 
   doc.setFont("helvetica", "normal");
@@ -259,7 +259,7 @@ export const exportToPDF = (options: PDFExportOptions) => {
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
         doc.text(
-          'SERVIGENS VISA SERVICES - Professional Visa & Business Services',
+          'Servigens Business Group - Professional Visa & Business Services',
           pageWidth / 2,
           pageHeight - 5,
           { align: 'center' }
@@ -343,7 +343,7 @@ export const exportSummaryToPDF = (options: {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'italic');
   doc.text(
-    'SERVIGENS VISA SERVICES - Professional Visa & Business Services',
+    'Servigens Business Group - Professional Visa & Business Services',
     pageWidth / 2,
     pageHeight - 5,
     { align: 'center' }

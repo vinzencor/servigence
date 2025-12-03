@@ -128,7 +128,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigate }) =>
                   <Building2 className="w-6 h-6 text-white" />
                 </div> */}
                 <div className="w-32 h-10 flex items-center justify-center">
-                  <img src="/servigens-logo.png" alt="Servigens Logo" className="w-full h-auto" />
+                  <img src="/servigens.png" alt="Servigens Logo" className="w-full h-auto" />
                 </div>
                 {/* <div>
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">

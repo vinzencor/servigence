@@ -57,7 +57,7 @@ export const generatePaymentReceipt = (receiptData: ReceiptData): void => {
 
   // =============== PROFESSIONAL HEADER ===============
 
-  const logoImg = "/servigens-logo.png";
+  const logoImg = "/servigens.png";
 
   // Define header block positions
   const leftX = 20;
@@ -83,7 +83,7 @@ export const generatePaymentReceipt = (receiptData: ReceiptData): void => {
   // ---------------- LEFT COLUMN (Company Info) - BELOW LOGO ----------------
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
-  doc.text("SERVIGENS VISA SERVICES", leftX, leftY);
+  doc.text("Servigens Business Group", leftX, leftY);
   leftY += 7;
 
   doc.setFont("helvetica", "normal");
@@ -622,11 +622,11 @@ export const generateHTMLReceipt = (receiptData: ReceiptData): string => {
 <body>
  <div class="header new-header">
   <div class="left-section">
-    <img src="/servigens-logo.png" alt="SERVIGENS" class="receipt-logo"
+    <img src="/servigens.png" alt="SERVIGENS" class="receipt-logo"
          onerror="this.style.display='none';" />
 
     <div class="company-details">
-      <strong>SERVIGENS VISA SERVICES</strong><br>
+      <strong>Servigens Business Group</strong><br>
       Dar Al Salam - Building, 9th Floor - Corniche St<br>
       Al Danah - Abu Dhabi Corniche - UAE<br>
       <strong>Tel:</strong> +97154887748 | <strong>Mob:</strong> 0544887748<br>

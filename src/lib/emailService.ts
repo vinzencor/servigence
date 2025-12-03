@@ -341,9 +341,9 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
-              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
               Al Danah - Abu Dhabi Corniche - UAE<br>
               Tel: +97154887748 | Mob: 0544887748<br>
@@ -421,9 +421,9 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
-              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
               Al Danah - Abu Dhabi Corniche - UAE<br>
               Tel: +97154887748 | Mob: 0544887748<br>
@@ -515,9 +515,9 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
-              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
               Al Danah - Abu Dhabi Corniche - UAE<br>
               Tel: +97154887748 | Mob: 0544887748<br>
@@ -617,9 +617,9 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
-              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
               Al Danah - Abu Dhabi Corniche - UAE<br>
               Tel: +97154887748 | Mob: 0544887748<br>
@@ -727,9 +727,9 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens-logo.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
-              <strong style="font-size: 18px; color: #2563eb;">SERVIGENS VISA SERVICES</strong><br>
+              <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
               Al Danah - Abu Dhabi Corniche - UAE<br>
               Tel: +97154887748 | Mob: 0544887748<br>

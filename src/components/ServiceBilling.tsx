@@ -1250,11 +1250,11 @@ const ServiceBilling: React.FC = () => {
           <!-- Header -->
           <div class="header">
             <div class="logo-section">
-              <img src="/servigens-logo.png" alt="SERVIGENS" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+              <img src="/servigens.png" alt="SERVIGENS" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
               <div class="logo-text" style="display:none;">SERVIGENS</div>
               
               <div class="company-details">
-                <strong>SERVIGENS VISA SERVICES</strong><br>
+                <strong>Servigens Business Group</strong><br>
                 Dar Al Salam - Building, 9th Floor - Corniche St - Al<br>
                 Danah -Abu Dhabi Corniche- UAE<br>
                 <strong>Tel:</strong> +97154887748<br>
@@ -1634,11 +1634,11 @@ const ServiceBilling: React.FC = () => {
           <!-- Header -->
           <div class="header">
             <div class="logo-section">
-              <img src="/servigens-logo.png" alt="SERVIGENS" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+              <img src="/servigens.png" alt="SERVIGENS" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
               <div class="logo-text" style="display:none;">SERVIGENS</div>
 
               <div class="company-details">
-                <strong>SERVIGENS VISA SERVICES</strong><br>
+                <strong>Servigens Business Group</strong><br>
                 Dar Al Salam - Building, 9th Floor - Corniche St - Al<br>
                 Danah -Abu Dhabi Corniche- UAE<br>
                 <strong>Tel:</strong> +97154887748<br>
@@ -2014,11 +2014,11 @@ const ServiceBilling: React.FC = () => {
           <!-- Header -->
           <div class="header">
             <div class="logo-section">
-              <img src="/servigens-logo.png" alt="SERVIGENS" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+              <img src="/servigens.png" alt="SERVIGENS" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
               <div class="logo-text" style="display:none;">SERVIGENS</div>
 
               <div class="company-details">
-                <strong>SERVIGENS VISA SERVICES</strong><br>
+                <strong>Servigens Business Group</strong><br>
                 Dar Al Salam - Building, 9th Floor - Corniche St - Al<br>
                 Danah -Abu Dhabi Corniche- UAE<br>
                 <strong>Tel:</strong> +97154887748<br>
