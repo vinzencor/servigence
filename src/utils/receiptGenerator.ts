@@ -14,6 +14,7 @@ export interface ReceiptData {
   status: 'draft' | 'issued' | 'paid' | 'cancelled';
   transactionId?: string;
   notes?: string;
+  contactDetails?: string;
   invoiceNumber?: string;
   totalAmount?: number;
   paidAmount?: number;
@@ -145,7 +146,14 @@ export const generatePaymentReceipt = (receiptData: ReceiptData): void => {
     20,
     yPosition
   );
-  yPosition += 10;
+  yPosition += 5;
+
+  if (receiptData.contactDetails) {
+    doc.text(`Contact: ${receiptData.contactDetails}`, 20, yPosition);
+    yPosition += 5;
+  }
+
+  yPosition += 5;
 
   // ================= PAYMENT DETAILS =================
   doc.setFont("helvetica", "bold");

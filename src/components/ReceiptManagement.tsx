@@ -695,6 +695,10 @@ const ReceiptManagement: React.FC = () => {
       // Generate and download the receipt
       const { generatePaymentReceipt } = await import('../utils/receiptGenerator');
 
+      // Extract contact details from notes if present
+      const notesMatch = receipt.notes?.match(/Contact: ([^|]+)/);
+      const contactDetails = notesMatch ? notesMatch[1].trim() : undefined;
+
       const receiptData = {
         receiptNumber: receipt.receiptNumber,
         date: new Date(receipt.date).toLocaleDateString(),
@@ -706,7 +710,8 @@ const ReceiptManagement: React.FC = () => {
         paymentMethod: receipt.paymentMethod,
         status: receipt.status,
         transactionId: receipt.transactionId,
-        notes: receipt.notes
+        notes: receipt.notes,
+        contactDetails: contactDetails
       };
 
       generatePaymentReceipt(receiptData);
