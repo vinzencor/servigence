@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Download, Calendar, TrendingUp, Target, Award, Search, FileText } from 'lucide-react';
+import { Users, Download, TrendingUp, Target, Award, Search, FileText, Printer } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { exportToPDF } from '../../utils/pdfExport';
@@ -15,6 +15,19 @@ interface EmployeeData {
   lastActivity: string;
 }
 
+interface EmployeeServiceData {
+  employeeId: string;
+  employeeName: string;
+  serviceId: string;
+  serviceName: string;
+  quantity: number;
+  rateFee: number;
+  total: number;
+  billingId: string;
+  invoiceNumber: string;
+  billingData: any; // Full billing record for invoice generation
+}
+
 interface Company {
   id: string;
   company_name: string;
@@ -27,6 +40,7 @@ const EmployeeWiseReport: React.FC = () => {
   );
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
   const [employees, setEmployees] = useState<EmployeeData[]>([]);
+  const [employeeServiceData, setEmployeeServiceData] = useState<EmployeeServiceData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('all');
@@ -59,32 +73,41 @@ const EmployeeWiseReport: React.FC = () => {
     try {
       setLoading(true);
 
-      // Load service billings with employee assignments and company info
+      // Load service billings with employee assignments, company info, and service types
       const { data: billings, error } = await supabase
         .from('service_billings')
         .select(`
           *,
           assigned_employee:service_employees(id, name),
           company_employee:employees(id, name, company_id),
-          company:companies(id, company_name)
+          company:companies(id, company_name),
+          service_type:service_types(id, name)
         `)
         .gte('service_date', dateFrom)
         .lte('service_date', dateTo);
 
       if (error) throw error;
 
-      // Process employee data
+      // Process employee data (aggregated)
       const employeeMap = new Map<string, EmployeeData>();
+
+      // Process employee-service breakdown data (individual billing records)
+      const employeeServiceList: EmployeeServiceData[] = [];
 
       (billings || []).forEach(billing => {
         const employee = billing.assigned_employee || billing.company_employee;
         if (!employee) return;
 
         const employeeId = employee.id;
+        const employeeName = employee.name;
         const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
         const companyId = billing.company?.id || billing.company_employee?.company_id;
         const companyName = billing.company?.company_name || '';
+        const serviceId = billing.service_type?.id || 'unknown';
+        const serviceName = billing.service_type?.name || 'Unknown Service';
+        const quantity = parseInt(billing.quantity || '1');
 
+        // Aggregate employee data
         if (!employeeMap.has(employeeId)) {
           employeeMap.set(employeeId, {
             id: employeeId,
@@ -105,6 +128,20 @@ const EmployeeWiseReport: React.FC = () => {
         if (billing.service_date > emp.lastActivity) {
           emp.lastActivity = billing.service_date;
         }
+
+        // Store individual billing records for detailed breakdown
+        employeeServiceList.push({
+          employeeId: employeeId,
+          employeeName: employeeName,
+          serviceId: serviceId,
+          serviceName: serviceName,
+          quantity: quantity,
+          rateFee: amount / quantity,
+          total: amount,
+          billingId: billing.id,
+          invoiceNumber: billing.invoice_number || 'N/A',
+          billingData: billing // Store full billing record for invoice generation
+        });
       });
 
       // Calculate averages
@@ -115,6 +152,9 @@ const EmployeeWiseReport: React.FC = () => {
       });
 
       setEmployees(Array.from(employeeMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue));
+      setEmployeeServiceData(employeeServiceList.sort((a, b) =>
+        a.employeeName.localeCompare(b.employeeName) || a.serviceName.localeCompare(b.serviceName)
+      ));
     } catch (error) {
       console.error('Error loading employee data:', error);
       toast.error('Failed to load employee data');
@@ -130,14 +170,15 @@ EMPLOYEE-WISE REPORT
 Date Range: ${dateFrom} to ${dateTo}
 Generated: ${new Date().toLocaleString()}
 
-EMPLOYEE PERFORMANCE
---------------------
-${employees.map(emp => `
-${emp.name}
-  Revenue: AED ${emp.totalRevenue.toLocaleString()}
-  Transactions: ${emp.totalTransactions}
-  Average: AED ${emp.averageTransactionValue.toLocaleString()}
-  Last Activity: ${emp.lastActivity}
+DETAILED SERVICE BREAKDOWN BY EMPLOYEE
+---------------------------------------
+${employeeServiceData.map(item => `
+Invoice: ${item.invoiceNumber}
+Employee: ${item.employeeName}
+Service: ${item.serviceName}
+Quantity: ${item.quantity}
+Rate/Fee: AED ${item.rateFee.toFixed(2)}
+Total: AED ${item.total.toFixed(2)}
 `).join('\n')}
     `;
 
@@ -150,164 +191,304 @@ ${emp.name}
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast.success('Employee report exported successfully');
   };
 
   const exportReportPDF = () => {
-    const filteredEmployees = employees.filter(emp =>
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase())
+    // Export the detailed service breakdown instead of employee performance
+    exportDetailedBreakdownPDF();
+  };
+
+  const exportDetailedBreakdownPDF = () => {
+    const filteredData = employeeServiceData.filter(item =>
+      item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.serviceName.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const pdfData = filteredEmployees.map(emp => ({
-      name: emp.name,
-      totalRevenue: emp.totalRevenue,
-      totalTransactions: emp.totalTransactions,
-      averageTransactionValue: emp.averageTransactionValue,
-      lastActivity: emp.lastActivity || '-'
+    const pdfData = filteredData.map(item => ({
+      invoiceNumber: item.invoiceNumber,
+      employeeName: item.employeeName,
+      serviceName: item.serviceName,
+      quantity: item.quantity,
+      rateFee: item.rateFee.toFixed(2),
+      total: item.total.toFixed(2)
     }));
 
-    const totalRevenue = filteredEmployees.reduce((sum, emp) => sum + emp.totalRevenue, 0);
-    const totalTransactions = filteredEmployees.reduce((sum, emp) => sum + emp.totalTransactions, 0);
-    const avgRevenue = filteredEmployees.length > 0 ? totalRevenue / filteredEmployees.length : 0;
+    const totalQuantity = filteredData.reduce((sum, item) => sum + item.quantity, 0);
+    const totalAmount = filteredData.reduce((sum, item) => sum + item.total, 0);
 
     const summaryData = [
-      { label: 'Total Employees', value: filteredEmployees.length },
-      { label: 'Total Revenue', value: `AED ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { label: 'Total Transactions', value: totalTransactions },
-      { label: 'Average Revenue/Employee', value: `AED ${avgRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+      { label: 'Total Services', value: filteredData.length },
+      { label: 'Total Quantity', value: totalQuantity },
+      { label: 'Total Amount', value: `AED ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
     ];
 
     exportToPDF({
-      title: 'Employee-Wise Report',
-      subtitle: 'Performance Summary by Employee',
+      title: 'Employee-Wise Detailed Service Breakdown',
+      subtitle: 'Service-level breakdown by employee',
       dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
       columns: [
-        { header: 'Employee Name', dataKey: 'name' },
-        { header: 'Total Revenue (AED)', dataKey: 'totalRevenue' },
-        { header: 'Transactions', dataKey: 'totalTransactions' },
-        { header: 'Avg Transaction (AED)', dataKey: 'averageTransactionValue' },
-        { header: 'Last Activity', dataKey: 'lastActivity' }
+        { header: 'Invoice #', dataKey: 'invoiceNumber' },
+        { header: 'Employee Name', dataKey: 'employeeName' },
+        { header: 'Service', dataKey: 'serviceName' },
+        { header: 'Quantity', dataKey: 'quantity' },
+        { header: 'Rate/Fee (AED)', dataKey: 'rateFee' },
+        { header: 'Total (AED)', dataKey: 'total' }
       ],
       data: pdfData,
       summaryData,
-      fileName: `Employee_Wise_Report_${dateFrom}_to_${dateTo}.pdf`,
+      fileName: `Employee_Service_Breakdown_${dateFrom}_to_${dateTo}.pdf`,
       orientation: 'landscape'
     });
 
-    toast.success('PDF exported successfully!');
+    toast.success('Detailed breakdown PDF exported successfully!');
   };
 
-  const generateEmployeeInvoice = async (employee: EmployeeData) => {
+  const generateInvoicePDF = (billingData: any) => {
     try {
-      // Load detailed billing data for this employee
-      const { data: billings, error } = await supabase
-        .from('service_billings')
-        .select(`
-          *,
-          company:companies(company_name),
-          individual:individuals(individual_name),
-          service_type:service_types(name),
-          assigned_employee:service_employees(id, name),
-          company_employee:employees(id, name)
-        `)
-        .or(`assigned_employee_id.eq.${employee.id},company_employee_id.eq.${employee.id}`)
-        .gte('service_date', dateFrom)
-        .lte('service_date', dateTo)
-        .order('service_date', { ascending: false });
+      // Generate invoice HTML content
+      const invoiceHTML = generateInvoiceHTML(billingData);
 
-      if (error) throw error;
-
-      // Process service breakdown
-      const serviceBreakdown = new Map<string, { count: number; revenue: number }>();
-      let totalRevenue = 0;
-      let totalTransactions = 0;
-
-      (billings || []).forEach(billing => {
-        const serviceName = billing.service_type?.name || 'Unknown Service';
-        const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
-
-        if (!serviceBreakdown.has(serviceName)) {
-          serviceBreakdown.set(serviceName, { count: 0, revenue: 0 });
-        }
-
-        const service = serviceBreakdown.get(serviceName)!;
-        service.count += 1;
-        service.revenue += amount;
-
-        totalRevenue += amount;
-        totalTransactions += 1;
-      });
-
-      // Prepare summary data for PDF
-      const summaryData = [
-        { label: 'Employee Name', value: employee.name },
-        { label: 'Company', value: employee.companyName || 'N/A' },
-        { label: 'Total Revenue Generated', value: `AED ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-        { label: 'Total Transactions', value: totalTransactions.toString() },
-        { label: 'Average Transaction Value', value: `AED ${totalTransactions > 0 ? (totalRevenue / totalTransactions).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}` }
-      ];
-
-      // Prepare service breakdown data for PDF
-      const serviceBreakdownData = Array.from(serviceBreakdown.entries()).map(([service, data]) => ({
-        service,
-        transactions: data.count,
-        revenue: data.revenue,
-        average: data.revenue / data.count
-      }));
-
-      // Prepare detailed transactions data for PDF
-      const transactionsData = (billings || []).map(billing => ({
-        date: new Date(billing.service_date).toLocaleDateString(),
-        client: billing.company?.company_name || billing.individual?.individual_name || 'Unknown',
-        service: billing.service_type?.name || 'Unknown Service',
-        amount: parseFloat(billing.total_amount_with_vat || billing.total_amount || 0),
-        payment: billing.cash_type || 'Unknown'
-      }));
-
-      // Generate PDF with service breakdown and detailed transactions
-      exportToPDF({
-        title: 'Employee Invoice/Collection Report',
-        subtitle: `Employee: ${employee.name}${employee.companyName ? ` | Company: ${employee.companyName}` : ''}`,
-        dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
-        columns: [
-          { header: 'Service Type', dataKey: 'service' },
-          { header: 'Transactions', dataKey: 'transactions' },
-          { header: 'Revenue (AED)', dataKey: 'revenue' },
-          { header: 'Average (AED)', dataKey: 'average' }
-        ],
-        data: serviceBreakdownData,
-        summaryData,
-        fileName: `Employee_Invoice_${employee.name.replace(/\s+/g, '_')}_${dateFrom}_to_${dateTo}.pdf`,
-        orientation: 'portrait'
-      });
-
-      // Generate a second PDF with detailed transactions if there are any
-      if (transactionsData.length > 0) {
-        setTimeout(() => {
-          exportToPDF({
-            title: 'Detailed Transactions',
-            subtitle: `Employee: ${employee.name}${employee.companyName ? ` | Company: ${employee.companyName}` : ''}`,
-            dateRange: `Period: ${new Date(dateFrom).toLocaleDateString()} - ${new Date(dateTo).toLocaleDateString()}`,
-            columns: [
-              { header: 'Date', dataKey: 'date' },
-              { header: 'Client', dataKey: 'client' },
-              { header: 'Service', dataKey: 'service' },
-              { header: 'Amount (AED)', dataKey: 'amount' },
-              { header: 'Payment Method', dataKey: 'payment' }
-            ],
-            data: transactionsData,
-            fileName: `Employee_Transactions_${employee.name.replace(/\s+/g, '_')}_${dateFrom}_to_${dateTo}.pdf`,
-            orientation: 'landscape'
-          });
-        }, 500);
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(invoiceHTML);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
       }
 
-      toast.success(`Invoice PDF generated for ${employee.name}`);
+      toast.success('Invoice opened for printing');
     } catch (error) {
-      console.error('Error generating employee invoice:', error);
-      toast.error('Failed to generate employee invoice');
+      console.error('Error generating invoice:', error);
+      toast.error('Failed to generate invoice');
     }
+  };
+
+  const generateInvoiceHTML = (billing: any) => {
+    const currentDate = new Date();
+    const formattedDate = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const formattedTime = currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
+
+    const invoiceNumber = billing.invoice_number || 'N/A';
+    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
+    const clientType = billing.company ? 'Company' : 'Individual';
+    const serviceName = billing.service_type?.name || 'Service';
+    const quantity = billing.quantity || '1';
+    const serviceCharge = parseFloat(billing.service_charge || 0);
+    const governmentCharge = parseFloat(billing.government_charge || 0);
+    const totalAmount = parseFloat(billing.total_amount || 0);
+    const vatAmount = parseFloat(billing.vat_amount || 0);
+    const totalWithVat = parseFloat(billing.total_amount_with_vat || totalAmount);
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Tax Invoice ${invoiceNumber}</title>
+        <meta charset="UTF-8">
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+          }
+          body {
+            padding: 20px;
+            background-color: #f5f5f5;
+          }
+          .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            border-radius: 5px;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+          }
+          .logo-section {
+            flex: 1;
+          }
+          .logo-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 5px;
+          }
+          .company-info {
+            font-size: 11px;
+            color: #666;
+            line-height: 1.6;
+          }
+          .invoice-info {
+            text-align: right;
+          }
+          .invoice-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 10px;
+          }
+          .invoice-number {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+          }
+          .client-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9fafb;
+            border-radius: 5px;
+          }
+          .section-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+          }
+          .client-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1e3a8a;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+          }
+          th {
+            background-color: #1e3a8a;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-size: 12px;
+            text-transform: uppercase;
+          }
+          td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .text-right {
+            text-align: right;
+          }
+          .totals-section {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+          }
+          .totals-table {
+            width: 300px;
+          }
+          .totals-table td {
+            padding: 8px;
+            border: none;
+          }
+          .total-row {
+            font-weight: bold;
+            font-size: 16px;
+            background-color: #f3f4f6;
+          }
+          .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+          }
+          @media print {
+            body {
+              background-color: white;
+              padding: 0;
+            }
+            .invoice-container {
+              box-shadow: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="invoice-container">
+          <div class="header">
+            <div class="logo-section">
+              <div class="logo-text">SERVIGENS</div>
+              <div class="company-info">
+                Business Group<br>
+                Office 123, Business Tower<br>
+                Dubai, UAE<br>
+                TRN: 123456789012345
+              </div>
+            </div>
+            <div class="invoice-info">
+              <div class="invoice-title">TAX INVOICE</div>
+              <div class="invoice-number">Invoice #: ${invoiceNumber}</div>
+              <div class="invoice-number">Date: ${formattedDate}</div>
+              <div class="invoice-number">Service Date: ${serviceDate}</div>
+            </div>
+          </div>
+
+          <div class="client-section">
+            <div class="section-title">Bill To</div>
+            <div class="client-name">${clientName}</div>
+            <div style="font-size: 12px; color: #666; margin-top: 4px;">${clientType}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Service Description</th>
+                <th class="text-right">Quantity</th>
+                <th class="text-right">Service Charge</th>
+                <th class="text-right">Govt. Charge</th>
+                <th class="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${serviceName}</td>
+                <td class="text-right">${quantity}</td>
+                <td class="text-right">AED ${serviceCharge.toFixed(2)}</td>
+                <td class="text-right">AED ${governmentCharge.toFixed(2)}</td>
+                <td class="text-right">AED ${totalAmount.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="totals-section">
+            <table class="totals-table">
+              <tr>
+                <td>Subtotal:</td>
+                <td class="text-right">AED ${totalAmount.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>VAT (5%):</td>
+                <td class="text-right">AED ${vatAmount.toFixed(2)}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Total Amount:</td>
+                <td class="text-right">AED ${totalWithVat.toFixed(2)}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="footer">
+            <p><strong>Thank you for choosing SERVIGENS!</strong></p>
+            <p>This is a computer-generated invoice. Generated on ${formattedDate} at ${formattedTime}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   };
 
   if (loading) {
@@ -367,7 +548,14 @@ ${emp.name}
             className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
             <Download className="w-4 h-4" />
-            <span>Export PDF</span>
+            <span>Summary PDF</span>
+          </button>
+          <button
+            onClick={exportDetailedBreakdownPDF}
+            className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+          >
+            <Download className="w-4 h-4" />
+            <span>Detailed PDF</span>
           </button>
         </div>
       </div>
@@ -482,85 +670,76 @@ ${emp.name}
         </div>
       </div>
 
-      {/* Employee Table */}
+
+
+      {/* Detailed Employee-Service Breakdown Table */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Employee Performance</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Detailed Service Breakdown by Employee</h2>
+          <p className="text-sm text-gray-600 mt-1">Individual services performed by each employee</p>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Average</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Activity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Rate/Fee (AED)</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total (AED)</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEmployees.map((employee, index) => (
-                <tr key={employee.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                        index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                        index === 1 ? 'bg-gray-100 text-gray-800' :
-                        index === 2 ? 'bg-orange-100 text-orange-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <span className="font-medium">{employee.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-green-600">
-                    AED {employee.totalRevenue.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {employee.totalTransactions}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                    AED {employee.averageTransactionValue.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span>{new Date(employee.lastActivity).toLocaleDateString()}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                    <button
-                      onClick={() => generateEmployeeInvoice(employee)}
-                      className="inline-flex items-center space-x-1 bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors"
-                      title="Generate Invoice"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Invoice</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {employeeServiceData
+                .filter(item =>
+                  item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  item.serviceName.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((item) => (
+                  <tr key={`${item.billingId}`} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{item.invoiceNumber}</span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      <span className="font-medium">{item.employeeName}</span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {item.serviceName}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {item.quantity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
+                      {item.rateFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-green-600">
+                      {item.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                      <button
+                        onClick={() => generateInvoicePDF(item.billingData)}
+                        className="inline-flex items-center space-x-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+                        title="Print Invoice"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Invoice</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
-          
-          {filteredEmployees.length === 0 && employees.length > 0 && (
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No employees match your search</h3>
-              <p className="text-gray-600">Try adjusting your search term.</p>
-            </div>
-          )}
 
-          {employees.length === 0 && (
+          {employeeServiceData.length === 0 && (
             <div className="text-center py-12">
-              <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No employee data found</h3>
-              <p className="text-gray-600">Try adjusting your date range.</p>
+              <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No service data found</h3>
+              <p className="text-gray-600">Try adjusting your date range or filters.</p>
             </div>
           )}
         </div>

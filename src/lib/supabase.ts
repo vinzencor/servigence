@@ -604,7 +604,8 @@ export const dbHelpers = {
       .select(`
         *,
         company:companies(company_name, assigned_to),
-        individual:individuals(individual_name, assigned_to),
+        individual:individuals!individual_id(individual_name, assigned_to),
+        dependent:dependents(id, name, relationship),
         service_type:service_types(name, typing_charges, government_charges),
         assigned_employee:service_employees(name),
         company_employee:employees(name, employee_id, position)
@@ -1329,7 +1330,8 @@ export const dbHelpers = {
         created_at,
         card_id,
         company:companies(id, company_name),
-        individual:individuals(id, individual_name),
+        individual:individuals!individual_id(id, individual_name),
+        dependent:dependents(id, name, relationship),
         service_type:service_types(id, name),
         payment_card:payment_cards(id, card_name)
       `)
@@ -1383,7 +1385,8 @@ export const dbHelpers = {
         created_at,
         card_id,
         company:companies(id, company_name),
-        individual:individuals(id, individual_name),
+        individual:individuals!individual_id(id, individual_name),
+        dependent:dependents(id, name, relationship),
         service_type:service_types(id, name),
         payment_card:payment_cards(id, card_name)
       `)
@@ -1529,7 +1532,8 @@ export const dbHelpers = {
         .select(`
           *,
           company:companies(company_name),
-          individual:individuals(individual_name),
+          individual:individuals!individual_id(individual_name),
+          dependent:dependents(id, name, relationship),
           service_type:service_types(name)
         `)
         .eq('cash_type', 'card')
@@ -1553,6 +1557,8 @@ export const dbHelpers = {
 
       return billings?.map((billing: any) => {
         const card = cardsMap[billing.card_id];
+        // Use dependent name if available, otherwise use individual name
+        const individualName = billing.dependent?.individual_name || billing.individual?.individual_name;
         return {
           id: billing.id,
           cardId: billing.card_id,
@@ -1561,7 +1567,7 @@ export const dbHelpers = {
           bankName: card?.bank_name,
           amount: parseFloat(billing.total_amount || 0),
           serviceName: billing.service_type?.name || 'Unknown Service',
-          clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
+          clientName: billing.company?.company_name || individualName || 'Unknown Client',
           clientType: billing.company_id ? 'company' : 'individual',
           invoiceNumber: billing.invoice_number,
           serviceDate: billing.service_date,
@@ -1680,7 +1686,8 @@ export const dbHelpers = {
           vendor:vendors(name, email, phone, service_category),
           service_type:service_types(name),
           company:companies(company_name),
-          individual:individuals(individual_name)
+          individual:individuals!individual_id(individual_name),
+          dependent:dependents(id, name, relationship)
         `)
         .not('assigned_vendor_id', 'is', null);
 
@@ -1846,7 +1853,8 @@ export const dbHelpers = {
         .select(`
           *,
           company:companies(company_name, assigned_to, credit_limit),
-          individual:individuals(individual_name, assigned_to, credit_limit),
+          individual:individuals!individual_id(individual_name, assigned_to, credit_limit),
+          dependent:dependents(id, name, relationship),
           service_type:service_types(name),
           assigned_employee:service_employees(name)
         `)
@@ -2022,7 +2030,8 @@ export const dbHelpers = {
             invoice_number,
             total_amount,
             company:companies(company_name),
-            individual:individuals(individual_name),
+            individual:individuals!individual_id(individual_name),
+            dependent:dependents(id, name, relationship),
             service_type:service_types(name)
           )
         `)
@@ -2071,7 +2080,8 @@ export const dbHelpers = {
             total_amount,
             service_date,
             company:companies(company_name, address, phone1, phone2, email1, email2),
-            individual:individuals(individual_name, address, phone1, phone2, email1, email2),
+            individual:individuals!individual_id(individual_name, address, phone1, phone2, email1, email2),
+            dependent:dependents(id, name, relationship),
             service_type:service_types(name)
           )
         `)
@@ -2140,7 +2150,8 @@ export const dbHelpers = {
         .select(`
           *,
           company:companies(company_name),
-          individual:individuals(individual_name),
+          individual:individuals!individual_id(individual_name),
+          dependent:dependents(id, name, relationship),
           service_type:service_types(name)
         `)
         .eq('id', billingId)
@@ -4123,7 +4134,8 @@ export const dbHelpers = {
             total_amount,
             service_date,
             company:companies(company_name),
-            individual:individuals(individual_name)
+            individual:individuals!individual_id(individual_name),
+            dependent:dependents(id, name, relationship)
           )
         `)
         .eq('receipt_transaction_id', receiptTransactionId)

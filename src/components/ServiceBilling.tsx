@@ -33,6 +33,7 @@ const ServiceBilling: React.FC = () => {
   const [selectedInvoiceTemplate, setSelectedInvoiceTemplate] = useState<'template1' | 'template2' | 'template3'>('template1');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [individuals, setIndividuals] = useState<Individual[]>([]);
+  const [dependents, setDependents] = useState<Individual[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [serviceEmployees, setServiceEmployees] = useState<ServiceEmployee[]>([]);
   const [companyEmployees, setCompanyEmployees] = useState<any[]>([]);
@@ -73,6 +74,7 @@ const ServiceBilling: React.FC = () => {
     clientType: 'company' as 'company' | 'individual',
     companyId: '',
     individualId: '',
+    dependentId: '',
     serviceTypeId: '',
     assignedEmployeeId: '',
     serviceDate: new Date().toISOString().split('T')[0],
@@ -83,6 +85,7 @@ const ServiceBilling: React.FC = () => {
     vendorCost: '0',
     vatPercentage: '0',
     vatAppliesTo: 'service_charge' as 'service_charge' | 'total_amount',
+    vatCalculationMethod: 'inclusive' as 'inclusive' | 'exclusive',
     discount: '0',
     cardId: '',
     customServiceCharges: '',
@@ -146,6 +149,7 @@ const ServiceBilling: React.FC = () => {
     clientType: 'company' as 'company' | 'individual',
     companyId: '',
     individualId: '',
+    dependentId: '',
     serviceTypeId: '',
     assignedEmployeeId: '',
     serviceDate: '',
@@ -156,6 +160,7 @@ const ServiceBilling: React.FC = () => {
     vendorCost: '0',
     vatPercentage: '0',
     vatAppliesTo: 'service_charge' as 'service_charge' | 'total_amount',
+    vatCalculationMethod: 'inclusive' as 'inclusive' | 'exclusive',
     discount: '0',
     cardId: '',
     customServiceCharges: '',
@@ -283,6 +288,25 @@ const ServiceBilling: React.FC = () => {
     };
   }, [billingForm.companyId, billingForm.individualId, billingForm.clientType, refreshAdvancePaymentBalance]);
 
+  // Fetch dependents when individual is selected (for create form)
+  useEffect(() => {
+    if (billingForm.individualId && billingForm.clientType === 'individual') {
+      fetchDependents(billingForm.individualId);
+    } else {
+      setDependents([]);
+      setBillingForm(prev => ({ ...prev, dependentId: '' }));
+    }
+  }, [billingForm.individualId, billingForm.clientType]);
+
+  // Fetch dependents when individual is selected (for edit form)
+  useEffect(() => {
+    if (editBillingForm.individualId && editBillingForm.clientType === 'individual' && selectedBilling) {
+      fetchDependents(editBillingForm.individualId);
+    } else if (selectedBilling) {
+      setDependents([]);
+    }
+  }, [editBillingForm.individualId, editBillingForm.clientType, selectedBilling]);
+
   const loadData = async () => {
     if (!user) {
       console.log('No user authenticated, skipping data load');
@@ -371,6 +395,59 @@ const ServiceBilling: React.FC = () => {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch dependents when an individual is selected
+  const fetchDependents = async (individualId: string) => {
+    try {
+      console.log('Fetching dependents for individual:', individualId);
+
+      const { data, error } = await supabase
+        .from('dependents')
+        .select('*')
+        .eq('individual_id', individualId)
+        .eq('status', 'active')
+        .order('name');
+
+      if (error) {
+        console.error('Supabase error fetching dependents:', error);
+        throw error;
+      }
+
+      console.log('Fetched dependents:', data);
+
+      // Map dependents to Individual type for compatibility
+      const mappedDependents: Individual[] = (data || []).map(dep => ({
+        id: dep.id,
+        individualName: dep.name,
+        nationality: dep.nationality || '',
+        phone1: dep.phone || '',
+        phone2: '',
+        email1: dep.email || '',
+        email2: '',
+        address: '',
+        idNumber: '',
+        passportNumber: dep.passport_number || '',
+        passportExpiry: dep.passport_expiry || '',
+        emiratesId: dep.emirates_id || '',
+        emiratesIdExpiry: dep.emirates_id_expiry || '',
+        visaNumber: dep.visa_number || '',
+        visaExpiry: dep.visa_expiry_date || '',
+        licenseNumber: '',
+        licenseExpiry: '',
+        assignedTo: '',
+        createdAt: dep.created_at || new Date().toISOString(),
+        updatedAt: dep.updated_at || new Date().toISOString(),
+        openingBalance: 0,
+        notes: `Dependent - ${dep.relationship}`
+      }));
+
+      setDependents(mappedDependents);
+      console.log(`Loaded ${mappedDependents.length} dependents for individual ${individualId}`);
+    } catch (error) {
+      console.error('Error fetching dependents:', error);
+      setDependents([]);
     }
   };
 
@@ -487,6 +564,7 @@ const ServiceBilling: React.FC = () => {
       clientType: billing.company_id ? 'company' : 'individual',
       companyId: billing.company_id || '',
       individualId: billing.individual_id || '',
+      dependentId: billing.dependent_id || '',
       serviceTypeId: billing.service_type_id || '',
       assignedEmployeeId: billing.company_employee_id || billing.assigned_employee_id || '',
       serviceDate: billing.service_date || '',
@@ -497,6 +575,7 @@ const ServiceBilling: React.FC = () => {
       vendorCost: billing.vendor_cost?.toString() || '0',
       vatPercentage: billing.vat_percentage?.toString() || '0',
       vatAppliesTo: billing.vat_applies_to || 'service_charge',
+      vatCalculationMethod: billing.vat_calculation_method || 'inclusive',
       discount: billing.discount?.toString() || '0',
       cardId: billing.card_id || '',
       customServiceCharges: billing.typing_charges?.toString() || '',
@@ -582,30 +661,37 @@ const ServiceBilling: React.FC = () => {
       const subtotal = typingCharges + governmentCharges;
       const totalAmount = Math.max(0, subtotal - discount);
 
-      // Calculate VAT using REVERSE calculation (VAT-inclusive)
+      // Calculate VAT based on selected method
       const vatPercentage = parseFloat(editBillingForm.vatPercentage) || 0;
+      const vatCalculationMethod = editBillingForm.vatCalculationMethod || 'inclusive';
       let vatAmount = 0;
       let netTypingCharges = typingCharges;
+      let totalAmountWithVat = totalAmount;
 
       if (vatPercentage > 0 && editBillingForm.vatAppliesTo === 'service_charge') {
-        // Reverse VAT calculation: Extract VAT from service charge
         const discountOnTyping = Math.min(discount, typingCharges);
         const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
 
-        // Extract VAT from the VAT-inclusive service charge
-        netTypingCharges = typingChargesAfterDiscount / (1 + vatPercentage / 100);
-        vatAmount = typingChargesAfterDiscount - netTypingCharges;
-
-        // Adjust net typing for the discount portion
-        netTypingCharges = netTypingCharges + discountOnTyping;
+        if (vatCalculationMethod === 'inclusive') {
+          // VAT-INCLUSIVE: Extract VAT from service charge
+          netTypingCharges = typingChargesAfterDiscount / (1 + vatPercentage / 100);
+          vatAmount = typingChargesAfterDiscount - netTypingCharges;
+          netTypingCharges = netTypingCharges + discountOnTyping;
+          totalAmountWithVat = totalAmount; // Total remains the same
+        } else {
+          // VAT-EXCLUSIVE: Add VAT on top of service charge
+          vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+          netTypingCharges = typingCharges;
+          totalAmountWithVat = totalAmount + vatAmount; // Add VAT on top
+        }
       }
 
-      const totalAmountWithVat = totalAmount; // Total remains the same (VAT is already included)
       const profit = netTypingCharges - vendorCost;
 
       const updatedBillingData = {
         company_id: editBillingForm.clientType === 'company' && editBillingForm.companyId ? editBillingForm.companyId : null,
         individual_id: editBillingForm.clientType === 'individual' && editBillingForm.individualId ? editBillingForm.individualId : null,
+        dependent_id: editBillingForm.clientType === 'individual' && editBillingForm.dependentId ? editBillingForm.dependentId : null,
         service_type_id: editBillingForm.serviceTypeId || null,
         // Use company_employee_id for company employees, assigned_employee_id for service employees
         assigned_employee_id: editBillingForm.clientType === 'individual' && editBillingForm.assignedEmployeeId && editBillingForm.assignedEmployeeId !== '' ? editBillingForm.assignedEmployeeId : null,
@@ -619,15 +705,16 @@ const ServiceBilling: React.FC = () => {
         government_charges: governmentCharges,
         discount: discount,
         total_amount: totalAmount,
-        // profit: profit, // Temporarily removed until profit column is added to database
+        profit: profit,
         vat_percentage: vatPercentage,
         vat_amount: vatAmount,
         vat_applies_to: editBillingForm.vatAppliesTo,
+        vat_calculation_method: editBillingForm.vatCalculationMethod,
         total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         notes: editBillingForm.notes || null,
-        // assigned_vendor_id: editBillingForm.assignedVendorId || null, // Temporarily removed until column is added
-        // vendor_cost: vendorCost, // Temporarily removed until column is added
+        assigned_vendor_id: editBillingForm.assignedVendorId || null,
+        vendor_cost: vendorCost,
         card_id: editBillingForm.cashType === 'card' && editBillingForm.cardId ? editBillingForm.cardId : null
       };
 
@@ -762,7 +849,7 @@ const ServiceBilling: React.FC = () => {
         ...serviceBillings.map((billing: any) => [
           billing.invoice_number || 'N/A',
           new Date(billing.service_date).toLocaleDateString(),
-          billing.company?.company_name || billing.individual?.individual_name || 'N/A',
+          billing.company?.company_name || billing.dependent?.name || billing.individual?.individual_name || 'N/A',
           billing.service_type?.name || 'N/A',
           billing.quantity || 1,
           parseFloat(billing.typing_charges || 0).toFixed(2),
@@ -796,7 +883,7 @@ const ServiceBilling: React.FC = () => {
       const pdfData = serviceBillings.map((billing: any) => ({
         invoiceNumber: billing.invoice_number || 'N/A',
         date: new Date(billing.service_date).toLocaleDateString(),
-        client: billing.company?.company_name || billing.individual?.individual_name || 'N/A',
+        client: billing.company?.company_name || billing.dependent?.name || billing.individual?.individual_name || 'N/A',
         service: billing.service_type?.name || 'N/A',
         quantity: billing.quantity || 1,
         serviceCharges: parseFloat(billing.typing_charges || 0),
@@ -2217,31 +2304,40 @@ const ServiceBilling: React.FC = () => {
           const subtotal = item.line_total;
           const totalAmount = Math.max(0, subtotal - discountPerItem);
 
-          // Calculate VAT using REVERSE calculation (VAT-inclusive)
+          // Calculate VAT based on selected method
           const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
+          const vatCalculationMethod = billingForm.vatCalculationMethod || 'inclusive';
           let vatAmount = 0;
           let netTypingCharges = item.typing_charges * item.quantity;
+          let totalAmountWithVat = totalAmount;
 
           if (vatPercentage > 0 && billingForm.vatAppliesTo === 'service_charge') {
             const typingCharges = item.typing_charges * item.quantity;
             const discountOnTyping = Math.min(discountPerItem, typingCharges);
             const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
 
-            // Extract VAT from the VAT-inclusive service charge
-            netTypingCharges = typingChargesAfterDiscount / (1 + vatPercentage / 100);
-            vatAmount = typingChargesAfterDiscount - netTypingCharges;
-
-            // Adjust net typing for the discount portion
-            netTypingCharges = netTypingCharges + discountOnTyping;
+            if (vatCalculationMethod === 'inclusive') {
+              // VAT-INCLUSIVE: Extract VAT from service charge
+              netTypingCharges = typingChargesAfterDiscount / (1 + vatPercentage / 100);
+              vatAmount = typingChargesAfterDiscount - netTypingCharges;
+              netTypingCharges = netTypingCharges + discountOnTyping;
+              totalAmountWithVat = totalAmount; // Total remains the same
+            } else {
+              // VAT-EXCLUSIVE: Add VAT on top of service charge
+              vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+              netTypingCharges = typingCharges;
+              totalAmountWithVat = totalAmount + vatAmount; // Add VAT on top
+            }
           }
 
-          const totalAmountWithVat = totalAmount; // Total remains the same (VAT is already included)
+          const profit = netTypingCharges - vendorCostPerItem;
 
           const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}-${createdBillings.length + 1}`;
 
           const billingData = {
             company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
             individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
+            dependent_id: billingForm.clientType === 'individual' && billingForm.dependentId ? billingForm.dependentId : null,
             service_type_id: item.service_id,
             assigned_employee_id: billingForm.clientType === 'individual' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
             company_employee_id: billingForm.clientType === 'company' && billingForm.assignedEmployeeId ? billingForm.assignedEmployeeId : null,
@@ -2254,15 +2350,19 @@ const ServiceBilling: React.FC = () => {
             government_charges: item.government_charges * item.quantity,
             discount: discountPerItem,
             total_amount: totalAmount,
+            profit: profit,
             vat_percentage: vatPercentage,
             vat_amount: vatAmount,
             vat_applies_to: billingForm.vatAppliesTo,
+            vat_calculation_method: billingForm.vatCalculationMethod,
             total_amount_with_vat: totalAmountWithVat,
             quantity: item.quantity,
             status: 'pending',
             notes: billingForm.notes ? `${billingForm.notes} (Multi-service billing ${createdBillings.length + 1}/${serviceItems.length})` : `Multi-service billing ${createdBillings.length + 1}/${serviceItems.length}`,
             invoice_generated: true,
             invoice_number: invoiceNumber,
+            assigned_vendor_id: billingForm.assignedVendorId || null,
+            vendor_cost: vendorCostPerItem,
             card_id: billingForm.cashType === 'card' && billingForm.cardId ? billingForm.cardId : null
           };
 
@@ -2302,25 +2402,31 @@ const ServiceBilling: React.FC = () => {
       const subtotal = typingCharges + governmentCharges;
       const totalAmount = Math.max(0, subtotal - discount);
 
-      // Calculate VAT using REVERSE calculation (VAT-inclusive)
+      // Calculate VAT based on selected method
       const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
+      const vatCalculationMethod = billingForm.vatCalculationMethod || 'inclusive';
       let vatAmount = 0;
       let netTypingCharges = typingCharges;
+      let totalAmountWithVat = totalAmount;
 
       if (vatPercentage > 0 && billingForm.vatAppliesTo === 'service_charge') {
-        // Reverse VAT calculation: Extract VAT from service charge
         const discountOnTyping = Math.min(discount, typingCharges);
         const typingChargesAfterDiscount = Math.max(0, typingCharges - discountOnTyping);
 
-        // Extract VAT from the VAT-inclusive service charge
-        netTypingCharges = typingChargesAfterDiscount / (1 + vatPercentage / 100);
-        vatAmount = typingChargesAfterDiscount - netTypingCharges;
-
-        // Adjust net typing for the discount portion
-        netTypingCharges = netTypingCharges + discountOnTyping;
+        if (vatCalculationMethod === 'inclusive') {
+          // VAT-INCLUSIVE: Extract VAT from service charge
+          netTypingCharges = typingChargesAfterDiscount / (1 + vatPercentage / 100);
+          vatAmount = typingChargesAfterDiscount - netTypingCharges;
+          netTypingCharges = netTypingCharges + discountOnTyping;
+          totalAmountWithVat = totalAmount; // Total remains the same
+        } else {
+          // VAT-EXCLUSIVE: Add VAT on top of service charge
+          vatAmount = (typingChargesAfterDiscount * vatPercentage) / 100;
+          netTypingCharges = typingCharges;
+          totalAmountWithVat = totalAmount + vatAmount; // Add VAT on top
+        }
       }
 
-      const totalAmountWithVat = totalAmount; // Total remains the same (VAT is already included)
       const profit = netTypingCharges - vendorCost;
 
       // Generate invoice number
@@ -2329,6 +2435,7 @@ const ServiceBilling: React.FC = () => {
       const billingData = {
         company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
         individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
+        dependent_id: billingForm.clientType === 'individual' && billingForm.dependentId ? billingForm.dependentId : null,
         service_type_id: billingForm.serviceTypeId || null,
         // Use company_employee_id for company employees, assigned_employee_id for service employees
         assigned_employee_id: billingForm.clientType === 'individual' && billingForm.assignedEmployeeId && billingForm.assignedEmployeeId !== '' ? billingForm.assignedEmployeeId : null,
@@ -2342,18 +2449,19 @@ const ServiceBilling: React.FC = () => {
         government_charges: governmentCharges,
         discount: discount,
         total_amount: totalAmount,
-        // profit: profit, // Temporarily removed until profit column is added to database
+        profit: profit,
         vat_percentage: vatPercentage,
         vat_amount: vatAmount,
         vat_applies_to: billingForm.vatAppliesTo,
+        vat_calculation_method: billingForm.vatCalculationMethod,
         total_amount_with_vat: totalAmountWithVat,
         quantity: quantity,
         status: 'pending',
         notes: billingForm.notes || null,
         invoice_generated: true,
         invoice_number: invoiceNumber,
-        // assigned_vendor_id: billingForm.assignedVendorId || null, // Temporarily removed until column is added
-        // vendor_cost: vendorCost, // Temporarily removed until column is added
+        assigned_vendor_id: billingForm.assignedVendorId || null,
+        vendor_cost: vendorCost,
         card_id: billingForm.cashType === 'card' && billingForm.cardId ? billingForm.cardId : null
       };
 
@@ -2558,6 +2666,7 @@ const ServiceBilling: React.FC = () => {
       clientType: 'company',
       companyId: '',
       individualId: '',
+      dependentId: '',
       serviceTypeId: '',
       assignedEmployeeId: '',
       serviceDate: new Date().toISOString().split('T')[0],
@@ -2571,6 +2680,7 @@ const ServiceBilling: React.FC = () => {
       vendorCost: '0',
       vatPercentage: '0',
       vatAppliesTo: 'service_charge',
+      vatCalculationMethod: 'inclusive',
       discount: '0',
       cardId: '',
       customServiceCharges: '',
@@ -2903,32 +3013,43 @@ const ServiceBilling: React.FC = () => {
     const discount = parseFloat(billingForm.discount) || 0;
     const vendorCost = parseFloat(billingForm.vendorCost) || 0;
     const vatPercentage = parseFloat(billingForm.vatPercentage) || 0;
+    const vatCalculationMethod = billingForm.vatCalculationMethod || 'inclusive';
 
-    // Calculate VAT using REVERSE calculation (VAT-inclusive)
-    // Service charges entered by user are VAT-inclusive
-    // We need to extract the VAT from the service charge
+    // Calculate VAT based on selected method
     let vatAmount = 0;
     let netTyping = typing; // Net service charge (excluding VAT)
+    let totalWithVat = 0;
 
     if (vatPercentage > 0 && billingForm.vatAppliesTo === 'service_charge') {
-      // Reverse VAT calculation: Extract VAT from service charge
-      // Formula: Net = Gross / (1 + VAT Rate)
-      // VAT Amount = Gross - Net
       const discountOnTyping = Math.min(discount, typing);
       const typingAfterDiscount = Math.max(0, typing - discountOnTyping);
 
-      // Extract VAT from the VAT-inclusive service charge
-      netTyping = typingAfterDiscount / (1 + vatPercentage / 100);
-      vatAmount = typingAfterDiscount - netTyping;
-
-      // Adjust net typing for the discount portion
-      netTyping = netTyping + discountOnTyping;
+      if (vatCalculationMethod === 'inclusive') {
+        // VAT-INCLUSIVE (Reverse calculation): Extract VAT from service charge
+        // Formula: Net = Gross / (1 + VAT Rate), VAT Amount = Gross - Net
+        netTyping = typingAfterDiscount / (1 + vatPercentage / 100);
+        vatAmount = typingAfterDiscount - netTyping;
+        // Adjust net typing for the discount portion
+        netTyping = netTyping + discountOnTyping;
+      } else {
+        // VAT-EXCLUSIVE: Add VAT on top of service charge
+        // Formula: VAT Amount = Service Charge * VAT Rate, Total = Service Charge + VAT
+        vatAmount = (typingAfterDiscount * vatPercentage) / 100;
+        netTyping = typing; // Net typing is the full service charge
+      }
     }
 
     // Government charges are always VAT-exempt
     const subtotal = typing + government;
     const total = Math.max(0, subtotal - discount);
-    const totalWithVat = total; // Total remains the same (VAT is already included in service charge)
+
+    // Calculate total with VAT based on method
+    if (vatCalculationMethod === 'inclusive') {
+      totalWithVat = total; // Total remains the same (VAT is already included)
+    } else {
+      totalWithVat = total + vatAmount; // Add VAT on top
+    }
+
     const profit = netTyping - vendorCost; // Profit = Net Service Charges - Vendor Cost
 
     return {
@@ -3208,7 +3329,7 @@ Servigens Business Services
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Services</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Payment Info</th>
@@ -3231,8 +3352,13 @@ Servigens Business Services
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {billing.company?.company_name || billing.individual?.individual_name || 'N/A'}
+                          {billing.company?.company_name || billing.dependent?.name || billing.individual?.individual_name || 'N/A'}
                         </div>
+                        {billing.dependent?.name && (
+                          <div className="text-xs text-gray-500">
+                            Dependent of: {billing.individual?.individual_name}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">
@@ -3678,6 +3804,7 @@ Servigens Business Services
                         </div>
                       </div>
                     )}
+
                   </div>
                 )}
 
@@ -3877,38 +4004,58 @@ Servigens Business Services
                   </div>
                 )}
 
-                {/* Employee Assignment */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {billingForm.clientType === 'company' ? 'Assign to Company Employee' : 'Assigned Employee'}
-                  </label>
-                  <select
-                    name="assignedEmployeeId"
-                    value={billingForm.assignedEmployeeId}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">
-                      {billingForm.clientType === 'company'
-                        ? (billingForm.companyId ? 'Select company employee (optional)' : 'Select a company first')
-                        : 'Select employee (optional)'
-                      }
-                    </option>
-                    {billingForm.clientType === 'company' && billingForm.companyId ? (
-                      companyEmployees.map((employee) => (
+                {/* Employee Assignment for Company OR Dependent Selection for Individual */}
+                {billingForm.clientType === 'company' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Assign to Company Employee
+                    </label>
+                    <select
+                      name="assignedEmployeeId"
+                      value={billingForm.assignedEmployeeId}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">
+                        {billingForm.companyId ? 'Select company employee (optional)' : 'Select a company first'}
+                      </option>
+                      {billingForm.companyId && companyEmployees.map((employee) => (
                         <option key={employee.id} value={employee.id}>
                           {employee.name} - {employee.position} ({employee.employee_id})
                         </option>
-                      ))
-                    ) : billingForm.clientType === 'individual' ? (
-                      serviceEmployees.map((employee) => (
-                        <option key={employee.id} value={employee.id}>
-                          {employee.name} - {employee.department}
+                      ))}
+                    </select>
+                  </div>
+                ) : billingForm.clientType === 'individual' && billingForm.individualId ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Dependent (Optional)
+                    </label>
+                    <select
+                      name="dependentId"
+                      value={billingForm.dependentId}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Service for main individual</option>
+                      {dependents.map((dependent) => (
+                        <option key={dependent.id} value={dependent.id}>
+                          {dependent.individualName} (Dependent)
                         </option>
-                      ))
-                    ) : null}
-                  </select>
-                </div>
+                      ))}
+                    </select>
+                    {dependents.length === 0 && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        No dependents registered for this individual
+                      </p>
+                    )}
+                    {dependents.length > 0 && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        Select if this service is for a dependent of the selected individual
+                      </p>
+                    )}
+                  </div>
+                ) : null}
 
 
 
@@ -4175,10 +4322,10 @@ Servigens Business Services
                     placeholder="0"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                  <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%) - VAT will be extracted from service charges (reverse calculation)</p>
+                  <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%)</p>
                 </div>
 
-                {/* VAT Applies To */}
+                {/* VAT Calculation Method */}
                 {parseFloat(billingForm.vatPercentage) > 0 && (
                   <div className="lg:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -4188,33 +4335,33 @@ Servigens Business Services
                       <label className="flex items-start cursor-pointer">
                         <input
                           type="radio"
-                          name="vatAppliesTo"
-                          value="service_charge"
-                          checked={billingForm.vatAppliesTo === 'service_charge'}
+                          name="vatCalculationMethod"
+                          value="inclusive"
+                          checked={billingForm.vatCalculationMethod === 'inclusive'}
                           onChange={handleInputChange}
                           className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                         />
                         <div className="ml-3">
-                          <span className="text-sm font-medium text-gray-900">VAT on Service Charges Only (Recommended)</span>
-                          <p className="text-sm text-gray-500">VAT will be extracted from service charges only (government charges are VAT-exempt)</p>
+                          <span className="text-sm font-medium text-gray-900">VAT-Inclusive (Reverse Calculation)</span>
+                          <p className="text-sm text-gray-500">Service charge already includes VAT - VAT will be extracted from the amount entered</p>
                         </div>
                       </label>
-                      <label className="flex items-start cursor-pointer opacity-50 cursor-not-allowed">
+                      <label className="flex items-start cursor-pointer">
                         <input
                           type="radio"
-                          name="vatAppliesTo"
-                          value="total_amount"
-                          checked={billingForm.vatAppliesTo === 'total_amount'}
+                          name="vatCalculationMethod"
+                          value="exclusive"
+                          checked={billingForm.vatCalculationMethod === 'exclusive'}
                           onChange={handleInputChange}
-                          disabled
                           className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                         />
                         <div className="ml-3">
-                          <span className="text-sm font-medium text-gray-900">VAT on Total Amount (Disabled)</span>
-                          <p className="text-sm text-gray-500">Government charges are VAT-exempt as per UAE VAT regulations</p>
+                          <span className="text-sm font-medium text-gray-900">VAT-Exclusive (Add VAT on Top)</span>
+                          <p className="text-sm text-gray-500">VAT will be added on top of the service charge entered</p>
                         </div>
                       </label>
                     </div>
+                    <p className="text-xs text-gray-500 mt-2">Note: Government charges are always VAT-exempt as per UAE VAT regulations</p>
                   </div>
                 )}
 
@@ -4719,6 +4866,7 @@ Servigens Business Services
                         </option>
                       ))}
                     </select>
+
                   </div>
                 )}
 
@@ -4743,38 +4891,58 @@ Servigens Business Services
                   </select>
                 </div>
 
-                {/* Employee Assignment */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {editBillingForm.clientType === 'company' ? 'Assign to Company Employee' : 'Assigned Employee'}
-                  </label>
-                  <select
-                    name="assignedEmployeeId"
-                    value={editBillingForm.assignedEmployeeId}
-                    onChange={(e) => setEditBillingForm(prev => ({ ...prev, assignedEmployeeId: e.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="">
-                      {editBillingForm.clientType === 'company'
-                        ? (editBillingForm.companyId ? 'Select company employee (optional)' : 'Select a company first')
-                        : 'Select employee (optional)'
-                      }
-                    </option>
-                    {editBillingForm.clientType === 'company' && editBillingForm.companyId ? (
-                      companyEmployees.map((employee) => (
+                {/* Employee Assignment for Company OR Dependent Selection for Individual */}
+                {editBillingForm.clientType === 'company' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Assign to Company Employee
+                    </label>
+                    <select
+                      name="assignedEmployeeId"
+                      value={editBillingForm.assignedEmployeeId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, assignedEmployeeId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">
+                        {editBillingForm.companyId ? 'Select company employee (optional)' : 'Select a company first'}
+                      </option>
+                      {editBillingForm.companyId && companyEmployees.map((employee) => (
                         <option key={employee.id} value={employee.id}>
                           {employee.name} - {employee.position} ({employee.employee_id})
                         </option>
-                      ))
-                    ) : editBillingForm.clientType === 'individual' ? (
-                      serviceEmployees.map((employee) => (
-                        <option key={employee.id} value={employee.id}>
-                          {employee.name} - {employee.department}
+                      ))}
+                    </select>
+                  </div>
+                ) : editBillingForm.clientType === 'individual' && editBillingForm.individualId ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Dependent (Optional)
+                    </label>
+                    <select
+                      name="dependentId"
+                      value={editBillingForm.dependentId}
+                      onChange={(e) => setEditBillingForm(prev => ({ ...prev, dependentId: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">Service for main individual</option>
+                      {dependents.map((dependent) => (
+                        <option key={dependent.id} value={dependent.id}>
+                          {dependent.individualName} (Dependent)
                         </option>
-                      ))
-                    ) : null}
-                  </select>
-                </div>
+                      ))}
+                    </select>
+                    {dependents.length === 0 && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        No dependents registered for this individual
+                      </p>
+                    )}
+                    {dependents.length > 0 && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        Select if this service is for a dependent of the selected individual
+                      </p>
+                    )}
+                  </div>
+                ) : null}
 
                 {/* Service Date */}
                 <div>
@@ -5049,10 +5217,10 @@ Servigens Business Services
                     step="0.01"
                     placeholder="0"
                   />
-                  <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%) - VAT will be extracted from service charges (reverse calculation)</p>
+                  <p className="text-sm text-gray-500 mt-1">Enter VAT percentage (e.g., 5 for 5%)</p>
                 </div>
 
-                {/* VAT Applies To */}
+                {/* VAT Calculation Method */}
                 {parseFloat(editBillingForm.vatPercentage) > 0 && (
                   <div className="lg:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -5062,33 +5230,33 @@ Servigens Business Services
                       <label className="flex items-start cursor-pointer">
                         <input
                           type="radio"
-                          name="vatAppliesTo"
-                          value="service_charge"
-                          checked={editBillingForm.vatAppliesTo === 'service_charge'}
-                          onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatAppliesTo: e.target.value as 'service_charge' | 'total_amount' }))}
+                          name="vatCalculationMethod"
+                          value="inclusive"
+                          checked={editBillingForm.vatCalculationMethod === 'inclusive'}
+                          onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatCalculationMethod: e.target.value as 'inclusive' | 'exclusive' }))}
                           className="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
                         />
                         <div className="ml-3">
-                          <span className="text-sm font-medium text-gray-900">VAT on Service Charges Only (Recommended)</span>
-                          <p className="text-sm text-gray-500">VAT will be extracted from service charges only (government charges are VAT-exempt)</p>
+                          <span className="text-sm font-medium text-gray-900">VAT-Inclusive (Reverse Calculation)</span>
+                          <p className="text-sm text-gray-500">Service charge already includes VAT - VAT will be extracted from the amount entered</p>
                         </div>
                       </label>
-                      <label className="flex items-start cursor-pointer opacity-50 cursor-not-allowed">
+                      <label className="flex items-start cursor-pointer">
                         <input
                           type="radio"
-                          name="vatAppliesTo"
-                          value="total_amount"
-                          checked={editBillingForm.vatAppliesTo === 'total_amount'}
-                          onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatAppliesTo: e.target.value as 'service_charge' | 'total_amount' }))}
-                          disabled
+                          name="vatCalculationMethod"
+                          value="exclusive"
+                          checked={editBillingForm.vatCalculationMethod === 'exclusive'}
+                          onChange={(e) => setEditBillingForm(prev => ({ ...prev, vatCalculationMethod: e.target.value as 'inclusive' | 'exclusive' }))}
                           className="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
                         />
                         <div className="ml-3">
-                          <span className="text-sm font-medium text-gray-900">VAT on Total Amount (Disabled)</span>
-                          <p className="text-sm text-gray-500">Government charges are VAT-exempt as per UAE VAT regulations</p>
+                          <span className="text-sm font-medium text-gray-900">VAT-Exclusive (Add VAT on Top)</span>
+                          <p className="text-sm text-gray-500">VAT will be added on top of the service charge entered</p>
                         </div>
                       </label>
                     </div>
+                    <p className="text-xs text-gray-500 mt-2">Note: Government charges are always VAT-exempt as per UAE VAT regulations</p>
                   </div>
                 )}
 
