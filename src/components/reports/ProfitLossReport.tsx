@@ -24,11 +24,11 @@ const ProfitLossReport: React.FC = () => {
   const loadProfitLossData = async () => {
     try {
       setLoading(true);
-      
-      // Load income from service billings
+
+      // Load income from service billings (including vendor costs)
       const { data: billings, error: billingsError } = await supabase
         .from('service_billings')
-        .select('total_amount_with_vat, total_amount')
+        .select('total_amount_with_vat, total_amount, vendor_cost')
         .gte('service_date', dateFrom)
         .lte('service_date', dateTo);
 
@@ -44,14 +44,29 @@ const ProfitLossReport: React.FC = () => {
 
       if (expensesError) throw expensesError;
 
-      const totalIncome = (billings || []).reduce((sum, billing) => 
+      const totalIncome = (billings || []).reduce((sum, billing) =>
         sum + parseFloat(billing.total_amount_with_vat || billing.total_amount || 0), 0);
-      
-      const totalExpenses = (expenses || []).reduce((sum, expense) => 
+
+      // Calculate total expenses including vendor costs from billings
+      const accountExpenses = (expenses || []).reduce((sum, expense) =>
         sum + parseFloat(expense.amount || 0), 0);
+
+      const vendorCosts = (billings || []).reduce((sum, billing) =>
+        sum + parseFloat(billing.vendor_cost || 0), 0);
+
+      const totalExpenses = accountExpenses + vendorCosts;
 
       const netProfit = totalIncome - totalExpenses;
       const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+
+      console.log('[ProfitLossReport] Summary:', {
+        totalIncome: totalIncome.toFixed(2),
+        accountExpenses: accountExpenses.toFixed(2),
+        vendorCosts: vendorCosts.toFixed(2),
+        totalExpenses: totalExpenses.toFixed(2),
+        netProfit: netProfit.toFixed(2),
+        profitMargin: profitMargin.toFixed(2) + '%'
+      });
 
       setData({
         totalIncome,

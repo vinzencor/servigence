@@ -105,21 +105,37 @@ const IncomeReport: React.FC = () => {
   };
 
   const processIncomeData = (billings: any[]): IncomeData => {
-    const incomes: Income[] = billings.map(billing => ({
-      id: billing.id,
-      date: billing.service_date,
-      amount: parseFloat(billing.total_amount_with_vat || billing.total_amount || 0),
-      serviceType: billing.service_type?.name || 'Unknown Service',
-      clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
-      clientType: billing.company_id ? 'company' : 'individual',
-      paymentMethod: billing.cash_type || 'unknown',
-      status: billing.status || 'completed',
-      invoiceNumber: billing.invoice_number,
-      employeeName: billing.assigned_employee?.name || billing.company_employee?.name,
-      profit: parseFloat(billing.profit || 0),
-      vatAmount: parseFloat(billing.vat_amount || 0),
-      discount: parseFloat(billing.discount || 0)
-    }));
+    const incomes: Income[] = billings.map(billing => {
+      // Calculate profit properly: Net Service Charges - Vendor Cost
+      const typingCharges = parseFloat(billing.typing_charges || 0);
+      const vendorCost = parseFloat(billing.vendor_cost || 0);
+      const vatPercentage = parseFloat(billing.vat_percentage || 0);
+
+      // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
+      let netTypingCharges = typingCharges;
+      if (vatPercentage > 0 && billing.vat_calculation_method === 'inclusive') {
+        netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
+      }
+
+      // Profit = Net Service Charges - Vendor Cost
+      const profit = netTypingCharges - vendorCost;
+
+      return {
+        id: billing.id,
+        date: billing.service_date,
+        amount: parseFloat(billing.total_amount_with_vat || billing.total_amount || 0),
+        serviceType: billing.service_type?.name || 'Unknown Service',
+        clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
+        clientType: billing.company_id ? 'company' : 'individual',
+        paymentMethod: billing.cash_type || 'unknown',
+        status: billing.status || 'completed',
+        invoiceNumber: billing.invoice_number,
+        employeeName: billing.assigned_employee?.name || billing.company_employee?.name,
+        profit: profit,
+        vatAmount: parseFloat(billing.vat_amount || 0),
+        discount: parseFloat(billing.discount || 0)
+      };
+    });
 
     const totalIncome = incomes.reduce((sum, income) => sum + income.amount, 0);
     const totalProfit = incomes.reduce((sum, income) => sum + (income.profit || 0), 0);

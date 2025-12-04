@@ -138,7 +138,38 @@ const CompanyWiseReport: React.FC = () => {
 
       const company = companyMap.get(companyId)!;
       const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
-      const profit = parseFloat(billing.profit || 0);
+
+      // Calculate profit properly: Revenue - Vendor Cost
+      // Profit = Net Service Charges (typing_charges after VAT) - Vendor Cost
+      const typingCharges = parseFloat(billing.typing_charges || 0);
+      const vendorCost = parseFloat(billing.vendor_cost || 0);
+      const vatPercentage = parseFloat(billing.vat_percentage || 0);
+
+      // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
+      // For VAT-inclusive, the net typing charge is: typing / (1 + VAT%)
+      // For VAT-exclusive or no VAT, net typing charge is the same as typing charges
+      let netTypingCharges = typingCharges;
+      if (vatPercentage > 0 && billing.vat_calculation_method === 'inclusive') {
+        netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
+      }
+
+      // Profit = Net Service Charges - Vendor Cost
+      const profit = netTypingCharges - vendorCost;
+
+      // Debug logging for profit calculation
+      if (vendorCost > 0 || profit !== 0) {
+        console.log(`[CompanyWiseReport] Profit Calculation for ${company.name}:`, {
+          invoiceNumber: billing.invoice_number,
+          typingCharges,
+          vendorCost,
+          vatPercentage,
+          vatMethod: billing.vat_calculation_method,
+          netTypingCharges,
+          calculatedProfit: profit,
+          revenue: amount
+        });
+      }
+
       const serviceName = billing.service_type?.name || 'Unknown Service';
       const paymentMethod = billing.cash_type || 'unknown';
       const month = new Date(billing.service_date).toISOString().slice(0, 7);
@@ -146,7 +177,7 @@ const CompanyWiseReport: React.FC = () => {
       company.totalRevenue += amount;
       company.totalProfit += profit;
       company.totalTransactions += 1;
-      
+
       if (!company.lastTransactionDate || billing.service_date > company.lastTransactionDate) {
         company.lastTransactionDate = billing.service_date;
       }
@@ -185,6 +216,17 @@ const CompanyWiseReport: React.FC = () => {
     const totalDue = companiesArray.reduce((sum, company) => sum + company.totalDue, 0);
     const companiesWithRevenue = companiesArray.filter(c => c.totalRevenue > 0);
 
+    // Summary logging
+    console.log('[CompanyWiseReport] Summary:', {
+      totalCompanies: companiesWithRevenue.length,
+      totalRevenue: totalRevenue.toFixed(2),
+      totalProfit: totalProfit.toFixed(2),
+      profitMargin: totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(2) + '%' : '0%',
+      totalDue: totalDue.toFixed(2),
+      companiesWithProfit: companiesArray.filter(c => c.totalProfit > 0).length,
+      companiesWithVendorCosts: companiesArray.filter(c => c.totalProfit < c.totalRevenue).length
+    });
+
     return {
       companies: companiesArray,
       summary: {
@@ -192,11 +234,11 @@ const CompanyWiseReport: React.FC = () => {
         totalRevenue,
         totalProfit,
         totalDue,
-        averageRevenuePerCompany: companiesWithRevenue.length > 0 
-          ? totalRevenue / companiesWithRevenue.length 
+        averageRevenuePerCompany: companiesWithRevenue.length > 0
+          ? totalRevenue / companiesWithRevenue.length
           : 0,
-        topCompanyRevenue: companiesArray.length > 0 
-          ? Math.max(...companiesArray.map(c => c.totalRevenue)) 
+        topCompanyRevenue: companiesArray.length > 0
+          ? Math.max(...companiesArray.map(c => c.totalRevenue))
           : 0
       }
     };
