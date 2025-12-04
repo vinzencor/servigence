@@ -1606,7 +1606,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({ onSave, onS
                   value={formData.vatTrnNo}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="TRN100000000000000"
+                  placeholder="105069346200003"
                 />
               </div>
             ) : (

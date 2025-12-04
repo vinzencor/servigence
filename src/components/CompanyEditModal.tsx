@@ -1076,7 +1076,7 @@ const CompanyEditModal: React.FC<CompanyEditModalProps> = ({ company, onClose, o
                 value={formData.vatTrnNo}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="TRN100234567890123"
+                placeholder="105069346200003"
               />
             </div>
 

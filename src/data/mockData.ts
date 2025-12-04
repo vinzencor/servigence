@@ -4,7 +4,7 @@ export const mockCompanies: Company[] = [
   {
     id: '550e8400-e29b-41d4-a716-446655440001',
     companyName: 'Al Manara Trading LLC',
-    vatTrnNo: 'TRN100234567890123',
+    vatTrnNo: '105069346200003',
     phone1: '+971-4-123-4567',
     phone2: '+971-50-123-4567',
     email1: 'admin@almanara.ae',
@@ -30,7 +30,7 @@ export const mockCompanies: Company[] = [
   {
     id: '550e8400-e29b-41d4-a716-446655440002',
     companyName: 'Emirates Tech Solutions',
-    vatTrnNo: 'TRN100987654321098',
+    vatTrnNo: '105069346200003',
     phone1: '+971-4-987-6543',
     email1: 'contact@emiratestech.ae',
     address: 'Suite 505, Emirates Tower, Sheikh Zayed Road, Dubai, UAE',
