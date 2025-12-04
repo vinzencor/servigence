@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Download, TrendingUp, Target, Award, Search, FileText, Printer } from 'lucide-react';
+import { Users, Download, TrendingUp, Target, Award, Search, FileText, Printer, FileDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { exportToPDF } from '../../utils/pdfExport';
+import { printInvoice, downloadInvoicePDF } from '../../utils/invoiceGenerator';
 
 interface EmployeeData {
   id: string;
@@ -245,250 +246,24 @@ Total: AED ${item.total.toFixed(2)}
     toast.success('Detailed breakdown PDF exported successfully!');
   };
 
-  const generateInvoicePDF = (billingData: any) => {
+  const handlePrintInvoice = (billingData: any) => {
     try {
-      // Generate invoice HTML content
-      const invoiceHTML = generateInvoiceHTML(billingData);
-
-      // Create a new window for printing
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(invoiceHTML);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-      }
-
+      printInvoice(billingData, 'Admin');
       toast.success('Invoice opened for printing');
     } catch (error) {
-      console.error('Error generating invoice:', error);
-      toast.error('Failed to generate invoice');
+      console.error('Error printing invoice:', error);
+      toast.error('Failed to print invoice');
     }
   };
 
-  const generateInvoiceHTML = (billing: any) => {
-    const currentDate = new Date();
-    const formattedDate = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
-    const formattedTime = currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
-
-    const invoiceNumber = billing.invoice_number || 'N/A';
-    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientType = billing.company ? 'Company' : 'Individual';
-    const serviceName = billing.service_type?.name || 'Service';
-    const quantity = billing.quantity || '1';
-    const serviceCharge = parseFloat(billing.service_charge || 0);
-    const governmentCharge = parseFloat(billing.government_charge || 0);
-    const totalAmount = parseFloat(billing.total_amount || 0);
-    const vatAmount = parseFloat(billing.vat_amount || 0);
-    const totalWithVat = parseFloat(billing.total_amount_with_vat || totalAmount);
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Tax Invoice ${invoiceNumber}</title>
-        <meta charset="UTF-8">
-        <style>
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: Arial, sans-serif;
-          }
-          body {
-            padding: 20px;
-            background-color: #f5f5f5;
-          }
-          .invoice-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            padding: 25px;
-            border-radius: 5px;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 20px;
-            margin-bottom: 20px;
-          }
-          .logo-section {
-            flex: 1;
-          }
-          .logo-text {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1e3a8a;
-            margin-bottom: 5px;
-          }
-          .company-info {
-            font-size: 11px;
-            color: #666;
-            line-height: 1.6;
-          }
-          .invoice-info {
-            text-align: right;
-          }
-          .invoice-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #1e3a8a;
-            margin-bottom: 10px;
-          }
-          .invoice-number {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 5px;
-          }
-          .client-section {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #f9fafb;
-            border-radius: 5px;
-          }
-          .section-title {
-            font-size: 12px;
-            font-weight: bold;
-            color: #666;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-          }
-          .client-name {
-            font-size: 16px;
-            font-weight: bold;
-            color: #1e3a8a;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-          }
-          th {
-            background-color: #1e3a8a;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-size: 12px;
-            text-transform: uppercase;
-          }
-          td {
-            padding: 12px;
-            border-bottom: 1px solid #e5e7eb;
-          }
-          .text-right {
-            text-align: right;
-          }
-          .totals-section {
-            margin-top: 20px;
-            display: flex;
-            justify-content: flex-end;
-          }
-          .totals-table {
-            width: 300px;
-          }
-          .totals-table td {
-            padding: 8px;
-            border: none;
-          }
-          .total-row {
-            font-weight: bold;
-            font-size: 16px;
-            background-color: #f3f4f6;
-          }
-          .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            text-align: center;
-            font-size: 11px;
-            color: #666;
-          }
-          @media print {
-            body {
-              background-color: white;
-              padding: 0;
-            }
-            .invoice-container {
-              box-shadow: none;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="invoice-container">
-          <div class="header">
-            <div class="logo-section">
-              <div class="logo-text">SERVIGENS</div>
-              <div class="company-info">
-                Business Group<br>
-                Office 123, Business Tower<br>
-                Dubai, UAE<br>
-                TRN: 123456789012345
-              </div>
-            </div>
-            <div class="invoice-info">
-              <div class="invoice-title">TAX INVOICE</div>
-              <div class="invoice-number">Invoice #: ${invoiceNumber}</div>
-              <div class="invoice-number">Date: ${formattedDate}</div>
-              <div class="invoice-number">Service Date: ${serviceDate}</div>
-            </div>
-          </div>
-
-          <div class="client-section">
-            <div class="section-title">Bill To</div>
-            <div class="client-name">${clientName}</div>
-            <div style="font-size: 12px; color: #666; margin-top: 4px;">${clientType}</div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Service Description</th>
-                <th class="text-right">Quantity</th>
-                <th class="text-right">Service Charge</th>
-                <th class="text-right">Govt. Charge</th>
-                <th class="text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>${serviceName}</td>
-                <td class="text-right">${quantity}</td>
-                <td class="text-right">AED ${serviceCharge.toFixed(2)}</td>
-                <td class="text-right">AED ${governmentCharge.toFixed(2)}</td>
-                <td class="text-right">AED ${totalAmount.toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="totals-section">
-            <table class="totals-table">
-              <tr>
-                <td>Subtotal:</td>
-                <td class="text-right">AED ${totalAmount.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>VAT (5%):</td>
-                <td class="text-right">AED ${vatAmount.toFixed(2)}</td>
-              </tr>
-              <tr class="total-row">
-                <td>Total Amount:</td>
-                <td class="text-right">AED ${totalWithVat.toFixed(2)}</td>
-              </tr>
-            </table>
-          </div>
-
-          <div class="footer">
-            <p><strong>Thank you for choosing SERVIGENS!</strong></p>
-            <p>This is a computer-generated invoice. Generated on ${formattedDate} at ${formattedTime}</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+  const handleDownloadInvoicePDF = (billingData: any) => {
+    try {
+      downloadInvoicePDF(billingData, 'Admin');
+      toast.success('Invoice ready for download - use Print to PDF in the dialog');
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+      toast.error('Failed to download invoice');
+    }
   };
 
   if (loading) {
@@ -721,14 +496,16 @@ Total: AED ${item.total.toFixed(2)}
                       {item.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                      <button
-                        onClick={() => generateInvoicePDF(item.billingData)}
-                        className="inline-flex items-center space-x-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
-                        title="Print Invoice"
-                      >
-                        <Printer className="w-4 h-4" />
-                        <span>Invoice</span>
-                      </button>
+                      <div className="flex items-center justify-center space-x-2">
+                        <button
+                          onClick={() => handlePrintInvoice(item.billingData)}
+                          className="inline-flex items-center space-x-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+                          title="Print Invoice"
+                        >
+                          <Printer className="w-4 h-4" />
+                          <span>Print</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
