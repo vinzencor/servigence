@@ -11,12 +11,149 @@ const ServiceExpiryReminderManager: React.FC = () => {
   const [lastRunResult, setLastRunResult] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [autoCheckEnabled, setAutoCheckEnabled] = useState(true);
+  const [nextAutoCheck, setNextAutoCheck] = useState<Date | null>(null);
+  const [checkInterval, setCheckInterval] = useState<'daily' | 'hourly'>('daily');
+  const [timeUntilNextCheck, setTimeUntilNextCheck] = useState<string>('');
 
   useEffect(() => {
     if (activeTab === 'logs') {
       loadLogs();
     }
   }, [activeTab]);
+
+  // Update countdown timer every second
+  useEffect(() => {
+    if (!autoCheckEnabled || !nextAutoCheck) {
+      setTimeUntilNextCheck('');
+      return;
+    }
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const diff = nextAutoCheck.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setTimeUntilNextCheck('Running now...');
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (hours > 0) {
+        setTimeUntilNextCheck(`${hours}h ${minutes}m ${seconds}s`);
+      } else if (minutes > 0) {
+        setTimeUntilNextCheck(`${minutes}m ${seconds}s`);
+      } else {
+        setTimeUntilNextCheck(`${seconds}s`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [autoCheckEnabled, nextAutoCheck]);
+
+  // Automatic reminder check - runs at specified interval
+  useEffect(() => {
+    if (!autoCheckEnabled) {
+      console.log('⏸️  Automatic reminder checks are disabled');
+      setNextAutoCheck(null);
+      return;
+    }
+
+    console.log(`🔔 Automatic reminder check scheduler initialized (${checkInterval} mode)`);
+
+    // Function to run the automatic check
+    const runAutomaticCheck = async () => {
+      console.log('⏰ Running automatic reminder check at', new Date().toLocaleString());
+      try {
+        const result = await serviceExpiryReminderService.checkAndSendReminders();
+        setLastRunResult(result);
+        console.log('✅ Automatic reminder check completed:', result);
+
+        // Update next check time based on interval
+        const nextCheck = new Date();
+        if (checkInterval === 'daily') {
+          nextCheck.setDate(nextCheck.getDate() + 1);
+          nextCheck.setHours(0, 0, 0, 0); // Midnight
+        } else {
+          nextCheck.setHours(nextCheck.getHours() + 1); // Next hour
+        }
+        setNextAutoCheck(nextCheck);
+      } catch (error) {
+        console.error('❌ Error in automatic reminder check:', error);
+      }
+    };
+
+    let timeout: NodeJS.Timeout | null = null;
+    let interval: NodeJS.Timeout | null = null;
+
+    if (checkInterval === 'daily') {
+      // Daily mode: Run at midnight every day
+      const getMillisecondsUntilMidnight = () => {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+        return tomorrow.getTime() - now.getTime();
+      };
+
+      const msUntilMidnight = getMillisecondsUntilMidnight();
+      console.log(`⏰ Next automatic check scheduled in ${Math.round(msUntilMidnight / 1000 / 60)} minutes (at midnight)`);
+
+      // Set next check time
+      const nextCheck = new Date();
+      nextCheck.setDate(nextCheck.getDate() + 1);
+      nextCheck.setHours(0, 0, 0, 0);
+      setNextAutoCheck(nextCheck);
+
+      timeout = setTimeout(() => {
+        runAutomaticCheck();
+
+        // After first midnight check, set up daily interval
+        interval = setInterval(() => {
+          runAutomaticCheck();
+        }, 24 * 60 * 60 * 1000); // 24 hours
+      }, msUntilMidnight);
+    } else {
+      // Hourly mode: Run every hour on the hour
+      const getMillisecondsUntilNextHour = () => {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0, 0, 0);
+        return nextHour.getTime() - now.getTime();
+      };
+
+      const msUntilNextHour = getMillisecondsUntilNextHour();
+      console.log(`⏰ Next automatic check scheduled in ${Math.round(msUntilNextHour / 1000 / 60)} minutes (hourly mode)`);
+
+      // Set next check time
+      const nextCheck = new Date();
+      nextCheck.setHours(nextCheck.getHours() + 1);
+      nextCheck.setMinutes(0, 0, 0);
+      setNextAutoCheck(nextCheck);
+
+      timeout = setTimeout(() => {
+        runAutomaticCheck();
+
+        // After first check, set up hourly interval
+        interval = setInterval(() => {
+          runAutomaticCheck();
+        }, 60 * 60 * 1000); // 1 hour
+      }, msUntilNextHour);
+    }
+
+    // Cleanup function
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
+  }, [autoCheckEnabled, checkInterval]);
 
   const loadLogs = async () => {
     try {
@@ -93,6 +230,62 @@ const ServiceExpiryReminderManager: React.FC = () => {
                 </>
               )}
             </button>
+          </div>
+
+          {/* Automatic Check Status */}
+          <div className="mt-4 bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4">
+            <div className="space-y-3">
+              {/* Status Row */}
+              <div className="flex items-center justify-between text-white">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${autoCheckEnabled ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
+                    <span className="text-sm font-medium">
+                      Automatic Checks: {autoCheckEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                  {autoCheckEnabled && (
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={checkInterval}
+                        onChange={(e) => setCheckInterval(e.target.value as 'daily' | 'hourly')}
+                        className="bg-white bg-opacity-20 text-white text-sm px-3 py-1 rounded border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50"
+                      >
+                        <option value="daily" className="text-gray-900">Daily (Midnight)</option>
+                        <option value="hourly" className="text-gray-900">Hourly (Testing)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setAutoCheckEnabled(!autoCheckEnabled)}
+                  className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {autoCheckEnabled ? 'Disable Auto-Check' : 'Enable Auto-Check'}
+                </button>
+              </div>
+
+              {/* Next Check Info */}
+              {autoCheckEnabled && nextAutoCheck && (
+                <div className="flex items-center justify-between text-white border-t border-white border-opacity-20 pt-3">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-4 h-4" />
+                      <span className="text-sm">
+                        Next check: {nextAutoCheck.toLocaleString()}
+                      </span>
+                    </div>
+                    {timeUntilNextCheck && (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-mono bg-white bg-opacity-20 px-2 py-1 rounded">
+                          {timeUntilNextCheck}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Last Run Result */}

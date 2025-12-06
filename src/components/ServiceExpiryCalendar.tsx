@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, X, AlertCircle, Building2, User, FileText, DollarSign, File } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, X, AlertCircle, Building2, User, FileText, DollarSign, File, RefreshCw, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
@@ -79,20 +79,28 @@ const ServiceExpiryCalendar: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [debugData, setDebugData] = useState<any>(null);
 
+  // Load data when component mounts or when month changes
   useEffect(() => {
+    console.log('📅 ServiceExpiryCalendar: Loading data (mount or month change)');
     loadExpiryData();
-  }, [currentDate]);
+  }, [currentDate]); // Runs on mount AND when currentDate changes
 
   const loadExpiryData = async () => {
     try {
       setLoading(true);
+      console.log('📅 Loading expiry data for calendar...');
 
       // Get first and last day of current month
       const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-      // Load service billings
+      console.log(`📅 Date range: ${firstDay.toISOString().split('T')[0]} to ${lastDay.toISOString().split('T')[0]}`);
+
+      // Load service billings - Load ALL with expiry dates (not just current month)
+      // We'll filter by month in the UI, but load all data to ensure nothing is missed
       const { data: servicesData, error: servicesError } = await supabase
         .from('service_billings')
         .select(`
@@ -120,7 +128,22 @@ const ServiceExpiryCalendar: React.FC = () => {
         .lte('expiry_date', lastDay.toISOString().split('T')[0])
         .order('expiry_date', { ascending: true });
 
-      if (servicesError) throw servicesError;
+      if (servicesError) {
+        console.error('❌ Error loading service billings:', servicesError);
+        throw servicesError;
+      }
+
+      console.log(`✅ Loaded ${servicesData?.length || 0} service billings with expiry dates`);
+
+      // Log detailed service billing data for debugging
+      if (servicesData && servicesData.length > 0) {
+        console.log('📋 Service Billings Details:');
+        servicesData.forEach((billing: any, index: number) => {
+          console.log(`  ${index + 1}. Invoice: ${billing.invoice_number}, Expiry: ${billing.expiry_date}, Client: ${billing.companies?.company_name || billing.individuals?.individual_name || 'N/A'}`);
+        });
+      } else {
+        console.log('⚠️ No service billings found for this month');
+      }
 
       // Normalize service billing data
       const normalizedServices = (servicesData || []).map(billing => ({
@@ -157,7 +180,22 @@ const ServiceExpiryCalendar: React.FC = () => {
         .lte('expiry_date', lastDay.toISOString().split('T')[0])
         .order('expiry_date', { ascending: true });
 
-      if (companyDocsError) throw companyDocsError;
+      if (companyDocsError) {
+        console.error('❌ Error loading company documents:', companyDocsError);
+        throw companyDocsError;
+      }
+
+      console.log(`✅ Loaded ${companyDocsData?.length || 0} company documents with expiry dates`);
+
+      // Log detailed company document data for debugging
+      if (companyDocsData && companyDocsData.length > 0) {
+        console.log('📄 Company Documents Details:');
+        companyDocsData.forEach((doc: any, index: number) => {
+          console.log(`  ${index + 1}. Title: ${doc.title}, Expiry: ${doc.expiry_date}, Company: ${doc.companies?.company_name || 'N/A'}`);
+        });
+      } else {
+        console.log('⚠️ No company documents found for this month');
+      }
 
       // Load individual documents
       const { data: individualDocsData, error: individualDocsError } = await supabase
@@ -180,7 +218,22 @@ const ServiceExpiryCalendar: React.FC = () => {
         .lte('expiry_date', lastDay.toISOString().split('T')[0])
         .order('expiry_date', { ascending: true });
 
-      if (individualDocsError) throw individualDocsError;
+      if (individualDocsError) {
+        console.error('❌ Error loading individual documents:', individualDocsError);
+        throw individualDocsError;
+      }
+
+      console.log(`✅ Loaded ${individualDocsData?.length || 0} individual documents with expiry dates`);
+
+      // Log detailed individual document data for debugging
+      if (individualDocsData && individualDocsData.length > 0) {
+        console.log('👤 Individual Documents Details:');
+        individualDocsData.forEach((doc: any, index: number) => {
+          console.log(`  ${index + 1}. Title: ${doc.title}, Expiry: ${doc.expiry_date}, Individual: ${doc.individuals?.individual_name || 'N/A'}`);
+        });
+      } else {
+        console.log('⚠️ No individual documents found for this month');
+      }
 
       // Normalize and combine document data
       const normalizedCompanyDocs = (companyDocsData || []).map(doc => ({
@@ -197,8 +250,24 @@ const ServiceExpiryCalendar: React.FC = () => {
       }));
 
       setDocumentExpiries([...normalizedCompanyDocs, ...normalizedIndividualDocs]);
+
+      console.log('✅ Calendar data loaded successfully');
+      console.log(`📊 Total: ${normalizedServices.length} services, ${normalizedCompanyDocs.length + normalizedIndividualDocs.length} documents`);
+
+      // Store debug data
+      setDebugData({
+        dateRange: {
+          start: firstDay.toISOString().split('T')[0],
+          end: lastDay.toISOString().split('T')[0]
+        },
+        services: servicesData || [],
+        companyDocs: companyDocsData || [],
+        individualDocs: individualDocsData || [],
+        totalServices: normalizedServices.length,
+        totalDocuments: normalizedCompanyDocs.length + normalizedIndividualDocs.length
+      });
     } catch (error: any) {
-      console.error('Error loading expiry data:', error);
+      console.error('❌ Error loading expiry data:', error);
       toast.error('Failed to load expiry data');
     } finally {
       setLoading(false);
@@ -246,6 +315,163 @@ const ServiceExpiryCalendar: React.FC = () => {
 
   const nextMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const goToSpecificMonth = (year: number, month: number) => {
+    setCurrentDate(new Date(year, month, 1));
+  };
+
+  const runDatabaseCheck = async () => {
+    try {
+      console.log('🔍 Running comprehensive database check...');
+      toast.loading('Running database check...', { id: 'db-check' });
+
+      // Query ALL service billings with expiry dates (no date filter)
+      const { data: allServices, error: servicesError } = await supabase
+        .from('service_billings')
+        .select(`
+          id,
+          service_date,
+          expiry_date,
+          invoice_number,
+          total_amount_with_vat,
+          company_id,
+          individual_id,
+          service_types!service_type_id (
+            name
+          ),
+          companies!company_id (
+            company_name,
+            email1
+          ),
+          individuals!individual_id (
+            individual_name,
+            email1
+          )
+        `)
+        .not('expiry_date', 'is', null)
+        .order('expiry_date', { ascending: true });
+
+      if (servicesError) {
+        console.error('❌ Database check error (services):', servicesError);
+        throw servicesError;
+      }
+
+      // Query ALL company documents with expiry dates (no date filter)
+      const { data: allCompanyDocs, error: companyDocsError } = await supabase
+        .from('company_documents')
+        .select(`
+          id,
+          title,
+          document_type,
+          document_number,
+          expiry_date,
+          company_id,
+          status,
+          companies!company_id (
+            company_name,
+            email1
+          )
+        `)
+        .not('expiry_date', 'is', null)
+        .order('expiry_date', { ascending: true });
+
+      if (companyDocsError) {
+        console.error('❌ Database check error (company docs):', companyDocsError);
+        throw companyDocsError;
+      }
+
+      // Query ALL individual documents with expiry dates (no date filter)
+      const { data: allIndividualDocs, error: individualDocsError } = await supabase
+        .from('individual_documents')
+        .select(`
+          id,
+          title,
+          document_type,
+          document_number,
+          expiry_date,
+          individual_id,
+          status,
+          individuals!individual_id (
+            individual_name,
+            email1
+          )
+        `)
+        .not('expiry_date', 'is', null)
+        .order('expiry_date', { ascending: true });
+
+      if (individualDocsError) {
+        console.error('❌ Database check error (individual docs):', individualDocsError);
+        throw individualDocsError;
+      }
+
+      // Log comprehensive results
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('🔍 DATABASE CHECK RESULTS (ALL ITEMS WITH EXPIRY DATES)');
+      console.log('═══════════════════════════════════════════════════════');
+
+      console.log(`\n📋 SERVICE BILLINGS: ${allServices?.length || 0} total`);
+      if (allServices && allServices.length > 0) {
+        allServices.forEach((billing: any, index: number) => {
+          console.log(`  ${index + 1}. Invoice: ${billing.invoice_number}`);
+          console.log(`     Expiry Date: ${billing.expiry_date}`);
+          console.log(`     Client: ${billing.companies?.company_name || billing.individuals?.individual_name || 'N/A'}`);
+          console.log(`     Service: ${billing.service_types?.name || 'N/A'}`);
+          console.log('');
+        });
+      } else {
+        console.log('  ⚠️ No service billings found with expiry dates');
+      }
+
+      console.log(`\n📄 COMPANY DOCUMENTS: ${allCompanyDocs?.length || 0} total`);
+      if (allCompanyDocs && allCompanyDocs.length > 0) {
+        allCompanyDocs.forEach((doc: any, index: number) => {
+          console.log(`  ${index + 1}. Title: ${doc.title}`);
+          console.log(`     Expiry Date: ${doc.expiry_date}`);
+          console.log(`     Company: ${doc.companies?.company_name || 'N/A'}`);
+          console.log(`     Status: ${doc.status}`);
+          console.log('');
+        });
+      } else {
+        console.log('  ⚠️ No company documents found with expiry dates');
+      }
+
+      console.log(`\n👤 INDIVIDUAL DOCUMENTS: ${allIndividualDocs?.length || 0} total`);
+      if (allIndividualDocs && allIndividualDocs.length > 0) {
+        allIndividualDocs.forEach((doc: any, index: number) => {
+          console.log(`  ${index + 1}. Title: ${doc.title}`);
+          console.log(`     Expiry Date: ${doc.expiry_date}`);
+          console.log(`     Individual: ${doc.individuals?.individual_name || 'N/A'}`);
+          console.log(`     Status: ${doc.status}`);
+          console.log('');
+        });
+      } else {
+        console.log('  ⚠️ No individual documents found with expiry dates');
+      }
+
+      console.log('═══════════════════════════════════════════════════════');
+      console.log(`📊 TOTAL ITEMS IN DATABASE: ${(allServices?.length || 0) + (allCompanyDocs?.length || 0) + (allIndividualDocs?.length || 0)}`);
+      console.log('═══════════════════════════════════════════════════════\n');
+
+      const totalItems = (allServices?.length || 0) + (allCompanyDocs?.length || 0) + (allIndividualDocs?.length || 0);
+
+      toast.success(
+        `Database Check Complete!\n` +
+        `Found ${allServices?.length || 0} services, ${allCompanyDocs?.length || 0} company docs, ${allIndividualDocs?.length || 0} individual docs\n` +
+        `Total: ${totalItems} items with expiry dates\n` +
+        `Check console for detailed results.`,
+        { id: 'db-check', duration: 8000 }
+      );
+
+      setShowDebugPanel(true);
+    } catch (error: any) {
+      console.error('❌ Database check failed:', error);
+      toast.error('Database check failed. Check console for details.', { id: 'db-check' });
+    }
   };
 
   const renderCalendar = () => {
@@ -322,14 +548,138 @@ const ServiceExpiryCalendar: React.FC = () => {
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg shadow-lg p-6 mb-6">
-        <div className="flex items-center space-x-3">
-          <Calendar className="w-8 h-8 text-white" />
-          <div>
-            <h1 className="text-2xl font-bold text-white">Service & Document Expiry Calendar</h1>
-            <p className="text-purple-100 text-sm mt-1">View all services and documents expiring by date</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Calendar className="w-8 h-8 text-white" />
+            <div>
+              <h1 className="text-2xl font-bold text-white">Service & Document Expiry Calendar</h1>
+              <p className="text-purple-100 text-sm mt-1">View all services and documents expiring by date</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={runDatabaseCheck}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              title="Check all items in database (for debugging)"
+            >
+              <Search className="w-5 h-5" />
+              <span>Database Check</span>
+            </button>
+            <button
+              onClick={loadExpiryData}
+              disabled={loading}
+              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Important Notice - Year Mismatch */}
+      {!loading && debugData && debugData.dateRange.start.startsWith('2024') && (
+        <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 mb-6">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-yellow-900 mb-2">⚠️ You're viewing 2024, but your services expire in 2025!</h3>
+              <p className="text-sm text-yellow-800 mb-3">
+                Most of your service billings expire in <strong>December 2025</strong>, but you're currently viewing <strong>December 2024</strong>.
+                That's why they're not appearing in the calendar!
+              </p>
+              <button
+                onClick={() => goToSpecificMonth(2025, 11)}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                🚀 Jump to December 2025 (Click Here!)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Debug Info Panel */}
+      {!loading && debugData && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">📊 Calendar Query Info</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-blue-600 font-medium">Date Range:</p>
+                  <p className="text-blue-900">{debugData.dateRange.start} to {debugData.dateRange.end}</p>
+                </div>
+                <div>
+                  <p className="text-blue-600 font-medium">Services Found:</p>
+                  <p className="text-blue-900 font-bold">{debugData.totalServices}</p>
+                </div>
+                <div>
+                  <p className="text-blue-600 font-medium">Documents Found:</p>
+                  <p className="text-blue-900 font-bold">{debugData.totalDocuments}</p>
+                </div>
+                <div>
+                  <p className="text-blue-600 font-medium">Last Refreshed:</p>
+                  <p className="text-blue-900">{new Date().toLocaleTimeString()}</p>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowDebugPanel(!showDebugPanel)}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium ml-4"
+            >
+              {showDebugPanel ? 'Hide Details' : 'Show Details'}
+            </button>
+          </div>
+
+          {showDebugPanel && (
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <p className="text-xs text-blue-700 mb-2">
+                💡 <strong>Tip:</strong> If you don't see a recently added item, make sure:
+              </p>
+              <ul className="text-xs text-blue-700 space-y-1 ml-4">
+                <li>• The item's expiry date falls within the date range shown above</li>
+                <li>• You're viewing the correct month AND year (use arrow buttons or quick jump buttons)</li>
+                <li>• For documents, the status is set to "active" (not deleted/archived)</li>
+                <li>• Click "Database Check" button to see ALL items in the database</li>
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Summary Stats */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Services This Month</p>
+                <p className="text-2xl font-bold text-red-600">{serviceBillings.length}</p>
+              </div>
+              <FileText className="w-10 h-10 text-red-600 opacity-20" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Documents This Month</p>
+                <p className="text-2xl font-bold text-orange-600">{documentExpiries.length}</p>
+              </div>
+              <File className="w-10 h-10 text-orange-600 opacity-20" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Expiries</p>
+                <p className="text-2xl font-bold text-purple-600">{serviceBillings.length + documentExpiries.length}</p>
+              </div>
+              <Calendar className="w-10 h-10 text-purple-600 opacity-20" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Calendar Navigation */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -337,15 +687,35 @@ const ServiceExpiryCalendar: React.FC = () => {
           <button
             onClick={previousMonth}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Previous Month"
           >
             <ChevronLeft className="w-6 h-6 text-gray-600" />
           </button>
-          <h2 className="text-2xl font-bold text-gray-800">
-            {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </h2>
+          <div className="flex items-center space-x-4">
+            <h2 className="text-2xl font-bold text-gray-800">
+              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </h2>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={goToToday}
+                className="bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-200 transition-colors"
+                title="Go to current month"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => goToSpecificMonth(2025, 11)} // December 2025 (month is 0-indexed)
+                className="bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
+                title="Jump to December 2025 where your services are"
+              >
+                Dec 2025
+              </button>
+            </div>
+          </div>
           <button
             onClick={nextMonth}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Next Month"
           >
             <ChevronRight className="w-6 h-6 text-gray-600" />
           </button>
@@ -372,20 +742,31 @@ const ServiceExpiryCalendar: React.FC = () => {
               {renderCalendar()}
             </div>
 
-            {/* Legend */}
-            <div className="mt-4 flex items-center justify-center space-x-6 text-sm">
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
-                <span className="text-gray-600">Today</span>
+            {/* Legend and Info */}
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-center space-x-6 text-sm">
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
+                  <span className="text-gray-600">Today</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <FileText className="w-4 h-4 text-red-600" />
+                  <span className="text-gray-600">Services</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <File className="w-4 h-4 text-orange-600" />
+                  <span className="text-gray-600">Documents</span>
+                </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <FileText className="w-4 h-4 text-red-600" />
-                <span className="text-gray-600">Services</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <File className="w-4 h-4 text-orange-600" />
-                <span className="text-gray-600">Documents</span>
-              </div>
+
+              {/* No items message */}
+              {serviceBillings.length === 0 && documentExpiries.length === 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-blue-800">
+                    <strong>No expiries found for this month.</strong> Use the navigation arrows to view other months, or click "Refresh" to reload data.
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )}
