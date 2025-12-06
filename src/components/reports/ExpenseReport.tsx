@@ -64,7 +64,7 @@ const ExpenseReport: React.FC = () => {
   const loadExpenseData = async () => {
     try {
       setLoading(true);
-      
+
       // Load account transactions (expenses)
       const { data: transactions, error } = await supabase
         .from('account_transactions')
@@ -80,7 +80,22 @@ const ExpenseReport: React.FC = () => {
 
       if (error) throw error;
 
-      const processedData = processExpenseData(transactions || []);
+      // Load service billings to get government charges and vendor costs
+      const { data: billings, error: billingsError } = await supabase
+        .from('service_billings')
+        .select(`
+          *,
+          company:companies(company_name),
+          individual:individuals(individual_name),
+          service_type:service_types(name)
+        `)
+        .gte('service_date', dateFrom)
+        .lte('service_date', dateTo)
+        .order('service_date', { ascending: false });
+
+      if (billingsError) throw billingsError;
+
+      const processedData = processExpenseData(transactions || [], billings || []);
       setData(processedData);
     } catch (error) {
       console.error('Error loading expense data:', error);
@@ -90,19 +105,62 @@ const ExpenseReport: React.FC = () => {
     }
   };
 
-  const processExpenseData = (transactions: any[]): ExpenseData => {
-    const expenses: Expense[] = transactions.map(transaction => ({
-      id: transaction.id,
-      date: transaction.transaction_date,
-      amount: parseFloat(transaction.amount || 0),
-      category: transaction.category || 'Uncategorized',
-      description: transaction.description || 'No description',
-      paymentMethod: transaction.payment_method || 'unknown',
-      status: transaction.status || 'completed',
-      companyName: transaction.company?.company_name,
-      individualName: transaction.individual?.individual_name,
-      referenceNumber: transaction.reference_number
-    }));
+  const processExpenseData = (transactions: any[], billings: any[]): ExpenseData => {
+    const expenses: Expense[] = [];
+
+    // Add account transaction expenses
+    transactions.forEach(transaction => {
+      expenses.push({
+        id: transaction.id,
+        date: transaction.transaction_date,
+        amount: parseFloat(transaction.amount || 0),
+        category: transaction.category || 'Uncategorized',
+        description: transaction.description || 'No description',
+        paymentMethod: transaction.payment_method || 'unknown',
+        status: transaction.status || 'completed',
+        companyName: transaction.company?.company_name,
+        individualName: transaction.individual?.individual_name,
+        referenceNumber: transaction.reference_number
+      });
+    });
+
+    // Add government charges from service billings as expenses
+    billings.forEach(billing => {
+      const govtCharges = parseFloat(billing.government_charges || 0);
+      if (govtCharges > 0) {
+        expenses.push({
+          id: `govt-${billing.id}`,
+          date: billing.service_date,
+          amount: govtCharges,
+          category: 'Government Charges',
+          description: `Government charges for ${billing.service_type?.name || 'Service'} - Invoice: ${billing.invoice_number || 'N/A'}`,
+          paymentMethod: billing.cash_type || 'unknown',
+          status: 'completed',
+          companyName: billing.company?.company_name,
+          individualName: billing.individual?.individual_name,
+          referenceNumber: billing.invoice_number
+        });
+      }
+    });
+
+    // Add vendor costs from service billings as expenses
+    billings.forEach(billing => {
+      const vendorCost = parseFloat(billing.vendor_cost || 0);
+      if (vendorCost > 0) {
+        expenses.push({
+          id: `vendor-${billing.id}`,
+          date: billing.service_date,
+          amount: vendorCost,
+          category: 'Vendor Costs',
+          description: `Vendor cost for ${billing.service_type?.name || 'Service'} - Invoice: ${billing.invoice_number || 'N/A'}`,
+          paymentMethod: billing.cash_type || 'unknown',
+          status: 'completed',
+          companyName: billing.company?.company_name,
+          individualName: billing.individual?.individual_name,
+          referenceNumber: billing.invoice_number
+        });
+      }
+    });
 
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
     const expenseCount = expenses.length;

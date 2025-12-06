@@ -10,7 +10,6 @@ interface ServiceData {
   totalRevenue: number;
   totalProfit: number;
   totalTransactions: number;
-  averageTransactionValue: number;
   profitMargin: number;
   lastTransactionDate: string;
 }
@@ -53,9 +52,10 @@ const ServiceWiseReport: React.FC = () => {
         const serviceId = serviceType.id;
         const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
 
-        // Calculate profit properly: Net Service Charges - Vendor Cost
+        // Calculate profit properly: Net Service Charges - Vendor Cost - Government Charges
         const typingCharges = parseFloat(billing.typing_charges || 0);
         const vendorCost = parseFloat(billing.vendor_cost || 0);
+        const governmentCharges = parseFloat(billing.government_charges || 0);
         const vatPercentage = parseFloat(billing.vat_percentage || 0);
 
         // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
@@ -64,8 +64,8 @@ const ServiceWiseReport: React.FC = () => {
           netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
         }
 
-        // Profit = Net Service Charges - Vendor Cost
-        const profit = netTypingCharges - vendorCost;
+        // Profit = Net Service Charges - Vendor Cost - Government Charges
+        const profit = netTypingCharges - vendorCost - governmentCharges;
 
         if (!serviceMap.has(serviceId)) {
           serviceMap.set(serviceId, {
@@ -74,7 +74,6 @@ const ServiceWiseReport: React.FC = () => {
             totalRevenue: 0,
             totalProfit: 0,
             totalTransactions: 0,
-            averageTransactionValue: 0,
             profitMargin: 0,
             lastTransactionDate: billing.service_date
           });
@@ -92,11 +91,8 @@ const ServiceWiseReport: React.FC = () => {
 
       // Calculate derived values
       serviceMap.forEach(service => {
-        service.averageTransactionValue = service.totalTransactions > 0 
-          ? service.totalRevenue / service.totalTransactions 
-          : 0;
-        service.profitMargin = service.totalRevenue > 0 
-          ? (service.totalProfit / service.totalRevenue) * 100 
+        service.profitMargin = service.totalRevenue > 0
+          ? (service.totalProfit / service.totalRevenue) * 100
           : 0;
       });
 
@@ -134,7 +130,6 @@ ${service.name}
   Revenue: AED ${service.totalRevenue.toLocaleString()}
   Profit: AED ${service.totalProfit.toLocaleString()} (${service.profitMargin.toFixed(1)}%)
   Transactions: ${service.totalTransactions}
-  Average: AED ${service.averageTransactionValue.toLocaleString()}
   Last Transaction: ${service.lastTransactionDate}
 `).join('\n')}
     `;
@@ -159,7 +154,6 @@ ${service.name}
       totalProfit: service.totalProfit,
       profitMargin: service.profitMargin,
       totalTransactions: service.totalTransactions,
-      averageTransactionValue: service.averageTransactionValue,
       lastTransactionDate: service.lastTransactionDate || '-'
     }));
 
@@ -184,7 +178,6 @@ ${service.name}
         { header: 'Profit (AED)', dataKey: 'totalProfit' },
         { header: 'Profit %', dataKey: 'profitMargin' },
         { header: 'Transactions', dataKey: 'totalTransactions' },
-        { header: 'Avg Transaction (AED)', dataKey: 'averageTransactionValue' },
         { header: 'Last Transaction', dataKey: 'lastTransactionDate' }
       ],
       data: pdfData,
@@ -323,7 +316,6 @@ ${service.name}
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Average</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Transaction</th>
               </tr>
@@ -354,9 +346,6 @@ ${service.name}
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       {service.totalTransactions}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                    AED {service.averageTransactionValue.toLocaleString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

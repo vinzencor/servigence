@@ -12,7 +12,6 @@ interface EmployeeData {
   companyName?: string;
   totalRevenue: number;
   totalTransactions: number;
-  averageTransactionValue: number;
   lastActivity: string;
 }
 
@@ -117,7 +116,6 @@ const EmployeeWiseReport: React.FC = () => {
             companyName: companyName,
             totalRevenue: 0,
             totalTransactions: 0,
-            averageTransactionValue: 0,
             lastActivity: billing.service_date
           });
         }
@@ -145,12 +143,7 @@ const EmployeeWiseReport: React.FC = () => {
         });
       });
 
-      // Calculate averages
-      employeeMap.forEach(emp => {
-        emp.averageTransactionValue = emp.totalTransactions > 0
-          ? emp.totalRevenue / emp.totalTransactions
-          : 0;
-      });
+
 
       setEmployees(Array.from(employeeMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue));
       setEmployeeServiceData(employeeServiceList.sort((a, b) =>

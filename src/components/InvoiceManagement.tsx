@@ -22,8 +22,10 @@ import {
   CreditCard,
   MoreVertical,
   Printer,
-  Mail
+  Mail,
+  X
 } from 'lucide-react';
+import { generateInvoiceHTML, printInvoice } from '../utils/invoiceGenerator';
 
 interface Invoice {
   id: string;
@@ -436,6 +438,44 @@ const InvoiceManagement: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  // Download invoice as PDF
+  const handleDownloadInvoice = (invoice: Invoice) => {
+    try {
+      // Transform Invoice data to match the billing format expected by generateInvoiceHTML
+      const billingData = {
+        invoice_number: invoice.invoiceNumber,
+        service_date: invoice.date,
+        company: invoice.companyName ? { company_name: invoice.companyName } : null,
+        individual: !invoice.companyName ? { individual_name: invoice.companyName } : null,
+        service_type: { name: invoice.services[0]?.name || 'Service' },
+        typing_charges: invoice.subtotal,
+        government_charges: 0,
+        vendor_cost: 0,
+        total_amount: invoice.subtotal,
+        vat_percentage: invoice.tax > 0 ? ((invoice.tax / invoice.subtotal) * 100).toFixed(2) : '0',
+        vat_amount: invoice.tax,
+        total_amount_with_vat: invoice.total,
+        discount: 0,
+        cash_type: 'cash',
+        status: invoice.status,
+        contactDetails: invoice.contactDetails || ''
+      };
+
+      // Generate and print invoice
+      const invoiceHTML = generateInvoiceHTML(billingData, 'Admin');
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(invoiceHTML);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      }
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Error generating invoice. Please try again.');
+    }
+  };
+
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Stats Grid */}
@@ -621,20 +661,20 @@ const InvoiceManagement: React.FC = () => {
       {selectedInvoice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{selectedInvoice.invoiceNumber}</h2>
-                  <p className="text-gray-600">{selectedInvoice.companyName}</p>
+                  <h2 className="text-2xl font-bold text-white">{selectedInvoice.invoiceNumber}</h2>
+                  <p className="text-blue-100">{selectedInvoice.companyName}</p>
                   {selectedInvoice.contactDetails && (
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-blue-200 mt-1">
                       <span className="font-medium">Contact:</span> {selectedInvoice.contactDetails}
                     </p>
                   )}
                 </div>
                 <button
                   onClick={() => setSelectedInvoice(null)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-white hover:text-blue-200 transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -644,107 +684,152 @@ const InvoiceManagement: React.FC = () => {
             </div>
 
             <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Invoice Details</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Date:</span>
-                      <span className="text-gray-900">{selectedInvoice.date}</span>
+              {/* Professional Invoice Preview Section */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 mb-6 border border-blue-200">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-600 rounded-lg">
+                      <FileText className="w-6 h-6 text-white" />
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Due Date:</span>
-                      <span className="text-gray-900">{selectedInvoice.dueDate}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Status:</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedInvoice.status)}`}>
-                        {selectedInvoice.status.toUpperCase()}
-                      </span>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Tax Invoice</h3>
+                      <p className="text-sm text-gray-600">Professional Invoice Template</p>
                     </div>
                   </div>
+                  <span className={`px-4 py-2 rounded-full text-sm font-semibold border-2 ${getStatusColor(selectedInvoice.status)}`}>
+                    {selectedInvoice.status.toUpperCase()}
+                  </span>
                 </div>
 
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Amount Summary</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="text-gray-900">AED {selectedInvoice.subtotal.toLocaleString()}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+                      <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                      Invoice Details
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Invoice Number:</span>
+                        <span className="font-semibold text-gray-900">{selectedInvoice.invoiceNumber}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Invoice Date:</span>
+                        <span className="text-gray-900">{selectedInvoice.date}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Due Date:</span>
+                        <span className="text-gray-900">{selectedInvoice.dueDate}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Payment Terms:</span>
+                        <span className="text-gray-900">Net 30 Days</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tax (5%):</span>
-                      <span className="text-gray-900">AED {selectedInvoice.tax.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold text-lg border-t pt-2">
-                      <span className="text-gray-900">Total:</span>
-                      <span className="text-gray-900">AED {selectedInvoice.total.toLocaleString()}</span>
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+                      <DollarSign className="w-4 h-4 mr-2 text-green-600" />
+                      Amount Summary
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="text-gray-900">AED {selectedInvoice.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">VAT (5%):</span>
+                        <span className="text-gray-900">AED {selectedInvoice.tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-base border-t-2 border-gray-300 pt-2 mt-2">
+                        <span className="text-gray-900">Total Amount:</span>
+                        <span className="text-green-600">AED {selectedInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* Services/Items Table */}
               <div className="mb-6">
-                <h3 className="font-semibold text-gray-900 mb-3">Services</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-gray-200 rounded-lg">
-                    <thead className="bg-gray-50">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center">
+                  <Receipt className="w-5 h-5 mr-2 text-blue-600" />
+                  Services & Items
+                </h3>
+                <div className="overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <table className="w-full">
+                    <thead className="bg-gradient-to-r from-blue-600 to-blue-700">
                       <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Service</th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Qty</th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Rate</th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Amount</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-white">Service Description</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold text-white">Quantity</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-white">Rate (AED)</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-white">Amount (AED)</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {selectedInvoice.services.map((service) => (
-                        <tr key={service.id} className="border-t border-gray-200">
+                    <tbody className="divide-y divide-gray-200">
+                      {selectedInvoice.services.map((service, index) => (
+                        <tr key={service.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-gray-900">{service.name}</p>
-                            <p className="text-sm text-gray-600">{service.description}</p>
+                            <p className="font-semibold text-gray-900">{service.name}</p>
+                            <p className="text-sm text-gray-600 mt-1">{service.description}</p>
                           </td>
-                          <td className="px-4 py-3 text-gray-900">{service.quantity}</td>
-                          <td className="px-4 py-3 text-gray-900">AED {service.rate.toLocaleString()}</td>
-                          <td className="px-4 py-3 font-medium text-gray-900">AED {service.amount.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-center text-gray-900 font-medium">{service.quantity}</td>
+                          <td className="px-4 py-3 text-right text-gray-900">{service.rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{service.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         </tr>
                       ))}
+                      <tr className="bg-blue-50 border-t-2 border-blue-600">
+                        <td colSpan={3} className="px-4 py-3 text-right font-bold text-gray-900">Subtotal:</td>
+                        <td className="px-4 py-3 text-right font-bold text-gray-900">AED {selectedInvoice.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                      <tr className="bg-blue-50">
+                        <td colSpan={3} className="px-4 py-2 text-right text-gray-700">VAT (5%):</td>
+                        <td className="px-4 py-2 text-right text-gray-900">AED {selectedInvoice.tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                      <tr className="bg-gradient-to-r from-green-600 to-green-700">
+                        <td colSpan={3} className="px-4 py-3 text-right font-bold text-white text-lg">TOTAL AMOUNT:</td>
+                        <td className="px-4 py-3 text-right font-bold text-white text-lg">AED {selectedInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print</span>
-                </button>
-                <button
-                  onClick={() => alert('PDF download functionality will be implemented soon!')}
-                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download PDF</span>
-                </button>
-                <button
-                  onClick={() => handleSendInvoice(selectedInvoice)}
-                  className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
-                >
-                  <Mail className="w-4 h-4" />
-                  <span>Send Email</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedInvoice(null);
-                    handleEditInvoice(selectedInvoice);
-                  }}
-                  className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-                >
-                  <Edit className="w-4 h-4" />
-                  <span>Edit</span>
-                </button>
+              {/* Action Buttons */}
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => handleDownloadInvoice(selectedInvoice)}
+                    className="flex-1 min-w-[200px] flex items-center justify-center space-x-2 bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-lg font-semibold"
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>Download Invoice PDF</span>
+                  </button>
+                  <button
+                    onClick={() => handleSendInvoice(selectedInvoice)}
+                    className="flex items-center justify-center space-x-2 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                  >
+                    <Mail className="w-5 h-5" />
+                    <span>Send Email</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedInvoice(null);
+                      handleEditInvoice(selectedInvoice);
+                    }}
+                    className="flex items-center justify-center space-x-2 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    <Edit className="w-5 h-5" />
+                    <span>Edit Invoice</span>
+                  </button>
+                  <button
+                    onClick={() => setSelectedInvoice(null)}
+                    className="flex items-center justify-center space-x-2 border-2 border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+                  >
+                    <X className="w-5 h-5" />
+                    <span>Close</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1296,8 +1381,15 @@ const InvoiceManagement: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleEditInvoice(invoice)}
+                            onClick={() => handleDownloadInvoice(invoice)}
                             className="p-1 text-gray-400 hover:text-green-600"
+                            title="Download Invoice"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEditInvoice(invoice)}
+                            className="p-1 text-gray-400 hover:text-yellow-600"
                             title="Edit Invoice"
                           >
                             <Edit className="w-4 h-4" />

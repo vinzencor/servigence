@@ -106,9 +106,10 @@ const IncomeReport: React.FC = () => {
 
   const processIncomeData = (billings: any[]): IncomeData => {
     const incomes: Income[] = billings.map(billing => {
-      // Calculate profit properly: Net Service Charges - Vendor Cost
+      // Calculate profit properly: Net Service Charges - Vendor Cost - Government Charges
       const typingCharges = parseFloat(billing.typing_charges || 0);
       const vendorCost = parseFloat(billing.vendor_cost || 0);
+      const governmentCharges = parseFloat(billing.government_charges || 0);
       const vatPercentage = parseFloat(billing.vat_percentage || 0);
 
       // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
@@ -117,8 +118,8 @@ const IncomeReport: React.FC = () => {
         netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
       }
 
-      // Profit = Net Service Charges - Vendor Cost
-      const profit = netTypingCharges - vendorCost;
+      // Profit = Net Service Charges - Vendor Cost - Government Charges
+      const profit = netTypingCharges - vendorCost - governmentCharges;
 
       return {
         id: billing.id,

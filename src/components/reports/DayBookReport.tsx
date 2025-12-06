@@ -151,16 +151,79 @@ const DayBookReport: React.FC = () => {
         category: transaction.category || 'General Expense',
         status: transaction.status || 'completed'
       };
-      
+
       allTransactions.push(transactionItem);
       totalExpenses += transactionItem.amount;
-      
+
       // Update breakdowns
-      paymentMethodBreakdown[transactionItem.paymentMethod] = 
+      paymentMethodBreakdown[transactionItem.paymentMethod] =
         (paymentMethodBreakdown[transactionItem.paymentMethod] || 0) + transactionItem.amount;
-      categoryBreakdown[transactionItem.category] = 
+      categoryBreakdown[transactionItem.category] =
         (categoryBreakdown[transactionItem.category] || 0) + transactionItem.amount;
     });
+
+    // Process government charges from service billings as expenses
+    billings.forEach(billing => {
+      const govtCharges = parseFloat(billing.government_charges || 0);
+      if (govtCharges > 0) {
+        const govtExpense: Transaction = {
+          id: `govt-${billing.id}`,
+          date: billing.service_date,
+          type: 'expense',
+          amount: govtCharges,
+          paymentMethod: billing.cash_type || 'unknown',
+          description: `Government charges for ${billing.service_type?.name || 'Service'} - ${billing.invoice_number || 'N/A'}`,
+          clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown',
+          clientType: billing.company_id ? 'company' : 'individual',
+          invoiceNumber: billing.invoice_number || 'N/A',
+          category: 'Government Charges',
+          status: 'completed'
+        };
+
+        allTransactions.push(govtExpense);
+        totalExpenses += govtCharges;
+
+        // Update breakdowns
+        paymentMethodBreakdown[govtExpense.paymentMethod] =
+          (paymentMethodBreakdown[govtExpense.paymentMethod] || 0) + govtCharges;
+        categoryBreakdown['Government Charges'] =
+          (categoryBreakdown['Government Charges'] || 0) + govtCharges;
+      }
+    });
+
+    // Process vendor costs from service billings as expenses
+    billings.forEach(billing => {
+      const vendorCost = parseFloat(billing.vendor_cost || 0);
+      if (vendorCost > 0) {
+        const vendorExpense: Transaction = {
+          id: `vendor-${billing.id}`,
+          date: billing.service_date,
+          type: 'expense',
+          amount: vendorCost,
+          paymentMethod: billing.cash_type || 'unknown',
+          description: `Vendor cost for ${billing.service_type?.name || 'Service'} - ${billing.invoice_number || 'N/A'}`,
+          clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown',
+          clientType: billing.company_id ? 'company' : 'individual',
+          invoiceNumber: billing.invoice_number || 'N/A',
+          category: 'Vendor Costs',
+          status: 'completed'
+        };
+
+        allTransactions.push(vendorExpense);
+        totalExpenses += vendorCost;
+
+        // Update breakdowns
+        paymentMethodBreakdown[vendorExpense.paymentMethod] =
+          (paymentMethodBreakdown[vendorExpense.paymentMethod] || 0) + vendorCost;
+        categoryBreakdown['Vendor Costs'] =
+          (categoryBreakdown['Vendor Costs'] || 0) + vendorCost;
+      }
+    });
+
+    // Count total expense entries (account transactions + govt charges + vendor costs)
+    const totalExpenseEntries = transactions.length +
+      billings.filter(b => parseFloat(b.government_charges || 0) > 0).length +
+      billings.filter(b => parseFloat(b.vendor_cost || 0) > 0).length;
 
     // Sort all transactions by date (newest first)
     allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -173,7 +236,7 @@ const DayBookReport: React.FC = () => {
         netAmount: totalIncome - totalExpenses,
         transactionCount: allTransactions.length,
         incomeCount: billings.length,
-        expenseCount: transactions.length
+        expenseCount: totalExpenseEntries
       },
       paymentMethodBreakdown,
       categoryBreakdown

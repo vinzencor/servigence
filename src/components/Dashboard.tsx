@@ -62,17 +62,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       const totalAdvance = advancePayments.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
       setTotalAdvancePayment(totalAdvance);
 
-      // Calculate Total Expenses (all time)
-      const expenses = transactions?.filter(t => t.transaction_type === 'expense') || [];
-      const totalExp = expenses.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-      setTotalExpenses(totalExp);
-
-      // Load all service billings for total revenue calculation
+      // Load all service billings for total revenue and expense calculation
       const { data: allBillings, error: allBillingsError } = await dbHelpers.supabase
         .from('service_billings')
         .select('*');
 
       if (allBillingsError) throw allBillingsError;
+
+      // Calculate Total Expenses (all time) - includes account expenses, vendor costs, and government charges
+      const accountExpenses = transactions?.filter(t => t.transaction_type === 'expense') || [];
+      const accountExpensesTotal = accountExpenses.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+      const vendorCostsTotal = allBillings?.reduce((sum, b) => sum + parseFloat(b.vendor_cost || 0), 0) || 0;
+      const governmentChargesTotal = allBillings?.reduce((sum, b) => sum + parseFloat(b.government_charges || 0), 0) || 0;
+      const totalExp = accountExpensesTotal + vendorCostsTotal + governmentChargesTotal;
+      setTotalExpenses(totalExp);
 
       // Calculate Total Revenue (all time)
       const totalRev = allBillings?.reduce((sum, b) => sum + parseFloat(b.total_amount_with_vat || b.total_amount || 0), 0) || 0;
@@ -86,8 +89,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
       if (todayBillingsError) throw todayBillingsError;
 
-      // Calculate today's service charges only (excluding government charges)
+      // Calculate today's service charges (revenue from typing charges)
       const todayServiceCharges = todayBillings?.reduce((sum, b) => sum + parseFloat(b.typing_charges || 0), 0) || 0;
+
+      // Calculate today's vendor costs and government charges from service billings
+      const todayVendorCosts = todayBillings?.reduce((sum, b) => sum + parseFloat(b.vendor_cost || 0), 0) || 0;
+      const todayGovtCharges = todayBillings?.reduce((sum, b) => sum + parseFloat(b.government_charges || 0), 0) || 0;
 
       // Load TODAY's expenses for daily profit calculation
       const { data: todayExpenses, error: todayExpensesError } = await dbHelpers.supabase
@@ -98,21 +105,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
       if (todayExpensesError) throw todayExpensesError;
 
-      // Calculate today's expenses
-      const todayExp = todayExpenses?.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0;
+      // Calculate today's account expenses
+      const todayAccountExpenses = todayExpenses?.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0;
 
-      // Calculate Daily Profit (today's service charges only - today's expenses)
-      const profit = todayServiceCharges - todayExp;
+      // Calculate Daily Profit: Service Charges - Vendor Costs - Government Charges - Account Expenses
+      const profit = todayServiceCharges - todayVendorCosts - todayGovtCharges - todayAccountExpenses;
       setDailyProfit(profit);
 
-      console.log('Financial Metrics Loaded:', {
+      console.log('💰 [Dashboard] Financial Metrics Loaded:', {
         today,
-        totalAdvancePayment: totalAdvance,
-        totalExpenses: totalExp,
-        totalRevenue: totalRev,
-        todayServiceCharges,
-        todayExpenses: todayExp,
-        dailyProfit: profit
+        totalAdvancePayment: totalAdvance.toFixed(2),
+        totalExpenses: {
+          accountExpenses: accountExpensesTotal.toFixed(2),
+          vendorCosts: vendorCostsTotal.toFixed(2),
+          governmentCharges: governmentChargesTotal.toFixed(2),
+          total: totalExp.toFixed(2)
+        },
+        totalRevenue: totalRev.toFixed(2),
+        dailyMetrics: {
+          serviceCharges: todayServiceCharges.toFixed(2),
+          vendorCosts: todayVendorCosts.toFixed(2),
+          governmentCharges: todayGovtCharges.toFixed(2),
+          accountExpenses: todayAccountExpenses.toFixed(2),
+          profit: profit.toFixed(2)
+        }
       });
 
     } catch (error) {

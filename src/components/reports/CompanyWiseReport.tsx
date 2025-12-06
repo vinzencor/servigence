@@ -28,7 +28,6 @@ interface CompanyData {
   totalPaid: number;
   lastTransactionDate: string;
   services: string[];
-  averageTransactionValue: number;
   profitMargin: number;
   paymentMethods: Record<string, number>;
   monthlyRevenue: Record<string, number>;
@@ -124,7 +123,6 @@ const CompanyWiseReport: React.FC = () => {
         totalPaid: 0,
         lastTransactionDate: '',
         services: [],
-        averageTransactionValue: 0,
         profitMargin: 0,
         paymentMethods: {},
         monthlyRevenue: {}
@@ -139,10 +137,11 @@ const CompanyWiseReport: React.FC = () => {
       const company = companyMap.get(companyId)!;
       const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
 
-      // Calculate profit properly: Revenue - Vendor Cost
-      // Profit = Net Service Charges (typing_charges after VAT) - Vendor Cost
+      // Calculate profit properly: Revenue - Vendor Cost - Government Charges
+      // Profit = Net Service Charges (typing_charges after VAT) - Vendor Cost - Government Charges
       const typingCharges = parseFloat(billing.typing_charges || 0);
       const vendorCost = parseFloat(billing.vendor_cost || 0);
+      const governmentCharges = parseFloat(billing.government_charges || 0);
       const vatPercentage = parseFloat(billing.vat_percentage || 0);
 
       // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
@@ -153,15 +152,16 @@ const CompanyWiseReport: React.FC = () => {
         netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
       }
 
-      // Profit = Net Service Charges - Vendor Cost
-      const profit = netTypingCharges - vendorCost;
+      // Profit = Net Service Charges - Vendor Cost - Government Charges
+      const profit = netTypingCharges - vendorCost - governmentCharges;
 
       // Debug logging for profit calculation
-      if (vendorCost > 0 || profit !== 0) {
+      if (vendorCost > 0 || governmentCharges > 0 || profit !== 0) {
         console.log(`[CompanyWiseReport] Profit Calculation for ${company.name}:`, {
           invoiceNumber: billing.invoice_number,
           typingCharges,
           vendorCost,
+          governmentCharges,
           vatPercentage,
           vatMethod: billing.vat_calculation_method,
           netTypingCharges,
@@ -202,11 +202,8 @@ const CompanyWiseReport: React.FC = () => {
 
     // Calculate derived values
     companyMap.forEach(company => {
-      company.averageTransactionValue = company.totalTransactions > 0 
-        ? company.totalRevenue / company.totalTransactions 
-        : 0;
-      company.profitMargin = company.totalRevenue > 0 
-        ? (company.totalProfit / company.totalRevenue) * 100 
+      company.profitMargin = company.totalRevenue > 0
+        ? (company.totalProfit / company.totalRevenue) * 100
         : 0;
     });
 
@@ -234,9 +231,6 @@ const CompanyWiseReport: React.FC = () => {
         totalRevenue,
         totalProfit,
         totalDue,
-        averageRevenuePerCompany: companiesWithRevenue.length > 0
-          ? totalRevenue / companiesWithRevenue.length
-          : 0,
         topCompanyRevenue: companiesArray.length > 0
           ? Math.max(...companiesArray.map(c => c.totalRevenue))
           : 0
@@ -331,7 +325,6 @@ ${company.name}
       totalTransactions: company.totalTransactions,
       totalDue: company.totalDue,
       totalPaid: company.totalPaid,
-      averageTransactionValue: company.averageTransactionValue,
       services: company.services.join(', '),
       lastTransactionDate: company.lastTransactionDate || '-'
     }));
@@ -341,7 +334,6 @@ ${company.name}
       { label: 'Total Revenue', value: `AED ${data.summary.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
       { label: 'Total Profit', value: `AED ${data.summary.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
       { label: 'Total Outstanding', value: `AED ${data.summary.totalDue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { label: 'Average Revenue/Company', value: `AED ${data.summary.averageRevenuePerCompany.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
       { label: 'Top Company Revenue', value: `AED ${data.summary.topCompanyRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
     ];
 
@@ -357,7 +349,6 @@ ${company.name}
         { header: 'Transactions', dataKey: 'totalTransactions' },
         { header: 'Outstanding (AED)', dataKey: 'totalDue' },
         { header: 'Paid (AED)', dataKey: 'totalPaid' },
-        { header: 'Avg Transaction (AED)', dataKey: 'averageTransactionValue' },
         { header: 'Last Transaction', dataKey: 'lastTransactionDate' }
       ],
       data: pdfData,
@@ -574,9 +565,6 @@ ${company.name}
                       </div>
                       <div>
                         <div className="font-medium">{company.name}</div>
-                        <div className="text-xs text-gray-500">
-                          Avg: AED {company.averageTransactionValue.toLocaleString()}
-                        </div>
                       </div>
                     </div>
                   </td>

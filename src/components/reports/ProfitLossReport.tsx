@@ -25,10 +25,10 @@ const ProfitLossReport: React.FC = () => {
     try {
       setLoading(true);
 
-      // Load income from service billings (including vendor costs)
+      // Load income from service billings (including vendor costs and government charges)
       const { data: billings, error: billingsError } = await supabase
         .from('service_billings')
-        .select('total_amount_with_vat, total_amount, vendor_cost')
+        .select('total_amount_with_vat, total_amount, vendor_cost, government_charges')
         .gte('service_date', dateFrom)
         .lte('service_date', dateTo);
 
@@ -47,14 +47,17 @@ const ProfitLossReport: React.FC = () => {
       const totalIncome = (billings || []).reduce((sum, billing) =>
         sum + parseFloat(billing.total_amount_with_vat || billing.total_amount || 0), 0);
 
-      // Calculate total expenses including vendor costs from billings
+      // Calculate total expenses including vendor costs and government charges from billings
       const accountExpenses = (expenses || []).reduce((sum, expense) =>
         sum + parseFloat(expense.amount || 0), 0);
 
       const vendorCosts = (billings || []).reduce((sum, billing) =>
         sum + parseFloat(billing.vendor_cost || 0), 0);
 
-      const totalExpenses = accountExpenses + vendorCosts;
+      const governmentCharges = (billings || []).reduce((sum, billing) =>
+        sum + parseFloat(billing.government_charges || 0), 0);
+
+      const totalExpenses = accountExpenses + vendorCosts + governmentCharges;
 
       const netProfit = totalIncome - totalExpenses;
       const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
@@ -63,6 +66,7 @@ const ProfitLossReport: React.FC = () => {
         totalIncome: totalIncome.toFixed(2),
         accountExpenses: accountExpenses.toFixed(2),
         vendorCosts: vendorCosts.toFixed(2),
+        governmentCharges: governmentCharges.toFixed(2),
         totalExpenses: totalExpenses.toFixed(2),
         netProfit: netProfit.toFixed(2),
         profitMargin: profitMargin.toFixed(2) + '%'
