@@ -81,6 +81,23 @@ interface DocumentExpiryReminderEmailData {
   serviceName?: string;
 }
 
+// Email logo URLs - Using Supabase Storage public URLs
+// These logos are hosted in Supabase Storage for reliable email delivery
+// To update: Upload logos to Supabase Storage 'documents' bucket and get public URLs
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const EMAIL_LOGO_URLS = {
+  // Main company logo
+  servigens: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/servigens.png`,
+
+  // Partner logos
+  daman: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/daman-logo.png`,
+  adjd: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/adjd-logo.png`,
+  tamm: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/tamm-logo.png`,
+  tasheel: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/tasheel-logo.png`,
+  emirates: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/emirates-logo.png`,
+  icp: `${SUPABASE_URL}/storage/v1/object/public/documents/email-assets/icp-logo.png`,
+};
+
 class EmailService {
   private async sendEmail(template: EmailTemplate): Promise<boolean> {
     try {
@@ -341,7 +358,7 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="${EMAIL_LOGO_URLS.servigens}" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" onerror="this.style.display='none'" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
               <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
@@ -391,12 +408,12 @@ class EmailService {
           <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
             <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
-              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+              <img src="${EMAIL_LOGO_URLS.daman}" alt="Daman" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.adjd}" alt="ADJD" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tamm}" alt="TAMM" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tasheel}" alt="Tasheel" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.emirates}" alt="Emirates" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.icp}" alt="ICP" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
             </div>
           </div>
 
@@ -421,7 +438,7 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="${EMAIL_LOGO_URLS.servigens}" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" onerror="this.style.display='none'" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
               <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
@@ -478,12 +495,12 @@ class EmailService {
           <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
             <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
-              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+              <img src="${EMAIL_LOGO_URLS.daman}" alt="Daman" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.adjd}" alt="ADJD" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tamm}" alt="TAMM" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tasheel}" alt="Tasheel" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.emirates}" alt="Emirates" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.icp}" alt="ICP" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
             </div>
           </div>
 
@@ -515,7 +532,7 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="${EMAIL_LOGO_URLS.servigens}" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" onerror="this.style.display='none'" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
               <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
@@ -581,12 +598,12 @@ class EmailService {
           <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
             <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
-              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+              <img src="${EMAIL_LOGO_URLS.daman}" alt="Daman" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.adjd}" alt="ADJD" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tamm}" alt="TAMM" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tasheel}" alt="Tasheel" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.emirates}" alt="Emirates" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.icp}" alt="ICP" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
             </div>
           </div>
 
@@ -617,7 +634,7 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="${EMAIL_LOGO_URLS.servigens}" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" onerror="this.style.display='none'" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
               <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
@@ -690,12 +707,12 @@ class EmailService {
           <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
             <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
-              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+              <img src="${EMAIL_LOGO_URLS.daman}" alt="Daman" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.adjd}" alt="ADJD" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tamm}" alt="TAMM" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tasheel}" alt="Tasheel" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.emirates}" alt="Emirates" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.icp}" alt="ICP" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
             </div>
           </div>
 
@@ -727,7 +744,7 @@ class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <!-- Header with Company Logo and Info -->
           <div style="background: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <img src="https://www.servigens.com/servigens.png" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" />
+            <img src="${EMAIL_LOGO_URLS.servigens}" alt="Servigens Logo" style="width: 120px; height: auto; margin-bottom: 15px;" onerror="this.style.display='none'" />
             <div style="color: #333; font-size: 14px; line-height: 1.6; margin-top: 10px;">
               <strong style="font-size: 18px; color: #2563eb;">Servigens Business Group</strong><br>
               Dar Al Salam - Building, 9th Floor - Corniche St<br>
@@ -801,12 +818,12 @@ class EmailService {
           <div style="background: white; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
             <p style="color: #666; font-size: 12px; margin-bottom: 15px;">Our Trusted Partners</p>
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
-              <img src="https://www.servigens.com/Daman%20Health%20Insurance%20Logo%20Vector.svg%20.png" alt="Daman" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/abu-dhabi-judicial-department-adjd-logo-vector-1.png" alt="ADJD" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tamm%20abu%20dhabi%20government%20Logo%20Vector.svg%20.png" alt="TAMM" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/tas-heel-dubai-uae-seeklogo.png" alt="Tasheel" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/the-emirates-new-seeklogo.png" alt="Emirates" style="height: 35px; width: auto;" />
-              <img src="https://www.servigens.com/uaeicp-federal-authority-for-identity-citizenshi-seeklogo.png" alt="ICP" style="height: 35px; width: auto;" />
+              <img src="${EMAIL_LOGO_URLS.daman}" alt="Daman" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.adjd}" alt="ADJD" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tamm}" alt="TAMM" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.tasheel}" alt="Tasheel" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.emirates}" alt="Emirates" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
+              <img src="${EMAIL_LOGO_URLS.icp}" alt="ICP" style="height: 35px; width: auto;" onerror="this.style.display='none'" />
             </div>
           </div>
 
