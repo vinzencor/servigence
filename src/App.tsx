@@ -26,6 +26,7 @@ import Reports from './components/Reports';
 import Quotations from './components/Quotations';
 import ExpenseManagement from './components/ExpenseManagement';
 import ReceiptManagement from './components/ReceiptManagement';
+import EmailReminderDiagnostic from './components/EmailReminderDiagnostic';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
 
@@ -249,6 +250,8 @@ function AppContent() {
         return <RemindersManagement />;
       case 'email-test':
         return <EmailTest />;
+      case 'email-diagnostic':
+        return <EmailReminderDiagnostic />;
       default:
         return <Dashboard onNavigate={setCurrentView} />;
     }

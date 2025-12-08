@@ -13,7 +13,7 @@ const ServiceExpiryReminderManager: React.FC = () => {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [autoCheckEnabled, setAutoCheckEnabled] = useState(true);
   const [nextAutoCheck, setNextAutoCheck] = useState<Date | null>(null);
-  const [checkInterval, setCheckInterval] = useState<'daily' | 'hourly'>('daily');
+  const [checkInterval, setCheckInterval] = useState<'daily' | 'hourly'>('hourly');
   const [timeUntilNextCheck, setTimeUntilNextCheck] = useState<string>('');
 
   useEffect(() => {
