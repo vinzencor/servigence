@@ -56,9 +56,6 @@ const ProfitLossReport: React.FC = () => {
       const vendorCosts = (billings || []).reduce((sum, billing) =>
         sum + parseFloat(billing.vendor_cost || 0), 0);
 
-      // Calculate Service Profit: Typing Charges - Vendor Costs
-      const serviceProfit = totalIncome - vendorCosts;
-
       // Calculate other expenses
       const accountExpenses = (expenses || []).reduce((sum, expense) =>
         sum + parseFloat(expense.amount || 0), 0);
@@ -66,22 +63,29 @@ const ProfitLossReport: React.FC = () => {
       const governmentCharges = (billings || []).reduce((sum, billing) =>
         sum + parseFloat(billing.government_charges || 0), 0);
 
-      // Total Expenses still includes all three components
-      const totalExpenses = accountExpenses + vendorCosts + governmentCharges;
+      // Calculate Service Profit: Typing Charges - Vendor Costs - Account Expenses
+      // Note: Government charges are excluded from Service Profit calculation
+      const serviceProfit = totalIncome - vendorCosts - accountExpenses;
 
-      // Net Profit = Total Income - Total Expenses (traditional P&L calculation)
+      // Total Expenses now EXCLUDES government charges (only vendor costs + account expenses)
+      // Government charges are tracked separately but not included in expense total
+      const totalExpenses = accountExpenses + vendorCosts;
+
+      // Net Profit = Total Income - Total Expenses (excludes government charges)
+      // This aligns Net Profit with Service Profit methodology
       const netProfit = totalIncome - totalExpenses;
       const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
 
       console.log('[ProfitLossReport] Summary:', {
         totalIncome: totalIncome.toFixed(2),
         vendorCosts: vendorCosts.toFixed(2),
-        serviceProfit: serviceProfit.toFixed(2) + ' (Typing - Vendor)',
-        governmentCharges: governmentCharges.toFixed(2),
         accountExpenses: accountExpenses.toFixed(2),
-        totalExpenses: totalExpenses.toFixed(2),
-        netProfit: netProfit.toFixed(2),
-        profitMargin: profitMargin.toFixed(2) + '%'
+        serviceProfit: serviceProfit.toFixed(2) + ' (Typing - Vendor - Account Expenses)',
+        governmentCharges: governmentCharges.toFixed(2) + ' (tracked separately, NOT included in expenses)',
+        totalExpenses: totalExpenses.toFixed(2) + ' (Vendor + Account Expenses only)',
+        netProfit: netProfit.toFixed(2) + ' (excludes government charges)',
+        profitMargin: profitMargin.toFixed(2) + '%',
+        note: 'Government charges are excluded from both Service Profit and Net Profit calculations'
       });
 
       setData({
@@ -232,7 +236,7 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Service Profit</p>
-              <p className="text-xs text-gray-500">(Income - Vendor)</p>
+              <p className="text-xs text-gray-500">(Income - Vendor - Account Exp.)</p>
               <p className={`text-2xl font-bold ${data.serviceProfit >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
                 AED {data.serviceProfit.toLocaleString()}
               </p>
@@ -247,7 +251,7 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Expenses</p>
-              <p className="text-xs text-gray-500">(All Costs)</p>
+              <p className="text-xs text-gray-500">(Vendor + Account)</p>
               <p className="text-2xl font-bold text-red-600">AED {data.totalExpenses.toLocaleString()}</p>
             </div>
             <div className="p-3 bg-red-100 rounded-lg">
@@ -260,7 +264,7 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Net Profit/Loss</p>
-              <p className="text-xs text-gray-500">(Income - All Expenses)</p>
+              <p className="text-xs text-gray-500">(Excludes Govt Charges)</p>
               <p className={`text-2xl font-bold ${data.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 AED {data.netProfit.toLocaleString()}
               </p>
@@ -302,26 +306,33 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
               <span className="text-gray-700">Less: Vendor Costs</span>
               <span className="font-semibold text-red-600">AED {data.vendorCosts.toLocaleString()}</span>
             </div>
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-gray-700">Less: Account Expenses</span>
+              <span className="font-semibold text-red-600">AED {data.accountExpenses.toLocaleString()}</span>
+            </div>
             <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
-              <span className="font-medium text-purple-900">Service Profit (Gross Profit)</span>
+              <span className="font-medium text-purple-900">Service Profit</span>
               <span className="font-bold text-purple-600">AED {data.serviceProfit.toLocaleString()}</span>
             </div>
           </div>
 
           <div className="border-b border-gray-200 pb-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-3">OTHER EXPENSES</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-3">EXPENSE SUMMARY</h3>
             <div className="flex justify-between items-center">
-              <span className="text-gray-700">Government Charges</span>
-              <span className="font-semibold text-red-600">AED {data.governmentCharges.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center mt-2">
-              <span className="text-gray-700">Account Expenses</span>
-              <span className="font-semibold text-red-600">AED {data.accountExpenses.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
-              <span className="font-medium text-gray-900">Total Expenses (All Costs)</span>
+              <span className="text-gray-700">Total Expenses (Vendor + Account)</span>
               <span className="font-bold text-red-600">AED {data.totalExpenses.toLocaleString()}</span>
             </div>
+          </div>
+
+          <div className="border-b border-gray-200 pb-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-3">GOVERNMENT CHARGES (Tracked Separately)</h3>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-700">Government Charges</span>
+              <span className="font-semibold text-orange-600">AED {data.governmentCharges.toLocaleString()}</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2 italic">
+              * Government charges are tracked for reference but not included in expense or profit calculations
+            </p>
           </div>
 
           <div className="bg-gray-50 p-4 rounded-lg">
@@ -337,6 +348,9 @@ Profit Margin: ${data.profitMargin.toFixed(2)}%
                 {data.profitMargin.toFixed(2)}%
               </span>
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Net Profit = Service Revenue - Vendor Costs - Account Expenses (excludes government charges)
+            </p>
           </div>
         </div>
       </div>

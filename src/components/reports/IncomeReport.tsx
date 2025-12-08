@@ -76,7 +76,7 @@ const IncomeReport: React.FC = () => {
   const loadIncomeData = async () => {
     try {
       setLoading(true);
-      
+
       // Load service billings (income)
       const { data: billings, error } = await supabase
         .from('service_billings')
@@ -94,7 +94,21 @@ const IncomeReport: React.FC = () => {
 
       if (error) throw error;
 
-      const processedData = processIncomeData(billings || []);
+      // Load account expenses for the date range
+      const { data: expenses, error: expensesError } = await supabase
+        .from('account_transactions')
+        .select('amount')
+        .eq('transaction_type', 'expense')
+        .gte('transaction_date', dateFrom)
+        .lte('transaction_date', dateTo);
+
+      if (expensesError) throw expensesError;
+
+      // Calculate total account expenses
+      const totalAccountExpenses = (expenses || []).reduce((sum, expense) =>
+        sum + parseFloat(expense.amount || 0), 0);
+
+      const processedData = processIncomeData(billings || [], totalAccountExpenses);
       setData(processedData);
     } catch (error) {
       console.error('Error loading income data:', error);
@@ -104,16 +118,25 @@ const IncomeReport: React.FC = () => {
     }
   };
 
-  const processIncomeData = (billings: any[]): IncomeData => {
+  const processIncomeData = (billings: any[], totalAccountExpenses: number): IncomeData => {
+    // Calculate total typing charges for proportional allocation
+    const totalTypingCharges = billings.reduce((sum, billing) =>
+      sum + parseFloat(billing.typing_charges || 0), 0);
+
     const incomes: Income[] = billings.map(billing => {
-      // Calculate Service Profit: Typing Charges - Vendor Cost
-      // Note: This is gross profit from services only, excluding government charges
+      // Calculate Service Profit: Typing Charges - Vendor Cost - Allocated Account Expenses
+      // Note: Government charges are excluded from Service Profit calculation
       const typingCharges = parseFloat(billing.typing_charges || 0);
       const vendorCost = parseFloat(billing.vendor_cost || 0);
       const governmentCharges = parseFloat(billing.government_charges || 0);
 
-      // Service Profit = Typing Charges - Vendor Cost
-      const profit = typingCharges - vendorCost;
+      // Allocate account expenses proportionally based on typing charges
+      const allocatedAccountExpenses = totalTypingCharges > 0
+        ? (typingCharges / totalTypingCharges) * totalAccountExpenses
+        : 0;
+
+      // Service Profit = Typing Charges - Vendor Cost - Allocated Account Expenses
+      const profit = typingCharges - vendorCost - allocatedAccountExpenses;
 
       return {
         id: billing.id,
@@ -511,7 +534,7 @@ ${sortedIncomes.map(income =>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Service Profit</p>
-                <p className="text-xs text-gray-500 mb-1">(Typing - Vendor Costs)</p>
+                <p className="text-xs text-gray-500 mb-1">(Typing - Vendor - Account Exp.)</p>
                 <p className="text-2xl font-bold text-blue-600">AED {data.summary.totalProfit.toLocaleString()}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -621,7 +644,7 @@ ${sortedIncomes.map(income =>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Service Profit
-                  <div className="text-xs font-normal text-gray-400 normal-case">(Typing - Vendor)</div>
+                  <div className="text-xs font-normal text-gray-400 normal-case">(Typing - Vendor - Acct Exp.)</div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               </tr>

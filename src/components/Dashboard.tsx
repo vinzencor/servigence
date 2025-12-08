@@ -108,9 +108,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       // Calculate today's account expenses
       const todayAccountExpenses = todayExpenses?.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0;
 
-      // Calculate Daily Service Profit: Typing Charges - Vendor Costs
-      // Note: This is gross profit from services only, excluding government charges and account expenses
-      const profit = todayServiceCharges - todayVendorCosts;
+      // Calculate Daily Service Profit: Typing Charges - Vendor Costs - Account Expenses
+      // Note: Government charges are excluded from Service Profit calculation
+      const profit = todayServiceCharges - todayVendorCosts - todayAccountExpenses;
       setDailyProfit(profit);
 
       console.log('💰 [Dashboard] Financial Metrics Loaded:', {
@@ -129,7 +129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           governmentCharges: todayGovtCharges.toFixed(2),
           accountExpenses: todayAccountExpenses.toFixed(2),
           serviceProfit: profit.toFixed(2),
-          note: 'Service Profit = Typing Charges - Vendor Costs (excludes govt charges & account expenses)'
+          note: 'Service Profit = Typing Charges - Vendor Costs - Account Expenses (excludes govt charges)'
         }
       });
 
