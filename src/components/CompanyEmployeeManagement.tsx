@@ -49,6 +49,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
     fileUrl?: string;
     preview?: string;
     uploading?: boolean;
+    customReminderIntervals?: string;
+    customReminderDates?: string;
   }>>([]);
 
   // Image preview modal state
@@ -135,7 +137,9 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
         serviceId: doc.service_id || undefined,
         file: null,
         fileUrl: doc.file_path || '',
-        preview: 'existing-file'
+        preview: 'existing-file',
+        customReminderIntervals: doc.custom_reminder_intervals || '',
+        customReminderDates: doc.custom_reminder_dates || ''
       }));
 
       console.log('✅ Transformed service-based documents:', transformedDocs);
@@ -734,6 +738,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                 name: documentTitle, // Use 'name' field instead of 'title'
                 expiry_date: doc.expiryDate,
                 service_id: doc.serviceId,
+                custom_reminder_intervals: doc.customReminderIntervals || null,
+                custom_reminder_dates: doc.customReminderDates || null,
                 ...(fileUrl && { file_path: fileUrl }),
                 ...(doc.file?.name && { file_name: doc.file.name }), // Update file_name if new file
                 updated_at: new Date().toISOString()
@@ -751,6 +757,8 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                 file_path: fileUrl || null,
                 expiry_date: doc.expiryDate,
                 service_id: doc.serviceId,
+                custom_reminder_intervals: doc.customReminderIntervals || null,
+                custom_reminder_dates: doc.customReminderDates || null,
                 upload_date: doc.expiryDate, // Use expiry_date format (DATE not TIMESTAMP)
                 status: 'valid' // Use 'valid' as it's allowed by the constraint
               };
@@ -3511,6 +3519,44 @@ const CompanyEmployeeManagement: React.FC<CompanyEmployeeManagementProps> = ({ c
                               Documents with expiry dates will create automatic reminders
                             </p>
                           </div>
+                        </div>
+
+                        {/* Custom Reminder Intervals */}
+                        {doc.expiryDate && (
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Custom Reminder Intervals (Days Before Expiry)
+                              <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={doc.customReminderIntervals || ''}
+                              onChange={(e) => updateDocument(doc.id, 'customReminderIntervals', e.target.value)}
+                              placeholder="e.g., 30, 15, 7, 3"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Enter days before expiry separated by commas (e.g., 30, 15, 7). Leave blank to use global settings.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Custom Reminder Dates */}
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Custom Reminder Dates (Specific Calendar Dates)
+                            <span className="text-gray-500 text-xs ml-2">(Optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={doc.customReminderDates || ''}
+                            onChange={(e) => updateDocument(doc.id, 'customReminderDates', e.target.value)}
+                            placeholder="e.g., 2025-02-15, 2025-03-01, 2025-03-10"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter specific dates when reminders should be sent, separated by commas (e.g., 2025-02-15, 2025-03-01). Independent of expiry date.
+                          </p>
                         </div>
 
                         <div className="mt-4">

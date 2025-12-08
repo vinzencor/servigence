@@ -141,7 +141,8 @@ const IncomeReport: React.FC = () => {
       return {
         id: billing.id,
         date: billing.service_date,
-        amount: parseFloat(billing.total_amount_with_vat || billing.total_amount || 0),
+        // Income = Typing Charges (excludes government charges)
+        amount: parseFloat(billing.typing_charges || 0),
         serviceType: billing.service_type?.name || 'Unknown Service',
         clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown Client',
         clientType: billing.company_id ? 'company' : 'individual',

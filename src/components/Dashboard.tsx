@@ -77,8 +77,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       const totalExp = accountExpensesTotal + vendorCostsTotal + governmentChargesTotal;
       setTotalExpenses(totalExp);
 
-      // Calculate Total Revenue (all time)
-      const totalRev = allBillings?.reduce((sum, b) => sum + parseFloat(b.total_amount_with_vat || b.total_amount || 0), 0) || 0;
+      // Calculate Total Revenue (all time) - using typing_charges (excludes government charges)
+      const totalRev = allBillings?.reduce((sum, b) => sum + parseFloat(b.typing_charges || 0), 0) || 0;
       setTotalRevenue(totalRev);
 
       // Load TODAY's service billings for daily profit calculation
@@ -122,14 +122,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           governmentCharges: governmentChargesTotal.toFixed(2),
           total: totalExp.toFixed(2)
         },
-        totalRevenue: totalRev.toFixed(2),
+        totalRevenue: totalRev.toFixed(2) + ' (typing charges only, excludes govt charges)',
         dailyMetrics: {
           serviceCharges: todayServiceCharges.toFixed(2),
           vendorCosts: todayVendorCosts.toFixed(2),
-          governmentCharges: todayGovtCharges.toFixed(2),
+          governmentCharges: todayGovtCharges.toFixed(2) + ' (not included in revenue)',
           accountExpenses: todayAccountExpenses.toFixed(2),
           serviceProfit: profit.toFixed(2),
-          note: 'Service Profit = Typing Charges - Vendor Costs - Account Expenses (excludes govt charges)'
+          note: 'Revenue = Typing Charges | Service Profit = Typing Charges - Vendor Costs - Account Expenses (excludes govt charges)'
         }
       });
 

@@ -153,11 +153,13 @@ const CompanyWiseReport: React.FC = () => {
       if (!companyMap.has(companyId)) return;
 
       const company = companyMap.get(companyId)!;
-      const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+
+      // Revenue = Typing Charges (excludes government charges)
+      const typingCharges = parseFloat(billing.typing_charges || 0);
+      const amount = typingCharges; // Revenue is typing charges only
 
       // Calculate Service Profit: Typing Charges - Vendor Cost - Allocated Account Expenses
       // Note: Government charges are excluded from Service Profit calculation
-      const typingCharges = parseFloat(billing.typing_charges || 0);
       const vendorCost = parseFloat(billing.vendor_cost || 0);
       const governmentCharges = parseFloat(billing.government_charges || 0);
 
@@ -173,13 +175,13 @@ const CompanyWiseReport: React.FC = () => {
       if (vendorCost > 0 || allocatedAccountExpenses > 0 || profit !== 0) {
         console.log(`[CompanyWiseReport] Service Profit Calculation for ${company.name}:`, {
           invoiceNumber: billing.invoice_number,
+          revenue: amount + ' (typing charges only, excludes govt charges)',
           typingCharges,
           vendorCost,
           allocatedAccountExpenses,
-          governmentCharges: governmentCharges + ' (not included in profit)',
+          governmentCharges: governmentCharges + ' (not included in revenue or profit)',
           calculatedServiceProfit: profit,
-          revenue: amount,
-          note: 'Service Profit = Typing Charges - Vendor Cost - Allocated Account Expenses'
+          note: 'Revenue = Typing Charges | Service Profit = Typing Charges - Vendor Cost - Allocated Account Expenses'
         });
       }
 

@@ -67,11 +67,13 @@ const ServiceWiseReport: React.FC = () => {
         if (!serviceType) return;
 
         const serviceId = serviceType.id;
-        const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+
+        // Revenue = Typing Charges (excludes government charges)
+        const typingCharges = parseFloat(billing.typing_charges || 0);
+        const amount = typingCharges; // Revenue is typing charges only
 
         // Calculate Service Profit: Typing Charges - Vendor Cost - Allocated Account Expenses
         // Note: Government charges are excluded from Service Profit calculation
-        const typingCharges = parseFloat(billing.typing_charges || 0);
         const vendorCost = parseFloat(billing.vendor_cost || 0);
         const governmentCharges = parseFloat(billing.government_charges || 0);
 

@@ -108,17 +108,22 @@ const DayBookReport: React.FC = () => {
   const processDayBookData = (billings: any[], transactions: any[]): DayBookData => {
     const allTransactions: Transaction[] = [];
     let totalIncome = 0;
-    let totalExpenses = 0;
+    let totalExpenses = 0; // Excludes government charges (only account expenses + vendor costs)
+    let totalGovernmentCharges = 0; // Tracked separately, not included in totalExpenses
     const paymentMethodBreakdown: Record<string, number> = {};
     const categoryBreakdown: Record<string, number> = {};
 
     // Process income (service billings)
+    // Income = Typing Charges (excludes government charges)
     billings.forEach(billing => {
+      // Income is typing charges only (excludes government charges which are pass-through costs)
+      const incomeAmount = parseFloat(billing.typing_charges || 0);
+
       const transaction: Transaction = {
         id: billing.id,
         date: billing.service_date,
         type: 'income',
-        amount: parseFloat(billing.total_amount || 0),
+        amount: incomeAmount,
         paymentMethod: billing.cash_type || 'unknown',
         description: `${billing.service_type?.name || 'Service'} - ${billing.invoice_number || 'N/A'}`,
         clientName: billing.company?.company_name || billing.individual?.individual_name || 'Unknown',
@@ -128,15 +133,15 @@ const DayBookReport: React.FC = () => {
         category: 'Service Revenue',
         status: billing.status || 'completed'
       };
-      
+
       allTransactions.push(transaction);
-      totalIncome += transaction.amount;
-      
+      totalIncome += incomeAmount;
+
       // Update breakdowns
-      paymentMethodBreakdown[transaction.paymentMethod] = 
-        (paymentMethodBreakdown[transaction.paymentMethod] || 0) + transaction.amount;
-      categoryBreakdown[transaction.category] = 
-        (categoryBreakdown[transaction.category] || 0) + transaction.amount;
+      paymentMethodBreakdown[transaction.paymentMethod] =
+        (paymentMethodBreakdown[transaction.paymentMethod] || 0) + incomeAmount;
+      categoryBreakdown[transaction.category] =
+        (categoryBreakdown[transaction.category] || 0) + incomeAmount;
     });
 
     // Process expenses (account transactions)
@@ -163,6 +168,7 @@ const DayBookReport: React.FC = () => {
     });
 
     // Process government charges from service billings as expenses
+    // Note: Government charges are tracked separately but NOT included in totalExpenses for Net Amount calculation
     billings.forEach(billing => {
       const govtCharges = parseFloat(billing.government_charges || 0);
       if (govtCharges > 0) {
@@ -181,7 +187,8 @@ const DayBookReport: React.FC = () => {
         };
 
         allTransactions.push(govtExpense);
-        totalExpenses += govtCharges;
+        // Government charges are NOT added to totalExpenses (excluded from Net Amount calculation)
+        totalGovernmentCharges += govtCharges;
 
         // Update breakdowns
         paymentMethodBreakdown[govtExpense.paymentMethod] =
@@ -227,6 +234,17 @@ const DayBookReport: React.FC = () => {
 
     // Sort all transactions by date (newest first)
     allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Debug logging
+    console.log('[DayBookReport] Summary:', {
+      totalIncome: totalIncome.toFixed(2) + ' (typing charges only, excludes govt charges)',
+      totalExpenses: totalExpenses.toFixed(2) + ' (account expenses + vendor costs, EXCLUDES govt charges)',
+      governmentCharges: totalGovernmentCharges.toFixed(2) + ' (tracked separately, NOT included in Net Amount)',
+      netAmount: (totalIncome - totalExpenses).toFixed(2),
+      incomeTransactions: billings.length,
+      expenseTransactions: totalExpenseEntries,
+      note: 'Net Amount = Typing Charges - (Account Expenses + Vendor Costs) | Government charges excluded from Net Amount'
+    });
 
     return {
       transactions: allTransactions,
@@ -479,6 +497,7 @@ ${Object.entries(data.paymentMethodBreakdown).map(([method, amount]) =>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Income</p>
+                <p className="text-xs text-gray-500">(Typing Charges)</p>
                 <p className="text-2xl font-bold text-green-600">AED {data.summary.totalIncome.toLocaleString()}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-lg">
@@ -492,6 +511,7 @@ ${Object.entries(data.paymentMethodBreakdown).map(([method, amount]) =>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Expenses</p>
+                <p className="text-xs text-gray-500">(Excludes Govt Charges)</p>
                 <p className="text-2xl font-bold text-red-600">AED {data.summary.totalExpenses.toLocaleString()}</p>
               </div>
               <div className="p-3 bg-red-100 rounded-lg">
@@ -505,6 +525,7 @@ ${Object.entries(data.paymentMethodBreakdown).map(([method, amount]) =>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Net Amount</p>
+                <p className="text-xs text-gray-500">(Excludes Govt Charges)</p>
                 <p className={`text-2xl font-bold ${data.summary.netAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   AED {data.summary.netAmount.toLocaleString()}
                 </p>

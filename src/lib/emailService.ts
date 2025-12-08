@@ -78,6 +78,7 @@ interface DocumentExpiryReminderEmailData {
   daysUntilExpiry: number;
   companyName?: string;
   individualName?: string;
+  employeeName?: string;
   serviceName?: string;
 }
 

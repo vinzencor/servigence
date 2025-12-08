@@ -45,7 +45,8 @@ interface DocumentExpiry {
   expiry_date: string;
   company_id?: string;
   individual_id?: string;
-  type: 'company_document' | 'individual_document';
+  employee_id?: string;
+  type: 'company_document' | 'individual_document' | 'employee_document';
   // Supabase returns plural field names
   companies?: {
     company_name: string;
@@ -55,6 +56,16 @@ interface DocumentExpiry {
     individual_name: string;
     email1: string;
   };
+  employees?: {
+    name: string;
+    email: string;
+    phone?: string;
+    company_id?: string;
+    companies?: {
+      company_name: string;
+      email1: string;
+    };
+  };
   // Also support singular for compatibility
   company?: {
     company_name: string;
@@ -63,6 +74,16 @@ interface DocumentExpiry {
   individual?: {
     individual_name: string;
     email1: string;
+  };
+  employee?: {
+    name: string;
+    email: string;
+    phone?: string;
+    company_id?: string;
+    company?: {
+      company_name: string;
+      email1: string;
+    };
   };
   service_types?: {
     name: string;
@@ -235,6 +256,56 @@ const ServiceExpiryCalendar: React.FC = () => {
         console.log('⚠️ No individual documents found for this month');
       }
 
+      // Load employee documents
+      const { data: employeeDocsData, error: employeeDocsError } = await supabase
+        .from('employee_documents')
+        .select(`
+          id,
+          name,
+          type,
+          file_name,
+          expiry_date,
+          employee_id,
+          service_id,
+          employees!employee_id (
+            name,
+            email,
+            phone,
+            company_id,
+            companies!company_id (
+              company_name,
+              email1
+            )
+          ),
+          service_types!service_id (
+            name
+          )
+        `)
+        .not('expiry_date', 'is', null)
+        .eq('status', 'valid')
+        .gte('expiry_date', firstDay.toISOString().split('T')[0])
+        .lte('expiry_date', lastDay.toISOString().split('T')[0])
+        .order('expiry_date', { ascending: true });
+
+      if (employeeDocsError) {
+        console.error('❌ Error loading employee documents:', employeeDocsError);
+        throw employeeDocsError;
+      }
+
+      console.log(`✅ Loaded ${employeeDocsData?.length || 0} employee documents with expiry dates`);
+
+      // Log detailed employee document data for debugging
+      if (employeeDocsData && employeeDocsData.length > 0) {
+        console.log('👨‍💼 Employee Documents Details:');
+        employeeDocsData.forEach((doc: any, index: number) => {
+          const employee = doc.employees || doc.employee;
+          const employeeName = Array.isArray(employee) ? employee[0]?.name : employee?.name;
+          console.log(`  ${index + 1}. Title: ${doc.name}, Expiry: ${doc.expiry_date}, Employee: ${employeeName || 'N/A'}`);
+        });
+      } else {
+        console.log('⚠️ No employee documents found for this month');
+      }
+
       // Normalize and combine document data
       const normalizedCompanyDocs = (companyDocsData || []).map(doc => ({
         ...doc,
@@ -249,10 +320,44 @@ const ServiceExpiryCalendar: React.FC = () => {
         individual: doc.individuals || doc.individual
       }));
 
-      setDocumentExpiries([...normalizedCompanyDocs, ...normalizedIndividualDocs]);
+      const normalizedEmployeeDocs = (employeeDocsData || []).map(doc => {
+        let employee = doc.employees || doc.employee;
+        if (Array.isArray(employee)) {
+          employee = employee[0];
+        }
+
+        let company = employee?.companies || employee?.company;
+        if (Array.isArray(company)) {
+          company = company[0];
+        }
+
+        return {
+          ...doc,
+          id: doc.id,
+          title: doc.name || 'Employee Document',
+          document_type: doc.type,
+          document_number: doc.file_name,
+          expiry_date: doc.expiry_date,
+          employee_id: doc.employee_id,
+          type: 'employee_document' as const,
+          employee: employee ? {
+            name: employee.name,
+            email: employee.email,
+            phone: employee.phone,
+            company_id: employee.company_id,
+            company: company
+          } : undefined,
+          service_type: doc.service_types || doc.service_type
+        };
+      });
+
+      setDocumentExpiries([...normalizedCompanyDocs, ...normalizedIndividualDocs, ...normalizedEmployeeDocs]);
 
       console.log('✅ Calendar data loaded successfully');
-      console.log(`📊 Total: ${normalizedServices.length} services, ${normalizedCompanyDocs.length + normalizedIndividualDocs.length} documents`);
+      console.log(`📊 Total: ${normalizedServices.length} services, ${normalizedCompanyDocs.length + normalizedIndividualDocs.length + normalizedEmployeeDocs.length} documents`);
+      console.log(`   - Company Documents: ${normalizedCompanyDocs.length}`);
+      console.log(`   - Individual Documents: ${normalizedIndividualDocs.length}`);
+      console.log(`   - Employee Documents: ${normalizedEmployeeDocs.length}`);
 
       // Store debug data
       setDebugData({
@@ -263,8 +368,9 @@ const ServiceExpiryCalendar: React.FC = () => {
         services: servicesData || [],
         companyDocs: companyDocsData || [],
         individualDocs: individualDocsData || [],
+        employeeDocs: employeeDocsData || [],
         totalServices: normalizedServices.length,
-        totalDocuments: normalizedCompanyDocs.length + normalizedIndividualDocs.length
+        totalDocuments: normalizedCompanyDocs.length + normalizedIndividualDocs.length + normalizedEmployeeDocs.length
       });
     } catch (error: any) {
       console.error('❌ Error loading expiry data:', error);
@@ -409,6 +515,35 @@ const ServiceExpiryCalendar: React.FC = () => {
         throw individualDocsError;
       }
 
+      // Query ALL employee documents with expiry dates (no date filter)
+      const { data: allEmployeeDocs, error: employeeDocsError } = await supabase
+        .from('employee_documents')
+        .select(`
+          id,
+          name,
+          type,
+          file_name,
+          expiry_date,
+          employee_id,
+          status,
+          employees!employee_id (
+            name,
+            email,
+            company_id,
+            companies!company_id (
+              company_name,
+              email1
+            )
+          )
+        `)
+        .not('expiry_date', 'is', null)
+        .order('expiry_date', { ascending: true });
+
+      if (employeeDocsError) {
+        console.error('❌ Database check error (employee docs):', employeeDocsError);
+        throw employeeDocsError;
+      }
+
       // Log comprehensive results
       console.log('═══════════════════════════════════════════════════════');
       console.log('🔍 DATABASE CHECK RESULTS (ALL ITEMS WITH EXPIRY DATES)');
@@ -453,15 +588,34 @@ const ServiceExpiryCalendar: React.FC = () => {
         console.log('  ⚠️ No individual documents found with expiry dates');
       }
 
+      console.log(`\n👨‍💼 EMPLOYEE DOCUMENTS: ${allEmployeeDocs?.length || 0} total`);
+      if (allEmployeeDocs && allEmployeeDocs.length > 0) {
+        allEmployeeDocs.forEach((doc: any, index: number) => {
+          const employee = doc.employees || doc.employee;
+          const employeeName = Array.isArray(employee) ? employee[0]?.name : employee?.name;
+          const company = Array.isArray(employee) ? employee[0]?.companies || employee[0]?.company : employee?.companies || employee?.company;
+          const companyName = Array.isArray(company) ? company[0]?.company_name : company?.company_name;
+
+          console.log(`  ${index + 1}. Title: ${doc.name}`);
+          console.log(`     Expiry Date: ${doc.expiry_date}`);
+          console.log(`     Employee: ${employeeName || 'N/A'}`);
+          console.log(`     Company: ${companyName || 'N/A'}`);
+          console.log(`     Status: ${doc.status}`);
+          console.log('');
+        });
+      } else {
+        console.log('  ⚠️ No employee documents found with expiry dates');
+      }
+
       console.log('═══════════════════════════════════════════════════════');
-      console.log(`📊 TOTAL ITEMS IN DATABASE: ${(allServices?.length || 0) + (allCompanyDocs?.length || 0) + (allIndividualDocs?.length || 0)}`);
+      console.log(`📊 TOTAL ITEMS IN DATABASE: ${(allServices?.length || 0) + (allCompanyDocs?.length || 0) + (allIndividualDocs?.length || 0) + (allEmployeeDocs?.length || 0)}`);
       console.log('═══════════════════════════════════════════════════════\n');
 
-      const totalItems = (allServices?.length || 0) + (allCompanyDocs?.length || 0) + (allIndividualDocs?.length || 0);
+      const totalItems = (allServices?.length || 0) + (allCompanyDocs?.length || 0) + (allIndividualDocs?.length || 0) + (allEmployeeDocs?.length || 0);
 
       toast.success(
         `Database Check Complete!\n` +
-        `Found ${allServices?.length || 0} services, ${allCompanyDocs?.length || 0} company docs, ${allIndividualDocs?.length || 0} individual docs\n` +
+        `Found ${allServices?.length || 0} services, ${allCompanyDocs?.length || 0} company docs, ${allIndividualDocs?.length || 0} individual docs, ${allEmployeeDocs?.length || 0} employee docs\n` +
         `Total: ${totalItems} items with expiry dates\n` +
         `Check console for detailed results.`,
         { id: 'db-check', duration: 8000 }
@@ -522,9 +676,20 @@ const ServiceExpiryCalendar: React.FC = () => {
                 </div>
               )}
               {documents.length > 0 && (
-                <div className="text-xs text-orange-600 font-medium truncate flex items-center gap-1">
-                  <File className="w-3 h-3" />
+                <div className={`text-xs font-medium truncate flex items-center gap-1 ${
+                  documents[0].type === 'employee_document'
+                    ? 'text-purple-600'
+                    : 'text-orange-600'
+                }`}>
+                  {documents[0].type === 'employee_document' ? (
+                    <User className="w-3 h-3" />
+                  ) : (
+                    <File className="w-3 h-3" />
+                  )}
                   {documents[0].title}
+                  {documents[0].type === 'employee_document' && (
+                    <span className="text-xs text-purple-500 ml-1">(Employee)</span>
+                  )}
                 </div>
               )}
               {totalItems > 2 && (
@@ -904,22 +1069,37 @@ const ServiceExpiryCalendar: React.FC = () => {
                           >
                             <div className="flex items-start justify-between mb-4">
                               <div className="flex items-center space-x-3">
-                                {doc.company_id ? (
+                                {doc.type === 'employee_document' ? (
+                                  <User className="w-6 h-6 text-purple-600" />
+                                ) : doc.company_id ? (
                                   <Building2 className="w-6 h-6 text-blue-600" />
                                 ) : (
                                   <User className="w-6 h-6 text-green-600" />
                                 )}
                                 <div>
                                   <h3 className="text-lg font-semibold text-gray-800">
-                                    {doc.company?.company_name || doc.individual?.individual_name || 'N/A'}
+                                    {doc.type === 'employee_document'
+                                      ? doc.employee?.name
+                                      : doc.company?.company_name || doc.individual?.individual_name || 'N/A'}
                                   </h3>
                                   <p className="text-sm text-gray-600">
-                                    {doc.company?.email1 || doc.individual?.email1 || 'No email'}
+                                    {doc.type === 'employee_document'
+                                      ? doc.employee?.email || doc.employee?.company?.email1 || 'No email'
+                                      : doc.company?.email1 || doc.individual?.email1 || 'No email'}
                                   </p>
+                                  {doc.type === 'employee_document' && doc.employee?.company?.company_name && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Company: {doc.employee.company.company_name}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
-                              <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
-                                Expiring
+                              <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                doc.type === 'employee_document'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-orange-100 text-orange-800'
+                              }`}>
+                                {doc.type === 'employee_document' ? 'Employee Doc' : 'Expiring'}
                               </div>
                             </div>
 

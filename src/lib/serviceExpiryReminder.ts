@@ -42,6 +42,7 @@ interface DocumentWithDetails {
   document_number?: string;
   company_id?: string;
   individual_id?: string;
+  employee_id?: string;
   service_id?: string;
   company?: {
     company_name: string;
@@ -54,6 +55,18 @@ interface DocumentWithDetails {
     email1: string;
     email2?: string;
     phone1?: string;
+  };
+  employee?: {
+    name: string;
+    email: string;
+    phone?: string;
+    company_id?: string;
+    company?: {
+      company_name: string;
+      email1: string;
+      email2?: string;
+      phone1?: string;
+    };
   };
   service_type?: {
     name: string;
@@ -151,15 +164,21 @@ export class ServiceExpiryReminderService {
   private async hasDocumentReminderBeenSent(
     documentId: string,
     daysBeforeExpiry: number,
-    documentType: 'company' | 'individual'
+    documentType: 'company' | 'individual' | 'employee'
   ): Promise<boolean> {
     try {
       const today = new Date().toISOString().split('T')[0];
 
+      const columnName = documentType === 'company'
+        ? 'company_document_id'
+        : documentType === 'individual'
+        ? 'individual_document_id'
+        : 'employee_document_id';
+
       const { data, error } = await supabase
         .from('email_reminder_logs')
         .select('id')
-        .eq(documentType === 'company' ? 'company_document_id' : 'individual_document_id', documentId)
+        .eq(columnName, documentId)
         .eq('days_before_expiry', daysBeforeExpiry)
         .gte('email_sent_at', `${today}T00:00:00`)
         .lte('email_sent_at', `${today}T23:59:59`)
@@ -220,16 +239,27 @@ export class ServiceExpiryReminderService {
     errorMessage?: string
   ): Promise<void> {
     try {
-      const clientName = document.company?.company_name || document.individual?.individual_name || 'Unknown';
+      const clientName = document.company?.company_name
+        || document.individual?.individual_name
+        || document.employee?.name
+        || 'Unknown';
+
+      const recipientType = document.company_id
+        ? 'company'
+        : document.individual_id
+        ? 'individual'
+        : 'employee';
 
       await supabase.from('email_reminder_logs').insert([{
         company_document_id: document.company_id ? document.id : null,
         individual_document_id: document.individual_id ? document.id : null,
+        employee_document_id: document.employee_id ? document.id : null,
         recipient_email: recipientEmail,
         recipient_name: clientName,
-        recipient_type: document.company_id ? 'company' : 'individual',
-        company_id: document.company_id,
+        recipient_type: recipientType,
+        company_id: document.company_id || document.employee?.company_id,
         individual_id: document.individual_id,
+        employee_id: document.employee_id,
         reminder_type: 'document_expiry',
         days_before_expiry: daysBeforeExpiry,
         expiry_date: document.expiry_date,
@@ -334,28 +364,37 @@ export class ServiceExpiryReminderService {
     daysUntilExpiry: number
   ): Promise<boolean> {
     try {
-      // Determine recipient email
-      const recipientEmail = document.company?.email1 || document.individual?.email1;
+      // Determine recipient email - for employee documents, try employee email first, then company email
+      let recipientEmail = document.company?.email1 || document.individual?.email1;
+
+      if (document.employee_id) {
+        recipientEmail = document.employee?.email || document.employee?.company?.email1;
+      }
 
       if (!recipientEmail) {
         console.error(`❌ No email found for document ${document.id}`);
         console.error(`  - Company ID: ${document.company_id}`);
         console.error(`  - Individual ID: ${document.individual_id}`);
+        console.error(`  - Employee ID: ${document.employee_id}`);
         console.error(`  - Company data available: ${!!document.company}`);
         console.error(`  - Individual data available: ${!!document.individual}`);
+        console.error(`  - Employee data available: ${!!document.employee}`);
 
         await this.logDocumentReminderEmail(
           document,
           'no-email@example.com',
           daysUntilExpiry,
           'failed',
-          `No email address found. Company: ${document.company_id ? 'ID exists but no data' : 'null'}, Individual: ${document.individual_id ? 'ID exists but no data' : 'null'}`
+          `No email address found. Company: ${document.company_id ? 'ID exists but no data' : 'null'}, Individual: ${document.individual_id ? 'ID exists but no data' : 'null'}, Employee: ${document.employee_id ? 'ID exists but no data' : 'null'}`
         );
         return false;
       }
 
       // Determine client name and document title
-      const clientName = document.company?.company_name || document.individual?.individual_name || 'Valued Client';
+      const clientName = document.company?.company_name
+        || document.individual?.individual_name
+        || document.employee?.name
+        || 'Valued Client';
       const documentTitle = document.title || 'Document';
 
       console.log(`\n📧 Preparing document expiry email:`);
@@ -374,8 +413,9 @@ export class ServiceExpiryReminderService {
         documentNumber: document.document_number,
         expiryDate: document.expiry_date,
         daysUntilExpiry,
-        companyName: document.company?.company_name,
+        companyName: document.company?.company_name || document.employee?.company?.company_name,
         individualName: document.individual?.individual_name,
+        employeeName: document.employee?.name,
         serviceName: document.service_type?.name
       });
 
@@ -400,7 +440,7 @@ export class ServiceExpiryReminderService {
       console.error('Error sending document reminder email:', error);
       await this.logDocumentReminderEmail(
         document,
-        document.company?.email1 || document.individual?.email1 || 'error@example.com',
+        document.company?.email1 || document.individual?.email1 || document.employee?.email || 'error@example.com',
         daysUntilExpiry,
         'failed',
         error.message
@@ -977,6 +1017,190 @@ export class ServiceExpiryReminderService {
 
         // Send reminder email
         console.log(`    📤 Sending document reminder email (${reminderReason})...`);
+        const sent = await this.sendDocumentReminderEmail(normalizedDoc, daysUntilExpiry);
+
+        if (sent) {
+          remindersSent++;
+        } else {
+          errors++;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    // ========================================
+    // PART 3: Query employee documents with expiry dates
+    // ========================================
+    const { data: employeeDocs, error: employeeError } = await supabase
+      .from('employee_documents')
+      .select(`
+        id,
+        name,
+        type,
+        file_name,
+        expiry_date,
+        custom_reminder_intervals,
+        custom_reminder_dates,
+        employee_id,
+        service_id,
+        status,
+        employees!employee_id (
+          name,
+          email,
+          phone,
+          company_id,
+          companies!company_id (
+            company_name,
+            email1,
+            email2,
+            phone1
+          )
+        ),
+        service_types!service_id (
+          name
+        )
+      `)
+      .not('expiry_date', 'is', null)
+      .eq('status', 'valid');
+
+    if (employeeError) {
+      console.error('  ❌ Error querying employee documents:', employeeError);
+      errors++;
+    } else if (employeeDocs && employeeDocs.length > 0) {
+      console.log(`  ✅ Found ${employeeDocs.length} employee document(s) with expiry dates`);
+
+      // Process each employee document
+      for (const doc of employeeDocs) {
+        const rawDoc = doc as any;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+
+        let shouldSendReminder = false;
+        let reminderReason = '';
+
+        // Check 1: Custom Reminder Dates (specific calendar dates)
+        if (rawDoc.custom_reminder_dates) {
+          const customDates = rawDoc.custom_reminder_dates
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0);
+
+          if (customDates.includes(todayStr)) {
+            shouldSendReminder = true;
+            reminderReason = `custom date: ${todayStr}`;
+            console.log(`  📅 Custom reminder date match for employee document ${rawDoc.id}: ${todayStr}`);
+          }
+        }
+
+        // Check 2: Interval-based reminders (days before expiry)
+        if (!shouldSendReminder && rawDoc.expiry_date) {
+          // Determine which intervals to use for this document
+          let intervalsToCheck: number[] = globalIntervals;
+
+          if (rawDoc.custom_reminder_intervals) {
+            // Parse custom intervals (comma-separated string)
+            const customIntervals = rawDoc.custom_reminder_intervals
+              .split(',')
+              .map((s: string) => parseInt(s.trim()))
+              .filter((n: number) => !isNaN(n) && n > 0);
+
+            if (customIntervals.length > 0) {
+              intervalsToCheck = customIntervals;
+              console.log(`  🔧 Using custom intervals for employee document ${rawDoc.id}: [${customIntervals.join(', ')}]`);
+            }
+          }
+
+          // Calculate days until expiry
+          const expiryDate = new Date(rawDoc.expiry_date);
+          expiryDate.setHours(0, 0, 0, 0);
+          const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Check if daysUntilExpiry matches any of the intervals
+          if (intervalsToCheck.includes(daysUntilExpiry)) {
+            shouldSendReminder = true;
+            reminderReason = `${daysUntilExpiry} days before expiry`;
+          }
+        }
+
+        // Skip if no reminder needed
+        if (!shouldSendReminder) {
+          continue;
+        }
+
+        totalChecked++;
+
+        // Normalize data structure
+        let employee = rawDoc.employee || rawDoc.employees;
+        if (Array.isArray(employee)) {
+          employee = employee[0];
+        }
+
+        let company = employee?.company || employee?.companies;
+        if (Array.isArray(company)) {
+          company = company[0];
+        }
+
+        let serviceType = rawDoc.service_type || rawDoc.service_types;
+        if (Array.isArray(serviceType)) {
+          serviceType = serviceType[0];
+        }
+
+        const normalizedDoc: DocumentWithDetails = {
+          id: rawDoc.id,
+          title: rawDoc.name || 'Employee Document',
+          document_type: rawDoc.type,
+          expiry_date: rawDoc.expiry_date,
+          document_number: rawDoc.file_name,
+          employee_id: rawDoc.employee_id,
+          employee: employee ? {
+            name: employee.name,
+            email: employee.email,
+            phone: employee.phone,
+            company_id: employee.company_id,
+            company: company
+          } : undefined,
+          service_type: serviceType
+        };
+
+        // Calculate days until expiry for email
+        const expiryDate = new Date(rawDoc.expiry_date);
+        expiryDate.setHours(0, 0, 0, 0);
+        const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Determine recipient email and name
+        const employeeName = employee?.name || 'Employee';
+        const email = employee?.email || company?.email1;
+
+        if (!email) {
+          console.error(`  ❌ No email found for employee document ${rawDoc.id}`);
+          errors++;
+          continue;
+        }
+
+        console.log(`\n  🔍 Processing employee document ${normalizedDoc.id}:`);
+        console.log(`    - Employee: ${employeeName}`);
+        console.log(`    - Company: ${company?.company_name || 'N/A'}`);
+        console.log(`    - Document: ${normalizedDoc.title}`);
+        console.log(`    - Type: ${normalizedDoc.document_type || 'N/A'}`);
+        console.log(`    - Email: ${email}`);
+        console.log(`    - Expiry Date: ${normalizedDoc.expiry_date || 'N/A'}`);
+        console.log(`    - Days Until Expiry: ${daysUntilExpiry}`);
+        console.log(`    - Reminder Reason: ${reminderReason}`);
+
+        // Check if reminder already sent today for this reason
+        const intervalForLog = reminderReason.startsWith('custom date') ? 0 : daysUntilExpiry;
+        const alreadySent = await this.hasDocumentReminderBeenSent(normalizedDoc.id, intervalForLog, 'employee');
+
+        if (alreadySent) {
+          console.log(`    ✅ Reminder already sent today (${reminderReason})`);
+          continue;
+        }
+
+        // Send reminder email
+        console.log(`    📤 Sending employee document reminder email (${reminderReason})...`);
         const sent = await this.sendDocumentReminderEmail(normalizedDoc, daysUntilExpiry);
 
         if (sent) {
