@@ -389,28 +389,38 @@ const ServiceExpiryCalendar: React.FC = () => {
   };
 
   const getServicesForDate = (day: number) => {
-    const dateStr = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
-      .toISOString()
-      .split('T')[0];
+    // Create date string in YYYY-MM-DD format without timezone conversion
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateStr = `${year}-${month}-${dayStr}`;
 
     return serviceBillings.filter(billing => billing.expiry_date === dateStr);
   };
 
   const getDocumentsForDate = (day: number) => {
-    const dateStr = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
-      .toISOString()
-      .split('T')[0];
+    // Create date string in YYYY-MM-DD format without timezone conversion
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateStr = `${year}-${month}-${dayStr}`;
 
     return documentExpiries.filter(doc => doc.expiry_date === dateStr);
   };
 
   const handleDateClick = (day: number) => {
-    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    // Create date string in YYYY-MM-DD format for consistent display
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateStr = `${year}-${month}-${dayStr}`;
+
     const services = getServicesForDate(day);
     const documents = getDocumentsForDate(day);
 
     if (services.length > 0 || documents.length > 0) {
-      setSelectedDate(date);
+      // Store the date string instead of Date object to avoid timezone issues
+      setSelectedDate(new Date(year, currentDate.getMonth(), day));
       setShowModal(true);
     }
   };
@@ -429,6 +439,19 @@ const ServiceExpiryCalendar: React.FC = () => {
 
   const goToSpecificMonth = (year: number, month: number) => {
     setCurrentDate(new Date(year, month, 1));
+  };
+
+  // Helper function to format date without timezone issues
+  const formatDateForDisplay = (date: Date): string => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const dayOfWeek = days[date.getDay()];
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const year = date.getFullYear();
+
+    return `${dayOfWeek}, ${month} ${day}, ${year}`;
   };
 
   const runDatabaseCheck = async () => {
@@ -945,12 +968,7 @@ const ServiceExpiryCalendar: React.FC = () => {
             <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-white">
-                  Expiring on {selectedDate.toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+                  Expiring on {formatDateForDisplay(selectedDate)}
                 </h2>
                 <p className="text-purple-100 text-sm mt-1">
                   {selectedServices.length} service{selectedServices.length !== 1 ? 's' : ''} • {selectedDocuments.length} document{selectedDocuments.length !== 1 ? 's' : ''}
