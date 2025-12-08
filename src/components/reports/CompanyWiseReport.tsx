@@ -137,36 +137,25 @@ const CompanyWiseReport: React.FC = () => {
       const company = companyMap.get(companyId)!;
       const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
 
-      // Calculate profit properly: Revenue - Vendor Cost - Government Charges
-      // Profit = Net Service Charges (typing_charges after VAT) - Vendor Cost - Government Charges
+      // Calculate Service Profit: Typing Charges - Vendor Cost
+      // Note: This is gross profit from services only, excluding government charges
       const typingCharges = parseFloat(billing.typing_charges || 0);
       const vendorCost = parseFloat(billing.vendor_cost || 0);
       const governmentCharges = parseFloat(billing.government_charges || 0);
-      const vatPercentage = parseFloat(billing.vat_percentage || 0);
 
-      // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
-      // For VAT-inclusive, the net typing charge is: typing / (1 + VAT%)
-      // For VAT-exclusive or no VAT, net typing charge is the same as typing charges
-      let netTypingCharges = typingCharges;
-      if (vatPercentage > 0 && billing.vat_calculation_method === 'inclusive') {
-        netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
-      }
-
-      // Profit = Net Service Charges - Vendor Cost - Government Charges
-      const profit = netTypingCharges - vendorCost - governmentCharges;
+      // Service Profit = Typing Charges - Vendor Cost
+      const profit = typingCharges - vendorCost;
 
       // Debug logging for profit calculation
-      if (vendorCost > 0 || governmentCharges > 0 || profit !== 0) {
-        console.log(`[CompanyWiseReport] Profit Calculation for ${company.name}:`, {
+      if (vendorCost > 0 || profit !== 0) {
+        console.log(`[CompanyWiseReport] Service Profit Calculation for ${company.name}:`, {
           invoiceNumber: billing.invoice_number,
           typingCharges,
           vendorCost,
-          governmentCharges,
-          vatPercentage,
-          vatMethod: billing.vat_calculation_method,
-          netTypingCharges,
-          calculatedProfit: profit,
-          revenue: amount
+          governmentCharges: governmentCharges + ' (not included in profit)',
+          calculatedServiceProfit: profit,
+          revenue: amount,
+          note: 'Service Profit = Typing Charges - Vendor Cost'
         });
       }
 
@@ -428,8 +417,8 @@ ${company.name}
             >
               <option value="revenue-desc">Revenue (Highest)</option>
               <option value="revenue-asc">Revenue (Lowest)</option>
-              <option value="profit-desc">Profit (Highest)</option>
-              <option value="profit-asc">Profit (Lowest)</option>
+              <option value="profit-desc">Service Profit (Highest)</option>
+              <option value="profit-asc">Service Profit (Lowest)</option>
               <option value="transactions-desc">Transactions (Most)</option>
               <option value="transactions-asc">Transactions (Least)</option>
               <option value="due-desc">Outstanding (Highest)</option>
@@ -501,7 +490,8 @@ ${company.name}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Profit</p>
+                <p className="text-sm font-medium text-gray-600">Total Service Profit</p>
+                <p className="text-xs text-gray-500 mb-1">(Typing - Vendor Costs)</p>
                 <p className="text-2xl font-bold text-purple-600">AED {data.summary.totalProfit.toLocaleString()}</p>
               </div>
               <div className="p-3 bg-purple-100 rounded-lg">
@@ -548,7 +538,10 @@ ${company.name}
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Service Profit
+                  <div className="text-xs font-normal text-gray-400 normal-case">(Typing - Vendor)</div>
+                </th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Outstanding</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Services</th>

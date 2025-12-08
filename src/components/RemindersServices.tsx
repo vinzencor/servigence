@@ -1198,9 +1198,9 @@ const RemindersServices: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Milestones</h3>
         <div className="space-y-4">
           {[
-            { service: 'Company Formation - XYZ Corp', milestone: 'MOA Approval', progress: 75, dueDate: '2024-02-01' },
-            { service: 'Visa Processing - John Doe', milestone: 'Medical Test', progress: 50, dueDate: '2024-01-28' },
-            { service: 'License Renewal - ABC Trading', milestone: 'Document Submission', progress: 90, dueDate: '2024-01-25' }
+            { service: 'Company Formation - XYZ Corp', milestone: 'MOA Approval', progress: 75, dueDate: '2025-02-01' },
+            { service: 'Visa Processing - John Doe', milestone: 'Medical Test', progress: 50, dueDate: '2025-01-28' },
+            { service: 'License Renewal - ABC Trading', milestone: 'Document Submission', progress: 90, dueDate: '2025-01-25' }
           ].map((item, index) => (
             <div key={index} className="border border-gray-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
@@ -2468,11 +2468,11 @@ const RemindersServices: React.FC = () => {
                 status: 'in_progress',
                 progress: 75,
                 milestones: [
-                  { name: 'Initial Consultation', status: 'completed', date: '2024-01-01' },
-                  { name: 'Name Reservation', status: 'completed', date: '2024-01-05' },
-                  { name: 'MOA Preparation', status: 'completed', date: '2024-01-10' },
-                  { name: 'MOA Approval', status: 'in_progress', date: '2024-01-20' },
-                  { name: 'License Issuance', status: 'pending', date: '2024-02-01' }
+                  { name: 'Initial Consultation', status: 'completed', date: '2025-01-01' },
+                  { name: 'Name Reservation', status: 'completed', date: '2025-01-05' },
+                  { name: 'MOA Preparation', status: 'completed', date: '2025-01-10' },
+                  { name: 'MOA Approval', status: 'in_progress', date: '2025-01-20' },
+                  { name: 'License Issuance', status: 'pending', date: '2025-02-01' }
                 ]
               },
               {

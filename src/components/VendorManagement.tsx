@@ -364,11 +364,11 @@ const VendorManagement: React.FC = () => {
       title: 'Annual Insurance Services',
       type: 'annual_contract',
       value: 50000,
-      startDate: '2024-01-01',
-      endDate: '2024-12-31',
+      startDate: '2025-01-01',
+      endDate: '2025-12-31',
       status: 'active',
       terms: 'Comprehensive insurance coverage including health, life, and property insurance for all company operations.',
-      renewalDate: '2024-11-01'
+      renewalDate: '2025-11-01'
     },
     {
       id: '2',
@@ -377,11 +377,11 @@ const VendorManagement: React.FC = () => {
       title: 'Monthly Tax Compliance',
       type: 'retainer',
       value: 24000,
-      startDate: '2024-01-01',
-      endDate: '2024-12-31',
+      startDate: '2025-01-01',
+      endDate: '2025-12-31',
       status: 'active',
       terms: 'Monthly tax compliance services including VAT filing, corporate tax preparation, and regulatory compliance.',
-      renewalDate: '2024-11-15'
+      renewalDate: '2025-11-15'
     }
   ]);
 

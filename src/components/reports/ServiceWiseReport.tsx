@@ -52,20 +52,14 @@ const ServiceWiseReport: React.FC = () => {
         const serviceId = serviceType.id;
         const amount = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
 
-        // Calculate profit properly: Net Service Charges - Vendor Cost - Government Charges
+        // Calculate Service Profit: Typing Charges - Vendor Cost
+        // Note: This is gross profit from services only, excluding government charges
         const typingCharges = parseFloat(billing.typing_charges || 0);
         const vendorCost = parseFloat(billing.vendor_cost || 0);
         const governmentCharges = parseFloat(billing.government_charges || 0);
-        const vatPercentage = parseFloat(billing.vat_percentage || 0);
 
-        // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
-        let netTypingCharges = typingCharges;
-        if (vatPercentage > 0 && billing.vat_calculation_method === 'inclusive') {
-          netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
-        }
-
-        // Profit = Net Service Charges - Vendor Cost - Government Charges
-        const profit = netTypingCharges - vendorCost - governmentCharges;
+        // Service Profit = Typing Charges - Vendor Cost
+        const profit = typingCharges - vendorCost;
 
         if (!serviceMap.has(serviceId)) {
           serviceMap.set(serviceId, {
@@ -280,7 +274,8 @@ ${service.name}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Profit</p>
+              <p className="text-sm font-medium text-gray-600">Total Service Profit</p>
+              <p className="text-xs text-gray-500 mb-1">(Typing - Vendor Costs)</p>
               <p className="text-2xl font-bold text-purple-600">AED {totalProfit.toLocaleString()}</p>
             </div>
             <div className="p-3 bg-purple-100 rounded-lg">
@@ -314,7 +309,10 @@ ${service.name}
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Service Profit
+                  <div className="text-xs font-normal text-gray-400 normal-case">(Typing - Vendor)</div>
+                </th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Transaction</th>

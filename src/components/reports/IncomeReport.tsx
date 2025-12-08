@@ -106,20 +106,14 @@ const IncomeReport: React.FC = () => {
 
   const processIncomeData = (billings: any[]): IncomeData => {
     const incomes: Income[] = billings.map(billing => {
-      // Calculate profit properly: Net Service Charges - Vendor Cost - Government Charges
+      // Calculate Service Profit: Typing Charges - Vendor Cost
+      // Note: This is gross profit from services only, excluding government charges
       const typingCharges = parseFloat(billing.typing_charges || 0);
       const vendorCost = parseFloat(billing.vendor_cost || 0);
       const governmentCharges = parseFloat(billing.government_charges || 0);
-      const vatPercentage = parseFloat(billing.vat_percentage || 0);
 
-      // Calculate net service charges (typing charges after VAT deduction if VAT-inclusive)
-      let netTypingCharges = typingCharges;
-      if (vatPercentage > 0 && billing.vat_calculation_method === 'inclusive') {
-        netTypingCharges = typingCharges / (1 + (vatPercentage / 100));
-      }
-
-      // Profit = Net Service Charges - Vendor Cost - Government Charges
-      const profit = netTypingCharges - vendorCost - governmentCharges;
+      // Service Profit = Typing Charges - Vendor Cost
+      const profit = typingCharges - vendorCost;
 
       return {
         id: billing.id,
@@ -516,7 +510,8 @@ ${sortedIncomes.map(income =>
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Profit</p>
+                <p className="text-sm font-medium text-gray-600">Total Service Profit</p>
+                <p className="text-xs text-gray-500 mb-1">(Typing - Vendor Costs)</p>
                 <p className="text-2xl font-bold text-blue-600">AED {data.summary.totalProfit.toLocaleString()}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -624,7 +619,10 @@ ${sortedIncomes.map(income =>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Service Profit
+                  <div className="text-xs font-normal text-gray-400 normal-case">(Typing - Vendor)</div>
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>

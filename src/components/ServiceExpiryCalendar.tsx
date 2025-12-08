@@ -578,18 +578,18 @@ const ServiceExpiryCalendar: React.FC = () => {
       </div>
 
       {/* Important Notice - Year Mismatch */}
-      {!loading && debugData && debugData.dateRange.start.startsWith('2024') && (
+      {!loading && debugData && debugData.dateRange.start.startsWith('2025') && (
         <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 mb-6">
           <div className="flex items-start space-x-3">
             <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-yellow-900 mb-2">⚠️ You're viewing 2024, but your services expire in 2025!</h3>
+              <h3 className="text-sm font-bold text-yellow-900 mb-2">⚠️ You're viewing 2025, but your services expire in 2026!</h3>
               <p className="text-sm text-yellow-800 mb-3">
-                Most of your service billings expire in <strong>December 2025</strong>, but you're currently viewing <strong>December 2024</strong>.
+                Most of your service billings expire in <strong>December 2026</strong>, but you're currently viewing <strong>December 2025</strong>.
                 That's why they're not appearing in the calendar!
               </p>
               <button
-                onClick={() => goToSpecificMonth(2025, 11)}
+                onClick={() => goToSpecificMonth(2026, 11)}
                 className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 🚀 Jump to December 2025 (Click Here!)

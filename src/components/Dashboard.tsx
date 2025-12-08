@@ -108,8 +108,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       // Calculate today's account expenses
       const todayAccountExpenses = todayExpenses?.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0;
 
-      // Calculate Daily Profit: Service Charges - Vendor Costs - Government Charges - Account Expenses
-      const profit = todayServiceCharges - todayVendorCosts - todayGovtCharges - todayAccountExpenses;
+      // Calculate Daily Service Profit: Typing Charges - Vendor Costs
+      // Note: This is gross profit from services only, excluding government charges and account expenses
+      const profit = todayServiceCharges - todayVendorCosts;
       setDailyProfit(profit);
 
       console.log('💰 [Dashboard] Financial Metrics Loaded:', {
@@ -127,7 +128,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           vendorCosts: todayVendorCosts.toFixed(2),
           governmentCharges: todayGovtCharges.toFixed(2),
           accountExpenses: todayAccountExpenses.toFixed(2),
-          profit: profit.toFixed(2)
+          serviceProfit: profit.toFixed(2),
+          note: 'Service Profit = Typing Charges - Vendor Costs (excludes govt charges & account expenses)'
         }
       });
 
@@ -256,13 +258,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       navigateTo: 'accounts'
     },
     {
-      title: 'Daily Profit',
+      title: 'Daily Service Profit',
       value: `AED ${dailyProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       change: dailyProfit >= 0 ? '+' : '',
       trend: dailyProfit >= 0 ? 'up' : 'down',
       icon: BarChart3,
       color: dailyProfit >= 0 ? 'green' : 'red',
-      navigateTo: 'accounts'
+      navigateTo: 'accounts',
+      tooltip: 'Typing Charges - Vendor Costs (excludes govt charges & expenses)'
     }
   ];
 
@@ -289,7 +292,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       id: '3',
       type: 'invoice_sent',
       title: 'Invoice Sent',
-      description: 'Invoice INV-2024-002 sent to Emirates Tech Solutions',
+      description: 'Invoice INV-2025-002 sent to Emirates Tech Solutions',
       time: '6 hours ago',
       icon: FileText,
       color: 'amber'
