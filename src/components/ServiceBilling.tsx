@@ -749,10 +749,10 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
-  const downloadInvoice = (billing: any, templateType: 'template1' | 'template2' | 'template3' = 'template1') => {
+  const downloadInvoice = async (billing: any, templateType: 'template1' | 'template2' | 'template3' = 'template1') => {
     try {
       // Generate and download invoice as PDF
-      generateInvoicePDF(billing, templateType);
+      await generateInvoicePDF(billing, templateType);
     } catch (error) {
       console.error('Error generating invoice:', error);
       alert('Error generating invoice. Please try again.');
@@ -988,58 +988,87 @@ const ServiceBilling: React.FC = () => {
     }
   };
 
-  const generateInvoicePDF = (billing: any, templateType: 'template1' | 'template2' | 'template3' = 'template1') => {
-    // Create invoice HTML content based on selected template
-    let invoiceHTML: string;
+  const generateInvoicePDF = async (billing: any, templateType: 'template1' | 'template2' | 'template3' = 'template1') => {
+    try {
+      // Fetch ALL billing records with the same invoice number for consolidated invoice
+      const invoiceNumber = billing.invoice_number;
 
-    switch (templateType) {
-      case 'template2':
-        invoiceHTML = generateInvoiceHTMLTemplate2(billing);
-        break;
-      case 'template3':
-        invoiceHTML = generateInvoiceHTMLTemplate3(billing);
-        break;
-      case 'template1':
-      default:
-        invoiceHTML = generateInvoiceHTML(billing);
-        break;
-    }
+      if (!invoiceNumber) {
+        console.error('No invoice number found');
+        alert('Error: Invoice number not found');
+        return;
+      }
 
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(invoiceHTML);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      // Get all billings with the same invoice number
+      const allBillings = await dbHelpers.getServiceBillings(user?.service_employee_id, user?.role);
+      const consolidatedBillings = allBillings.filter(b => b.invoice_number === invoiceNumber);
+
+      console.log(`📄 Generating consolidated invoice for ${invoiceNumber}`);
+      console.log(`Found ${consolidatedBillings.length} billing record(s) with this invoice number`);
+
+      // Create invoice HTML content based on selected template
+      let invoiceHTML: string;
+
+      switch (templateType) {
+        case 'template2':
+          invoiceHTML = generateInvoiceHTMLTemplate2(consolidatedBillings);
+          break;
+        case 'template3':
+          invoiceHTML = generateInvoiceHTMLTemplate3(consolidatedBillings);
+          break;
+        case 'template1':
+        default:
+          invoiceHTML = generateInvoiceHTML(consolidatedBillings);
+          break;
+      }
+
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(invoiceHTML);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      }
+    } catch (error) {
+      console.error('Error generating consolidated invoice:', error);
+      alert('Error generating invoice. Please try again.');
     }
   };
 
-  const generateInvoiceHTML = (billing: any) => {
+  const generateInvoiceHTML = (billings: any[]) => {
+    // Handle both single billing and array of billings
+    const billingsArray = Array.isArray(billings) ? billings : [billings];
+    const firstBilling = billingsArray[0];
+
     const currentDate = new Date();
     const formattedDate = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
     const formattedTime = currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
 
-    // Safely get client information
-    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientEmail = billing.company?.email1 || billing.individual?.email1 || '';
-    const clientPhone = billing.company?.phone1 || billing.individual?.phone1 || '';
-    const serviceName = billing.service_type?.name || 'Service';
-    const invoiceNumber = billing.invoice_number || 'N/A';
-    const quantity = billing.quantity || 1;
-    const typingCharges = parseFloat(billing.typing_charges || 0);
-    const governmentCharges = parseFloat(billing.government_charges || 0);
-    const discount = parseFloat(billing.discount || 0);
-    const subtotal = typingCharges + governmentCharges;
-    const totalAmount = parseFloat(billing.total_amount || 0);
-    const vatPercentage = parseFloat(billing.vat_percentage || 0);
-    const vatAmount = parseFloat(billing.vat_amount || 0);
-    const totalAmountWithVat = parseFloat(billing.total_amount_with_vat || totalAmount);
-    const cashType = billing.cash_type || 'N/A';
-    const paidAmount = 0; // This should come from payment records
-    const amountDue = totalAmountWithVat - paidAmount;
+    // Get client information from first billing (all should have same client)
+    const clientName = firstBilling.company?.company_name || firstBilling.individual?.individual_name || 'N/A';
+    const clientEmail = firstBilling.company?.email1 || firstBilling.individual?.email1 || '';
+    const clientPhone = firstBilling.company?.phone1 || firstBilling.individual?.phone1 || '';
+    const invoiceNumber = firstBilling.invoice_number || 'N/A';
     const createdBy = user?.name || 'Admin';
+
+    // Calculate consolidated totals across all billings
+    let grandTotalTypingCharges = 0;
+    let grandTotalGovernmentCharges = 0;
+    let grandTotalDiscount = 0;
+    let grandTotalVatAmount = 0;
+    let grandTotalWithVat = 0;
+
+    billingsArray.forEach(billing => {
+      grandTotalTypingCharges += parseFloat(billing.typing_charges || 0);
+      grandTotalGovernmentCharges += parseFloat(billing.government_charges || 0);
+      grandTotalDiscount += parseFloat(billing.discount || 0);
+      grandTotalVatAmount += parseFloat(billing.vat_amount || 0);
+      grandTotalWithVat += parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+    });
+
+    const paidAmount = 0; // This should come from payment records
+    const amountDue = grandTotalWithVat - paidAmount;
 
     // Convert amount to words
     const numberToWords = (num: number): string => {
@@ -1068,7 +1097,7 @@ const ServiceBilling: React.FC = () => {
       return result;
     };
 
-    const amountInWords = numberToWords(totalAmountWithVat);
+    const amountInWords = numberToWords(grandTotalWithVat);
 
     return `
       <!DOCTYPE html>
@@ -1387,36 +1416,46 @@ const ServiceBilling: React.FC = () => {
                 <th>Service</th>
                 <th>Description</th>
                 <th>Qty</th>
-                <th>Fees/Rate</th>
+                <th>Service Charges</th>
+                <th>Govt Charges</th>
+                <th>Discount</th>
+                <th>VAT</th>
                 <th>Total</th>
               </tr>
             </thead>
             <tbody>
+              ${billingsArray.map((billing) => {
+                const serviceName = billing.service_type?.name || 'Service';
+                const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
+                const quantity = billing.quantity || 1;
+                const typingCharges = parseFloat(billing.typing_charges || 0);
+                const governmentCharges = parseFloat(billing.government_charges || 0);
+                const discount = parseFloat(billing.discount || 0);
+                const vatAmount = parseFloat(billing.vat_amount || 0);
+                const totalWithVat = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+
+                return `
               <tr>
                 <td>${serviceName}</td>
                 <td>${serviceName}<br><span class="date">${serviceDate}</span></td>
                 <td>${quantity}</td>
-                <td>${typingCharges.toFixed(2)}</td>
-                <td>${typingCharges.toFixed(2)}</td>
+                <td>AED ${typingCharges.toFixed(2)}</td>
+                <td>AED ${governmentCharges.toFixed(2)}</td>
+                <td>${discount > 0 ? '-AED ' + discount.toFixed(2) : 'AED 0.00'}</td>
+                <td>AED ${vatAmount.toFixed(2)}</td>
+                <td>AED ${totalWithVat.toFixed(2)}</td>
+              </tr>`;
+              }).join('')}
+
+              <!-- Totals Row -->
+              <tr style="background-color: #f0f0f0; font-weight: bold; border-top: 2px solid #333;">
+                <td colspan="3" style="text-align: right; padding-right: 10px;">TOTALS:</td>
+                <td>AED ${grandTotalTypingCharges.toFixed(2)}</td>
+                <td>AED ${grandTotalGovernmentCharges.toFixed(2)}</td>
+                <td>${grandTotalDiscount > 0 ? '-AED ' + grandTotalDiscount.toFixed(2) : 'AED 0.00'}</td>
+                <td>AED ${grandTotalVatAmount.toFixed(2)}</td>
+                <td>AED ${grandTotalWithVat.toFixed(2)}</td>
               </tr>
-              ${governmentCharges > 0 ? `
-              <tr>
-                <td>Government Charges</td>
-                <td>Government processing fees</td>
-                <td>${quantity}</td>
-                <td>${governmentCharges.toFixed(2)}</td>
-                <td>${governmentCharges.toFixed(2)}</td>
-              </tr>
-              ` : ''}
-              ${discount > 0 ? `
-              <tr>
-                <td>Discount</td>
-                <td>Discount applied</td>
-                <td>1</td>
-                <td>-${discount.toFixed(2)}</td>
-                <td>-${discount.toFixed(2)}</td>
-              </tr>
-              ` : ''}
             </tbody>
           </table>
 
@@ -1425,15 +1464,15 @@ const ServiceBilling: React.FC = () => {
             <table class="totals-table">
               <tr class="grand-total">
                 <td class="label">Grand Total</td>
-                <td class="value">${totalAmountWithVat.toFixed(2)}</td>
+                <td class="value">AED ${grandTotalWithVat.toFixed(2)}</td>
               </tr>
               <tr>
                 <td class="label">Paid</td>
-                <td class="value">${paidAmount.toFixed(2)}</td>
+                <td class="value">AED ${paidAmount.toFixed(2)}</td>
               </tr>
               <tr class="amount-due">
                 <td class="label">Amount Due</td>
-                <td class="value">${amountDue.toFixed(2)}</td>
+                <td class="value">AED ${amountDue.toFixed(2)}</td>
               </tr>
             </table>
           </div>
@@ -1465,27 +1504,38 @@ const ServiceBilling: React.FC = () => {
   };
 
   // Template 2: Alternative layout with itemized breakdown
-  const generateInvoiceHTMLTemplate2 = (billing: any) => {
+  const generateInvoiceHTMLTemplate2 = (billings: any[]) => {
+    // Handle both single billing and array of billings
+    const billingsArray = Array.isArray(billings) ? billings : [billings];
+    const firstBilling = billingsArray[0];
+
     const currentDate = new Date();
     const formattedDate = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
     const formattedTime = currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
 
-    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientEmail = billing.company?.email1 || billing.individual?.email1 || '';
-    const clientPhone = billing.company?.phone1 || billing.individual?.phone1 || '';
-    const serviceName = billing.service_type?.name || 'Service';
-    const invoiceNumber = billing.invoice_number || 'N/A';
-    const quantity = billing.quantity || 1;
-    const typingCharges = parseFloat(billing.typing_charges || 0);
-    const governmentCharges = parseFloat(billing.government_charges || 0);
-    const discount = parseFloat(billing.discount || 0);
-    const totalAmount = parseFloat(billing.total_amount || 0);
-    const vatAmount = parseFloat(billing.vat_amount || 0);
-    const totalAmountWithVat = parseFloat(billing.total_amount_with_vat || totalAmount);
-    const paidAmount = 0;
-    const amountDue = totalAmountWithVat - paidAmount;
+    const clientName = firstBilling.company?.company_name || firstBilling.individual?.individual_name || 'N/A';
+    const clientEmail = firstBilling.company?.email1 || firstBilling.individual?.email1 || '';
+    const clientPhone = firstBilling.company?.phone1 || firstBilling.individual?.phone1 || '';
+    const invoiceNumber = firstBilling.invoice_number || 'N/A';
     const createdBy = user?.name || 'Admin';
+
+    // Calculate consolidated totals across all billings
+    let grandTotalTypingCharges = 0;
+    let grandTotalGovernmentCharges = 0;
+    let grandTotalDiscount = 0;
+    let grandTotalVatAmount = 0;
+    let grandTotalWithVat = 0;
+
+    billingsArray.forEach(billing => {
+      grandTotalTypingCharges += parseFloat(billing.typing_charges || 0);
+      grandTotalGovernmentCharges += parseFloat(billing.government_charges || 0);
+      grandTotalDiscount += parseFloat(billing.discount || 0);
+      grandTotalVatAmount += parseFloat(billing.vat_amount || 0);
+      grandTotalWithVat += parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+    });
+
+    const paidAmount = 0;
+    const amountDue = grandTotalWithVat - paidAmount;
 
     // Convert amount to words
     const numberToWords = (num: number): string => {
@@ -1514,7 +1564,7 @@ const ServiceBilling: React.FC = () => {
       return result;
     };
 
-    const amountInWords = numberToWords(totalAmountWithVat);
+    const amountInWords = numberToWords(grandTotalWithVat);
 
     return `
       <!DOCTYPE html>
@@ -1771,36 +1821,46 @@ const ServiceBilling: React.FC = () => {
                 <th>Service</th>
                 <th>Description</th>
                 <th>Qty</th>
-                <th>Fees/Rate</th>
+                <th>Service Charges</th>
+                <th>Govt Charges</th>
+                <th>Discount</th>
+                <th>VAT</th>
                 <th>Total</th>
               </tr>
             </thead>
             <tbody>
+              ${billingsArray.map((billing) => {
+                const serviceName = billing.service_type?.name || 'Service';
+                const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
+                const quantity = billing.quantity || 1;
+                const typingCharges = parseFloat(billing.typing_charges || 0);
+                const governmentCharges = parseFloat(billing.government_charges || 0);
+                const discount = parseFloat(billing.discount || 0);
+                const vatAmount = parseFloat(billing.vat_amount || 0);
+                const totalWithVat = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+
+                return `
               <tr>
                 <td>${serviceName}</td>
                 <td>${serviceName}<br><span class="date">${serviceDate}</span></td>
                 <td>${quantity}</td>
-                <td>${typingCharges.toFixed(2)}</td>
-                <td>${typingCharges.toFixed(2)}</td>
+                <td>AED ${typingCharges.toFixed(2)}</td>
+                <td>AED ${governmentCharges.toFixed(2)}</td>
+                <td>${discount > 0 ? '-AED ' + discount.toFixed(2) : 'AED 0.00'}</td>
+                <td>AED ${vatAmount.toFixed(2)}</td>
+                <td>AED ${totalWithVat.toFixed(2)}</td>
+              </tr>`;
+              }).join('')}
+
+              <!-- Totals Row -->
+              <tr style="background-color: #f0f0f0; font-weight: bold; border-top: 2px solid #333;">
+                <td colspan="3" style="text-align: right; padding-right: 10px;">TOTALS:</td>
+                <td>AED ${grandTotalTypingCharges.toFixed(2)}</td>
+                <td>AED ${grandTotalGovernmentCharges.toFixed(2)}</td>
+                <td>${grandTotalDiscount > 0 ? '-AED ' + grandTotalDiscount.toFixed(2) : 'AED 0.00'}</td>
+                <td>AED ${grandTotalVatAmount.toFixed(2)}</td>
+                <td>AED ${grandTotalWithVat.toFixed(2)}</td>
               </tr>
-              ${governmentCharges > 0 ? `
-              <tr>
-                <td>Government Charges</td>
-                <td>Government processing fees</td>
-                <td>${quantity}</td>
-                <td>${governmentCharges.toFixed(2)}</td>
-                <td>${governmentCharges.toFixed(2)}</td>
-              </tr>
-              ` : ''}
-              ${discount > 0 ? `
-              <tr>
-                <td>Discount</td>
-                <td>Discount applied</td>
-                <td>1</td>
-                <td>-${discount.toFixed(2)}</td>
-                <td>-${discount.toFixed(2)}</td>
-              </tr>
-              ` : ''}
             </tbody>
           </table>
 
@@ -1809,15 +1869,15 @@ const ServiceBilling: React.FC = () => {
             <table class="totals-table">
               <tr class="grand-total">
                 <td class="label">Grand Total</td>
-                <td class="value">${totalAmountWithVat.toFixed(2)}</td>
+                <td class="value">AED ${grandTotalWithVat.toFixed(2)}</td>
               </tr>
               <tr>
                 <td class="label">Paid</td>
-                <td class="value">${paidAmount.toFixed(2)}</td>
+                <td class="value">AED ${paidAmount.toFixed(2)}</td>
               </tr>
               <tr class="amount-due">
                 <td class="label">Amount Due</td>
-                <td class="value">${amountDue.toFixed(2)}</td>
+                <td class="value">AED ${amountDue.toFixed(2)}</td>
               </tr>
             </table>
           </div>
@@ -1848,25 +1908,30 @@ const ServiceBilling: React.FC = () => {
   };
 
   // Template 3: Simplified invoice WITHOUT Service Charges and Government Charges breakdown
-  const generateInvoiceHTMLTemplate3 = (billing: any) => {
+  const generateInvoiceHTMLTemplate3 = (billings: any[]) => {
+    // Handle both single billing and array of billings
+    const billingsArray = Array.isArray(billings) ? billings : [billings];
+    const firstBilling = billingsArray[0];
+
     const currentDate = new Date();
     const formattedDate = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
     const formattedTime = currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
 
-    const clientName = billing.company?.company_name || billing.individual?.individual_name || 'N/A';
-    const clientEmail = billing.company?.email1 || billing.individual?.email1 || '';
-    const clientPhone = billing.company?.phone1 || billing.individual?.phone1 || '';
-    const serviceName = billing.service_type?.name || 'Service';
-    const invoiceNumber = billing.invoice_number || 'N/A';
-    const quantity = billing.quantity || 1;
-    const totalAmount = parseFloat(billing.total_amount || 0);
-    const vatPercentage = parseFloat(billing.vat_percentage || 0);
-    const vatAmount = parseFloat(billing.vat_amount || 0);
-    const totalAmountWithVat = parseFloat(billing.total_amount_with_vat || totalAmount);
-    const paidAmount = 0;
-    const amountDue = totalAmountWithVat - paidAmount;
+    const clientName = firstBilling.company?.company_name || firstBilling.individual?.individual_name || 'N/A';
+    const clientEmail = firstBilling.company?.email1 || firstBilling.individual?.email1 || '';
+    const clientPhone = firstBilling.company?.phone1 || firstBilling.individual?.phone1 || '';
+    const invoiceNumber = firstBilling.invoice_number || 'N/A';
     const createdBy = user?.name || 'Admin';
+
+    // Calculate consolidated totals across all billings
+    let grandTotalWithVat = 0;
+
+    billingsArray.forEach(billing => {
+      grandTotalWithVat += parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+    });
+
+    const paidAmount = 0;
+    const amountDue = grandTotalWithVat - paidAmount;
 
     // Convert amount to words
     const numberToWords = (num: number): string => {
@@ -1895,7 +1960,7 @@ const ServiceBilling: React.FC = () => {
       return result;
     };
 
-    const amountInWords = numberToWords(totalAmountWithVat);
+    const amountInWords = numberToWords(grandTotalWithVat);
 
     return `
       <!DOCTYPE html>
@@ -2155,11 +2220,25 @@ const ServiceBilling: React.FC = () => {
               </tr>
             </thead>
             <tbody>
+              ${billingsArray.map((billing) => {
+                const serviceName = billing.service_type?.name || 'Service';
+                const serviceDate = billing.service_date ? new Date(billing.service_date).toLocaleDateString('en-US') : 'N/A';
+                const quantity = billing.quantity || 1;
+                const totalWithVat = parseFloat(billing.total_amount_with_vat || billing.total_amount || 0);
+
+                return `
               <tr>
                 <td>${serviceName}</td>
                 <td>${serviceName}<br><span class="date">${serviceDate}</span></td>
                 <td>${quantity}</td>
-                <td>${totalAmount.toFixed(2)}</td>
+                <td>AED ${totalWithVat.toFixed(2)}</td>
+              </tr>`;
+              }).join('')}
+
+              <!-- Totals Row -->
+              <tr style="background-color: #f0f0f0; font-weight: bold; border-top: 2px solid #333;">
+                <td colspan="3" style="text-align: right; padding-right: 10px;">GRAND TOTAL:</td>
+                <td>AED ${grandTotalWithVat.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
@@ -2167,27 +2246,17 @@ const ServiceBilling: React.FC = () => {
           <!-- Totals Section -->
           <div class="totals-section">
             <table class="totals-table">
-              ${vatPercentage > 0 ? `
-              <tr>
-                <td class="label">Subtotal</td>
-                <td class="value">${totalAmount.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td class="label">VAT (${vatPercentage}%)</td>
-                <td class="value">${vatAmount.toFixed(2)}</td>
-              </tr>
-              ` : ''}
               <tr class="grand-total">
                 <td class="label">Grand Total</td>
-                <td class="value">${totalAmountWithVat.toFixed(2)}</td>
+                <td class="value">AED ${grandTotalWithVat.toFixed(2)}</td>
               </tr>
               <tr>
                 <td class="label">Paid</td>
-                <td class="value">${paidAmount.toFixed(2)}</td>
+                <td class="value">AED ${paidAmount.toFixed(2)}</td>
               </tr>
               <tr class="amount-due">
                 <td class="label">Amount Due</td>
-                <td class="value">${amountDue.toFixed(2)}</td>
+                <td class="value">AED ${amountDue.toFixed(2)}</td>
               </tr>
             </table>
           </div>
@@ -2291,6 +2360,9 @@ const ServiceBilling: React.FC = () => {
         setLoading(true);
         const createdBillings = [];
 
+        // Generate ONE consolidated invoice number for all service items
+        const consolidatedInvoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+
         // Create a billing record for each service item
         for (const item of serviceItems) {
           const service = services.find(s => s.id === item.service_id);
@@ -2332,8 +2404,6 @@ const ServiceBilling: React.FC = () => {
 
           const profit = netTypingCharges - vendorCostPerItem;
 
-          const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}-${createdBillings.length + 1}`;
-
           const billingData = {
             company_id: billingForm.clientType === 'company' && billingForm.companyId ? billingForm.companyId : null,
             individual_id: billingForm.clientType === 'individual' && billingForm.individualId ? billingForm.individualId : null,
@@ -2358,9 +2428,9 @@ const ServiceBilling: React.FC = () => {
             total_amount_with_vat: totalAmountWithVat,
             quantity: item.quantity,
             status: 'pending',
-            notes: billingForm.notes ? `${billingForm.notes} (Multi-service billing ${createdBillings.length + 1}/${serviceItems.length})` : `Multi-service billing ${createdBillings.length + 1}/${serviceItems.length}`,
+            notes: billingForm.notes ? `${billingForm.notes} (Item ${createdBillings.length + 1}/${serviceItems.length})` : `Item ${createdBillings.length + 1}/${serviceItems.length}`,
             invoice_generated: true,
-            invoice_number: invoiceNumber,
+            invoice_number: consolidatedInvoiceNumber, // Use the same invoice number for all items
             assigned_vendor_id: billingForm.assignedVendorId || null,
             vendor_cost: vendorCostPerItem,
             card_id: billingForm.cashType === 'card' && billingForm.cardId ? billingForm.cardId : null
@@ -2370,7 +2440,12 @@ const ServiceBilling: React.FC = () => {
           createdBillings.push(createdBilling);
         }
 
-        toast.success(`✅ Created ${createdBillings.length} service billings successfully!`);
+        // Calculate total amount for all services
+        const totalInvoiceAmount = createdBillings.reduce((sum, billing) => sum + (billing.total_amount_with_vat || billing.total_amount), 0);
+
+        toast.success(`✅ Created ${createdBillings.length} service billings successfully!\n\nConsolidated Invoice: ${consolidatedInvoiceNumber}\nTotal Amount: AED ${totalInvoiceAmount.toFixed(2)}`);
+        alert(`✅ Service billings created successfully!\n\nConsolidated Invoice Number: ${consolidatedInvoiceNumber}\nServices: ${createdBillings.length}\nTotal Amount: AED ${totalInvoiceAmount.toFixed(2)}\n\nAll services are under ONE invoice.`);
+
         setShowCreateBilling(false);
         resetForm();
         loadServiceBillings();

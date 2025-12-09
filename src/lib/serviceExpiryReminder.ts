@@ -154,6 +154,7 @@ export class ServiceExpiryReminderService {
         console.log(`    🔍 Duplicate check: Reminder already sent for service ${serviceBillingId} (${daysBeforeExpiry} days before expiry)`);
       }
 
+      
       return alreadySent;
     } catch (error) {
       console.error('⚠️ Error checking reminder log:', error);
