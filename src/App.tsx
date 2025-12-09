@@ -29,6 +29,7 @@ import ReceiptManagement from './components/ReceiptManagement';
 import EmailReminderDiagnostic from './components/EmailReminderDiagnostic';
 import { dbHelpers } from './lib/supabase';
 import { Company, Individual } from './types';
+// import { reminderScheduler } from './lib/reminderScheduler'; // Not needed - using ServiceExpiryReminderManager component scheduler
 
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -50,6 +51,25 @@ function AppContent() {
       loadCompanies();
     }
   }, [isAuthenticated, user]);
+
+  // ❌ GLOBAL SCHEDULER DISABLED - Using ServiceExpiryReminderManager component scheduler instead
+  // This prevents duplicate schedulers from running simultaneously
+  // The ServiceExpiryReminderManager component now handles all automatic reminder scheduling
+  // useEffect(() => {
+  //   if (isAuthenticated && user) {
+  //     console.log('🚀 Initializing automated email reminder scheduler...');
+  //     console.log('✅ Duplicate prevention: Application-level checks + Database unique indexes');
+
+  //     // Start the scheduler to run every 1 hour (60 minutes)
+  //     reminderScheduler.start(60);
+
+  //     // Cleanup: Stop scheduler when component unmounts or user logs out
+  //     return () => {
+  //       console.log('🛑 Stopping automated email reminder scheduler...');
+  //       reminderScheduler.stop();
+  //     };
+  //   }
+  // }, [isAuthenticated, user]);
 
   const loadCompanies = async () => {
     if (!user) {

@@ -132,34 +132,41 @@ export class ServiceExpiryReminderService {
 
   /**
    * Check if a reminder has already been sent for this service and interval
+   * This checks if the reminder was EVER sent (not just today) to prevent duplicate reminders
    */
   private async hasReminderBeenSent(
     serviceBillingId: string,
     daysBeforeExpiry: number
   ): Promise<boolean> {
     try {
-      const today = new Date().toISOString().split('T')[0];
-
       const { data, error } = await supabase
         .from('email_reminder_logs')
         .select('id')
         .eq('service_billing_id', serviceBillingId)
         .eq('days_before_expiry', daysBeforeExpiry)
-        .gte('email_sent_at', `${today}T00:00:00`)
-        .lte('email_sent_at', `${today}T23:59:59`)
         .limit(1);
 
       if (error) throw error;
 
-      return (data?.length ?? 0) > 0;
+      const alreadySent = (data?.length ?? 0) > 0;
+
+      if (alreadySent) {
+        console.log(`    🔍 Duplicate check: Reminder already sent for service ${serviceBillingId} (${daysBeforeExpiry} days before expiry)`);
+      }
+
+      return alreadySent;
     } catch (error) {
-      console.error('Error checking reminder log:', error);
+      console.error('⚠️ Error checking reminder log:', error);
+      console.error(`  - Service Billing ID: ${serviceBillingId}`);
+      console.error(`  - Days Before Expiry: ${daysBeforeExpiry}`);
+      console.error('  - Defaulting to FALSE (will attempt to send) to avoid missing reminders');
       return false; // If error, assume not sent to avoid missing reminders
     }
   }
 
   /**
    * Check if a reminder has already been sent for this document and interval
+   * This checks if the reminder was EVER sent (not just today) to prevent duplicate reminders
    */
   private async hasDocumentReminderBeenSent(
     documentId: string,
@@ -167,8 +174,6 @@ export class ServiceExpiryReminderService {
     documentType: 'company' | 'individual' | 'employee'
   ): Promise<boolean> {
     try {
-      const today = new Date().toISOString().split('T')[0];
-
       const columnName = documentType === 'company'
         ? 'company_document_id'
         : documentType === 'individual'
@@ -180,15 +185,23 @@ export class ServiceExpiryReminderService {
         .select('id')
         .eq(columnName, documentId)
         .eq('days_before_expiry', daysBeforeExpiry)
-        .gte('email_sent_at', `${today}T00:00:00`)
-        .lte('email_sent_at', `${today}T23:59:59`)
         .limit(1);
 
       if (error) throw error;
 
-      return (data?.length ?? 0) > 0;
+      const alreadySent = (data?.length ?? 0) > 0;
+
+      if (alreadySent) {
+        console.log(`    🔍 Duplicate check: Reminder already sent for ${documentType} document ${documentId} (${daysBeforeExpiry} days before expiry)`);
+      }
+
+      return alreadySent;
     } catch (error) {
-      console.error('Error checking document reminder log:', error);
+      console.error('⚠️ Error checking document reminder log:', error);
+      console.error(`  - Document ID: ${documentId}`);
+      console.error(`  - Document Type: ${documentType}`);
+      console.error(`  - Days Before Expiry: ${daysBeforeExpiry}`);
+      console.error('  - Defaulting to FALSE (will attempt to send) to avoid missing reminders');
       return false; // If error, assume not sent to avoid missing reminders
     }
   }

@@ -13,7 +13,7 @@ const ServiceExpiryReminderManager: React.FC = () => {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [autoCheckEnabled, setAutoCheckEnabled] = useState(true);
   const [nextAutoCheck, setNextAutoCheck] = useState<Date | null>(null);
-  const [checkInterval, setCheckInterval] = useState<'daily' | 'hourly'>('hourly');
+  const [checkInterval, setCheckInterval] = useState<'daily' | 'hourly'>('daily');
   const [timeUntilNextCheck, setTimeUntilNextCheck] = useState<string>('');
 
   useEffect(() => {
@@ -343,7 +343,11 @@ const ServiceExpiryReminderManager: React.FC = () => {
 
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto">
-        {activeTab === 'calendar' && <ServiceExpiryCalendar />}
+        {activeTab === 'calendar' && (
+          <div className="space-y-6">
+            <ServiceExpiryCalendar />
+          </div>
+        )}
         {activeTab === 'settings' && <ExpiryReminderSettings />}
         {activeTab === 'logs' && (
           <div className="p-6">
