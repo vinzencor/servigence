@@ -3505,9 +3505,9 @@ Servigens Business Services
                             <FileText className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => downloadInvoice(billing)}
+                            onClick={() => downloadInvoice(billing, 'template3')}
                             className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                            title="Download Invoice"
+                            title="Download Invoice (Simplified)"
                           >
                             <Download className="w-4 h-4" />
                           </button>
